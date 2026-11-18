@@ -54,6 +54,13 @@
 ## Branches
 - Integração: `claude/ai-video-editor-r0tr67`. Sessões de módulo: `claude/ai-video-editor-r0tr67-<módulo>`.
 
+## Estado (2026-11-18, 1ª integração)
+- As 4 sessões de módulo foram integradas na `claude/ai-video-editor-r0tr67` e publicadas: 181 testes, build ok,
+  fluxo wizard → IA (demo) → editor validado no Playwright (14 ops ao vivo, sem erros), desktop + iPhone sem overflow.
+- IA real depende de `ANTHROPIC_API_KEY` na Vercel (status hoje: demo). Hosts externos usados no navegador:
+  cdn.jsdelivr.net (transformers.js/MediaPipe), huggingface.co (Whisper), storage.googleapis.com (MediaPipe).
+- Sessões de módulo seguem nas branches `-timeline/-engine/-ai/-shell`; integrar de novo com merge (sem rebase).
+
 ## Como rodar/validar
 ```
 cd web && npm install
