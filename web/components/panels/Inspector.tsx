@@ -22,13 +22,13 @@ export const INSPECTOR_TABS: { id: InspectorTool; label: string }[] = [
   { id: 'audio', label: 'Áudio' },
 ];
 
-const TYPE_LABEL = { video: 'Vídeo', image: 'Imagem', audio: 'Áudio', text: 'Texto' } as const;
+const TYPE_LABEL = { video: 'Vídeo', image: 'Imagem', audio: 'Áudio', text: 'Texto', sticker: 'Sticker', shape: 'Forma', adjustment: 'Ajuste' } as const;
 
 function SelectionChip() {
   const found = useSelectedClip();
   if (!found) return <span className="ep-selchip off">Nada selecionado</span>;
   const c = found.clip;
-  const name = c.type === 'text' ? c.text : c.label || TYPE_LABEL[c.type];
+  const name = c.type === 'text' ? c.text : c.type === 'sticker' && c.emoji ? `${c.emoji} ${c.label ?? ''}` : c.label || TYPE_LABEL[c.type];
   return (
     <span className="ep-selchip" title={name}>
       <b>{TYPE_LABEL[c.type]}</b>

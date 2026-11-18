@@ -194,3 +194,123 @@ export function parseTimeInput(s: string): number | null {
   if (nums.some((n) => !isFinite(n) || n < 0)) return null;
   return parts.length === 2 ? nums[0] * 60 + nums[1] : nums[0];
 }
+
+/* ---------- curvas de velocidade (CapCut) ---------- */
+import type { SpeedPoint, SpeedPreset, ClipAnimation, VisualEffectKind, BlendMode, MaskShape, ShapeKind, AudioEffectKind } from '@/lib/types';
+
+export const SPEED_PRESETS: { id: SpeedPreset; label: string; points: SpeedPoint[] }[] = [
+  { id: 'montage', label: 'Montagem', points: [{ t: 0, speed: 1 }, { t: 0.25, speed: 3 }, { t: 0.5, speed: 0.5 }, { t: 0.75, speed: 3 }, { t: 1, speed: 1 }] },
+  { id: 'hero', label: 'Herói', points: [{ t: 0, speed: 2.5 }, { t: 0.4, speed: 0.3 }, { t: 0.6, speed: 0.3 }, { t: 1, speed: 2.5 }] },
+  { id: 'bullet', label: 'Bala', points: [{ t: 0, speed: 3 }, { t: 0.45, speed: 0.2 }, { t: 0.55, speed: 0.2 }, { t: 1, speed: 3 }] },
+  { id: 'jump-cut', label: 'Jump cut', points: [{ t: 0, speed: 1 }, { t: 0.3, speed: 4 }, { t: 0.35, speed: 1 }, { t: 0.65, speed: 4 }, { t: 0.7, speed: 1 }, { t: 1, speed: 1 }] },
+  { id: 'flash-in', label: 'Flash in', points: [{ t: 0, speed: 4 }, { t: 0.4, speed: 1 }, { t: 1, speed: 1 }] },
+  { id: 'flash-out', label: 'Flash out', points: [{ t: 0, speed: 1 }, { t: 0.6, speed: 1 }, { t: 1, speed: 4 }] },
+];
+
+/** velocidade média de uma curva (trapézios) — duração na timeline = trecho da mídia / média */
+export function meanSpeed(points: SpeedPoint[]): number {
+  const pts = [...points].sort((a, b) => a.t - b.t);
+  if (!pts.length) return 1;
+  if (pts.length === 1) return pts[0].speed;
+  let area = 0;
+  for (let i = 1; i < pts.length; i++) area += ((pts[i].speed + pts[i - 1].speed) / 2) * (pts[i].t - pts[i - 1].t);
+  const span = pts[pts.length - 1].t - pts[0].t;
+  return span > 0 ? area / span : pts[0].speed;
+}
+
+/** aplica (ou remove) curva mantendo o mesmo trecho da mídia */
+export function retimeForCurve(c: { duration: number; speed: number; speedCurve?: SpeedPoint[] }, curve: SpeedPoint[] | undefined): { duration: number; speedCurve: SpeedPoint[] | undefined } {
+  const oldMean = c.speedCurve?.length ? meanSpeed(c.speedCurve) * (c.speed || 1) : (c.speed || 1);
+  const src = c.duration * oldMean;
+  const newMean = curve?.length ? meanSpeed(curve) * (c.speed || 1) : (c.speed || 1);
+  return { duration: Math.max(0.05, src / newMean), speedCurve: curve };
+}
+
+/* ---------- animações de clipe ---------- */
+export const CLIP_ANIMATIONS: { id: ClipAnimation; label: string }[] = [
+  { id: 'fade', label: 'Fade' }, { id: 'zoom-in', label: 'Zoom in' }, { id: 'zoom-out', label: 'Zoom out' },
+  { id: 'slide-left', label: 'Esquerda' }, { id: 'slide-right', label: 'Direita' }, { id: 'slide-up', label: 'Subir' },
+  { id: 'slide-down', label: 'Descer' }, { id: 'spin', label: 'Girar' }, { id: 'bounce', label: 'Quicar' },
+  { id: 'pop', label: 'Pop' }, { id: 'shake', label: 'Tremer' }, { id: 'swing', label: 'Balançar' },
+  { id: 'blur', label: 'Desfocar' }, { id: 'flip', label: 'Virar' },
+];
+
+export const TEXT_ANIMATIONS_ALL: { id: TextAnimation; label: string }[] = [
+  ...TEXT_ANIMATIONS,
+  { id: 'slide-down', label: 'Descer' }, { id: 'slide-left', label: 'Esquerda' }, { id: 'slide-right', label: 'Direita' },
+  { id: 'zoom', label: 'Zoom' }, { id: 'blur', label: 'Desfocar' }, { id: 'wave', label: 'Onda' },
+  { id: 'glitch', label: 'Glitch' }, { id: 'flicker', label: 'Piscar' }, { id: 'spin', label: 'Girar' },
+];
+
+/* ---------- efeitos visuais ---------- */
+export const VISUAL_EFFECTS: { id: VisualEffectKind; label: string; css: string }[] = [
+  { id: 'shake', label: 'Tremor', css: 'none' },
+  { id: 'glitch', label: 'Glitch', css: 'hue-rotate(40deg) saturate(1.6)' },
+  { id: 'rgb-split', label: 'RGB split', css: 'saturate(1.8) contrast(1.1)' },
+  { id: 'zoom-pulse', label: 'Pulso', css: 'none' },
+  { id: 'vhs', label: 'VHS', css: 'sepia(.25) saturate(1.4) contrast(.9) blur(.4px)' },
+  { id: 'film-grain', label: 'Granulado', css: 'contrast(1.1) saturate(.85)' },
+  { id: 'light-leak', label: 'Light leak', css: 'sepia(.3) brightness(1.15) saturate(1.3)' },
+  { id: 'pixelate', label: 'Pixelado', css: 'contrast(1.2)' },
+  { id: 'mirror', label: 'Espelho', css: 'none' },
+  { id: 'kaleidoscope', label: 'Caleidoscópio', css: 'hue-rotate(90deg)' },
+  { id: 'blur-motion', label: 'Desfoque mov.', css: 'blur(1.5px)' },
+  { id: 'flash-strobe', label: 'Estroboscópio', css: 'brightness(1.4)' },
+  { id: 'old-film', label: 'Filme antigo', css: 'sepia(.7) contrast(1.1)' },
+  { id: 'vignette-pulse', label: 'Vinheta pulso', css: 'brightness(.85)' },
+  { id: 'sparkle', label: 'Brilhos', css: 'brightness(1.1) saturate(1.2)' },
+  { id: 'soft-glow', label: 'Brilho suave', css: 'brightness(1.12) contrast(.92) saturate(1.1)' },
+  { id: 'neon-edge', label: 'Neon', css: 'invert(.15) saturate(2.2) hue-rotate(200deg)' },
+  { id: 'black-bars', label: 'Barras de cinema', css: 'contrast(1.05)' },
+];
+
+export const BLEND_MODES: { id: BlendMode; label: string }[] = [
+  { id: 'normal', label: 'Normal' }, { id: 'multiply', label: 'Multiplicar' }, { id: 'screen', label: 'Tela' },
+  { id: 'overlay', label: 'Sobrepor' }, { id: 'darken', label: 'Escurecer' }, { id: 'lighten', label: 'Clarear' },
+  { id: 'add', label: 'Adicionar' }, { id: 'difference', label: 'Diferença' },
+];
+
+export const MASK_SHAPES: { id: MaskShape; label: string }[] = [
+  { id: 'rect', label: 'Retângulo' }, { id: 'circle', label: 'Círculo' }, { id: 'heart', label: 'Coração' },
+  { id: 'star', label: 'Estrela' }, { id: 'line', label: 'Linear' }, { id: 'mirror', label: 'Espelho' },
+];
+
+export const SHAPES: { id: ShapeKind; label: string }[] = [
+  { id: 'rect', label: 'Retângulo' }, { id: 'rounded-rect', label: 'Arredondado' }, { id: 'circle', label: 'Círculo' },
+  { id: 'triangle', label: 'Triângulo' }, { id: 'star', label: 'Estrela' }, { id: 'arrow', label: 'Seta' },
+  { id: 'line', label: 'Linha' }, { id: 'heart', label: 'Coração' }, { id: 'speech-bubble', label: 'Balão' },
+];
+
+export const AUDIO_EFFECTS: { id: AudioEffectKind; label: string }[] = [
+  { id: 'noise-reduction', label: 'Reduzir ruído' }, { id: 'normalize', label: 'Normalizar' }, { id: 'voice-enhance', label: 'Realçar voz' },
+  { id: 'chipmunk', label: 'Esquilo' }, { id: 'deep', label: 'Grave' }, { id: 'robot', label: 'Robô' },
+  { id: 'echo', label: 'Eco' }, { id: 'reverb', label: 'Reverb' }, { id: 'telephone', label: 'Telefone' },
+  { id: 'megaphone', label: 'Megafone' }, { id: 'bass-boost', label: 'Grave reforçado' },
+];
+
+/** ajustes finos (aba Ajustes) — todos -1..1 exceto os de intensidade */
+export const ADJUST_DEFS: { kind: FilterKind; label: string; min: number; max: number }[] = [
+  { kind: 'exposure', label: 'Exposição', min: -1, max: 1 },
+  { kind: 'brightness', label: 'Brilho', min: -1, max: 1 },
+  { kind: 'contrast', label: 'Contraste', min: -1, max: 1 },
+  { kind: 'highlights', label: 'Realces', min: -1, max: 1 },
+  { kind: 'shadows', label: 'Sombras', min: -1, max: 1 },
+  { kind: 'saturation', label: 'Saturação', min: -1, max: 1 },
+  { kind: 'temperature', label: 'Temperatura', min: -1, max: 1 },
+  { kind: 'tint', label: 'Matiz (tint)', min: -1, max: 1 },
+  { kind: 'hue', label: 'Tom (hue)', min: -1, max: 1 },
+  { kind: 'sharpen', label: 'Nitidez', min: 0, max: 1 },
+  { kind: 'vignette', label: 'Vinheta', min: 0, max: 1 },
+  { kind: 'fade', label: 'Fade', min: 0, max: 1 },
+  { kind: 'grain', label: 'Granulado', min: 0, max: 1 },
+  { kind: 'blur', label: 'Desfoque', min: 0, max: 1 },
+];
+
+/** proporções de recorte (w/h relativos ao quadro da mídia) */
+export function cropForRatio(mediaW: number, mediaH: number, ratio: number | null): { x: number; y: number; w: number; h: number } {
+  if (!ratio || !mediaW || !mediaH) return { x: 0, y: 0, w: 1, h: 1 };
+  const mr = mediaW / mediaH;
+  if (mr > ratio) { const w = ratio / mr; return { x: (1 - w) / 2, y: 0, w, h: 1 }; }
+  const h = mr / ratio;
+  return { x: 0, y: (1 - h) / 2, w: 1, h };
+}

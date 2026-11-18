@@ -66,3 +66,21 @@ export function projectNameFromBrief(brief: string, fallback = 'Projeto sem tít
   const name = words.length > 48 ? `${words.slice(0, 46)}…` : words;
   return name.charAt(0).toUpperCase() + name.slice(1);
 }
+
+/**
+ * "Congelar quadro": divide o clipe em `at`, insere uma imagem (quadro capturado) de `dur`
+ * segundos e empurra o resto da trilha para frente.
+ */
+export function freezeFrameOps(p: Project, clipId: string, at: number, frame: MediaAsset, dur = 2): EditOp[] {
+  const track = p.tracks.find((t) => t.clips.some((c) => c.id === clipId));
+  const clip = track?.clips.find((c) => c.id === clipId);
+  if (!track || !clip || at <= clip.start || at >= clipEnd(clip)) return [];
+  const rightId = uid('clip');
+  const later = track.clips.filter((c) => c.start >= clipEnd(clip) - 1e-6 && c.id !== clipId).sort((a, b) => b.start - a.start);
+  return [
+    ...later.map((c) => ({ op: 'move_clip' as const, clipId: c.id, start: c.start + dur })),
+    { op: 'split_clip', clipId, at, newId: rightId },
+    { op: 'move_clip', clipId: rightId, start: at + dur },
+    { op: 'add_clip', trackId: track.id, clip: makeImageClip(frame, at, dur, { label: 'quadro congelado' }), explain: 'Congelando quadro' },
+  ];
+}

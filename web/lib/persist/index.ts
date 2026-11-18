@@ -133,3 +133,35 @@ export async function deleteProject(id: string): Promise<void> {
   // protege a mídia em uso no projeto aberto (pode ainda não ter sido salva)
   await dbDelete(id, Object.keys(useEditor.getState().assets));
 }
+
+/** duplica um projeto salvo (mídia compartilhada pelos mesmos blobs) */
+export async function duplicateProject(id: string): Promise<string | null> {
+  flushAutosave();
+  const rec = await getProjectRecord(id);
+  if (!rec) return null;
+  const { uid } = await import('../util');
+  const newId = uid('proj');
+  const now = Date.now();
+  const name = `${rec.name} (cópia)`;
+  await saveProjectRecord({ ...rec, id: newId, name, createdAt: now, updatedAt: now, project: { ...rec.project, id: newId, name, createdAt: now, updatedAt: now } });
+  return newId;
+}
+
+/** renomeia um projeto salvo (se for o aberto, usa a op set_project) */
+export async function renameProject(id: string, name: string): Promise<void> {
+  const st = useEditor.getState();
+  if (st.project.id === id) { st.dispatch({ op: 'set_project', patch: { name } }); return; }
+  const rec = await getProjectRecord(id);
+  if (!rec) return;
+  await saveProjectRecord({ ...rec, name, project: { ...rec.project, name } });
+}
+
+/** começa um projeto novo a partir de um Project pronto (modelos) */
+export function startFromProject(p: import('../types').Project): void {
+  saveSoon.flush();
+  const st = useEditor.getState();
+  revokeAssetUrls(st.assets);
+  st.loadProject(p);
+  useEditor.setState({ assets: {}, messages: [] });
+  useSaveStatus.setState({ status: 'idle', at: 0 });
+}

@@ -74,3 +74,30 @@ describe('parseTimeInput', () => {
     expect(parseTimeInput('')).toBeNull();
   });
 });
+
+import { SPEED_PRESETS, cropForRatio, meanSpeed, retimeForCurve } from './presets';
+
+describe('curvas de velocidade', () => {
+  it('média por trapézios', () => {
+    expect(meanSpeed([{ t: 0, speed: 1 }, { t: 1, speed: 3 }])).toBe(2);
+    expect(meanSpeed([])).toBe(1);
+    expect(SPEED_PRESETS).toHaveLength(6);
+  });
+  it('mantém o trecho da mídia ao aplicar e remover', () => {
+    const c = { duration: 10, speed: 1 };
+    const r = retimeForCurve(c, [{ t: 0, speed: 2 }, { t: 1, speed: 2 }]);
+    expect(r.duration).toBeCloseTo(5);
+    const back = retimeForCurve({ ...c, duration: r.duration, speedCurve: r.speedCurve }, undefined);
+    expect(back.duration).toBeCloseTo(10);
+  });
+});
+
+describe('recorte', () => {
+  it('centraliza na proporção', () => {
+    expect(cropForRatio(1920, 1080, 1)).toEqual({ x: (1 - 0.5625) / 2, y: 0, w: 0.5625, h: 1 });
+    expect(cropForRatio(1080, 1920, null)).toEqual({ x: 0, y: 0, w: 1, h: 1 });
+    const c = cropForRatio(1080, 1080, 16 / 9);
+    expect(c.w).toBe(1);
+    expect(c.h).toBeCloseTo(0.5625);
+  });
+});

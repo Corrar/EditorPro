@@ -43,3 +43,21 @@ describe('projectNameFromBrief', () => {
     expect(projectNameFromBrief('   ')).toBe('Projeto sem título');
   });
 });
+
+import { freezeFrameOps } from './place';
+describe('freezeFrameOps', () => {
+  it('divide, insere a imagem e empurra o resto', () => {
+    const p0 = createProject();
+    const p = applyOps(p0, sequenceOps(p0, [mk('a', 'video', 4), mk('b', 'video', 3)])).project;
+    const a = p.tracks[0].clips[0];
+    const { project, errors } = applyOps(p, freezeFrameOps(p, a.id, 2, mk('f', 'image', 0), 1.5));
+    expect(errors).toEqual([]);
+    const v = project.tracks[0].clips.map((c) => [c.type, c.start, c.duration]);
+    expect(v).toEqual([['video', 0, 2], ['image', 2, 1.5], ['video', 3.5, 2], ['video', 5.5, 3]]);
+  });
+  it('fora do clipe não faz nada', () => {
+    const p0 = createProject();
+    const p = applyOps(p0, sequenceOps(p0, [mk('a', 'video', 4)])).project;
+    expect(freezeFrameOps(p, p.tracks[0].clips[0].id, 0, mk('f', 'image', 0))).toEqual([]);
+  });
+});

@@ -32,7 +32,7 @@ export function stripAsset(a: MediaAsset): StoredAsset {
 /** assets usados pelo projeto (clipes + referência) — e os demais da biblioteca também ficam */
 export function usedAssetIds(p: Project): Set<string> {
   const ids = new Set<string>();
-  for (const t of p.tracks) for (const c of t.clips) if ('assetId' in c) ids.add(c.assetId);
+  for (const t of p.tracks) for (const c of t.clips) if ('assetId' in c && c.assetId) ids.add(c.assetId);
   if (p.referenceAssetId) ids.add(p.referenceAssetId);
   return ids;
 }
@@ -41,7 +41,7 @@ export function coverFor(p: Project, assets: Record<string, MediaAsset>): string
   for (const t of p.tracks) {
     if (t.kind !== 'video') continue;
     for (const c of t.clips) {
-      if (!('assetId' in c)) continue;
+      if (!('assetId' in c) || !c.assetId) continue;
       const th = assets[c.assetId]?.thumbnails;
       if (th?.length) return th[Math.min(th.length - 1, Math.floor(th.length / 3))];
     }
