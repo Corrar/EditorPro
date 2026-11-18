@@ -32,6 +32,14 @@
   `app/page.tsx`, `styles/{shell,media,panels}.css`
 - Classes CSS: `.ep-*` compartilhadas em `app/globals.css` (tokens em `.ep-root`, `--green` = laranja).
 
+## Deploy (Vercel)
+- Projeto Vercel **`editor-pro`** (`prj_4ow4vaCopsLqpdQbcUuBrdyRbspF`, team `team_boHR5HKaBgxuWff3stQypEfG`),
+  Root Directory = `web`. Produção acompanha a branch `claude/ai-video-editor-r0tr67`
+  (push nela = deploy). Envs: `ANTHROPIC_MODEL`, `DASH_PASSWORD` (sensível), `ANTHROPIC_API_KEY` (Bruno coloca).
+- Login por senha (`middleware.ts` + `lib/auth.ts`, portado do Radar) protege `/`, `/dev/*` e `/api/ai/*`.
+- Sem backend extra: as rotas `/api/ai/*` do Next rodam como funções da Vercel. Render/Neon/R2 só
+  quando houver salvar na nuvem (projetos em Neon, mídia/efeitos em R2) — hoje tudo fica no navegador.
+
 ## Branches
 - Integração: `claude/ai-video-editor-r0tr67`. Sessões de módulo: `claude/ai-video-editor-r0tr67-<módulo>`.
 
