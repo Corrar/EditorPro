@@ -11,11 +11,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { emit } from '@/lib/events';
 import { ingestFile, ingestFiles, listenAttachFiles } from '@/lib/media/ingest';
 import { projectNameFromBrief, sequenceOps } from '@/lib/media/place';
-import { flushAutosave, openProject, resetWorkspace, restoreLastProject, startAutosave } from '@/lib/persist';
+import { flushAutosave, openProject, resetWorkspace, restoreLastProject, startAutosave, startFromProject } from '@/lib/persist';
+import { projectFromTemplate } from './templates';
 import { useEditor } from '@/lib/store';
 import type { AspectRatio } from '@/lib/types';
 import Home, { type WizardInput } from './Home';
-import MobileNav, { type Pane } from './MobileNav';
+import MobileNav from './MobileNav';
 import SettingsModal from './SettingsModal';
 import Sidebar from './Sidebar';
 import Toasts from './Toasts';
@@ -35,7 +36,7 @@ export default function EditorShell() {
   const [busy, setBusy] = useState<string | null>(null);
   const [tool, setTool] = useState<ToolId>('media');
   const [sideOpen, setSideOpen] = useState(true);
-  const [pane, setPane] = useState<Pane>('timeline');
+  const [chatOpen, setChatOpen] = useState(false);
   const [sbMin, setSbMin] = useState(false);
   const [settings, setSettings] = useState(false);
   const [focusWizard, setFocusWizard] = useState(false);
@@ -50,8 +51,27 @@ export default function EditorShell() {
       if (saved) setDark(saved === 'dark');
       if (localStorage.getItem(SB_KEY) === '1' || mq('(max-width: 1100px)')) setSbMin(true);
     } catch {}
-    if (mq('(max-width: 1100px)')) setSideOpen(false);
+    if (mq('(max-width: 1099px)')) setSideOpen(false);
   }, []);
+
+  // altura real da área visível (teclado virtual do celular não cobre o chat)
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const upd = () => {
+      const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      document.documentElement.style.setProperty('--kb', `${Math.round(kb)}px`);
+      document.documentElement.style.setProperty('--vvh', `${Math.round(vv.height)}px`);
+    };
+    upd();
+    vv.addEventListener('resize', upd);
+    vv.addEventListener('scroll', upd);
+    return () => { vv.removeEventListener('resize', upd); vv.removeEventListener('scroll', upd); };
+  }, []);
+
+  // seleção de clipe: no celular a ferramenta "Editar" vira a primeira opção; se o painel Editar já estava aberto, segue
+  const selCount = useEditor((s) => s.selection.length);
+  useEffect(() => { if (!selCount && tool === 'edit') setSideOpen((v) => (mq('(max-width: 1099px)') ? false : v)); }, [selCount, tool]);
   const toggleTheme = useCallback(() => {
     setDark((d) => {
       try { localStorage.setItem(THEME_KEY, d ? 'light' : 'dark'); } catch {}
@@ -110,12 +130,16 @@ export default function EditorShell() {
   }, []);
 
   const pickTool = (id: ToolId) => {
-    if (view !== 'editor') { setTool(id); setSideOpen(true); setPane('side'); setView('editor'); return; }
-    if (mq('(max-width: 900px)')) { setTool(id); setPane('side'); return; }
+    if (view !== 'editor') { setTool(id); setSideOpen(true); setView('editor'); return; }
+    if (mq('(max-width: 1099px)')) setChatOpen(false);
     if (id === tool) setSideOpen((v) => !v);
     else { setTool(id); setSideOpen(true); }
   };
-  const pickPane = (x: Pane) => { setPane(x); if (view !== 'editor') setView('editor'); };
+  const openChat = (open: boolean) => {
+    if (view !== 'editor') setView('editor');
+    if (open && mq('(max-width: 1099px)')) setSideOpen(false);
+    setChatOpen(open);
+  };
 
   const startWizard = async (w: WizardInput) => {
     const brief = w.brief.trim() || DEFAULT_BRIEF;
@@ -138,7 +162,7 @@ export default function EditorShell() {
       st.dispatch([...sequenceOps(st.project, material), { op: 'set_project', patch: { brief, referenceAssetId } }], { history: false });
       pendingBrief.current = brief;
       setTool('media');
-      setPane('chat'); // no celular, abre o chat para acompanhar a IA
+      if (mq('(max-width: 1099px)')) { setSideOpen(false); setChatOpen(true); } // telas menores: abre o chat p/ acompanhar a IA
       setView('editor');
     } finally {
       setBusy(null);
@@ -148,7 +172,14 @@ export default function EditorShell() {
   const openEmpty = (aspect: AspectRatio) => {
     resetWorkspace({ aspect });
     setTool('media');
-    setPane('side');
+    setSideOpen(true);
+    setView('editor');
+  };
+
+  const fromTemplate = (id: string) => {
+    startFromProject(projectFromTemplate(id));
+    setTool('media');
+    setSideOpen(true);
     setView('editor');
   };
 
@@ -157,7 +188,7 @@ export default function EditorShell() {
       const ok = await openProject(id).catch(() => false);
       if (!ok) { emit('ep:toast', { text: 'Não consegui abrir este projeto', kind: 'error' }); return; }
     }
-    setPane('timeline');
+    if (mq('(max-width: 1099px)')) setSideOpen(false);
     setView('editor');
   };
 
@@ -177,13 +208,13 @@ export default function EditorShell() {
           <div className="ep-content">
             {view === 'home' && (
               <Home
-                onStart={startWizard} onEmpty={openEmpty} onOpen={open} busy={busy} focusWizard={focusWizard}
+                onStart={startWizard} onEmpty={openEmpty} onOpen={open} onTemplate={fromTemplate} busy={busy} focusWizard={focusWizard}
                 canResume={hasContent ? projectName : null} onResume={() => setView('editor')}
               />
             )}
-            {view === 'editor' && <Workspace tool={tool} sideOpen={sideOpen} onCloseSide={() => setSideOpen(false)} pane={pane} />}
+            {view === 'editor' && <Workspace tool={tool} sideOpen={sideOpen} onCloseSide={() => setSideOpen(false)} chatOpen={chatOpen} onChat={openChat} />}
           </div>
-          <MobileNav {...nav} pane={pane} onPane={pickPane} />
+          <MobileNav {...nav} chatOpen={chatOpen} onChat={openChat} />
         </div>
       )}
       {settings && <SettingsModal dark={dark} onTheme={toggleTheme} onClose={() => setSettings(false)} />}

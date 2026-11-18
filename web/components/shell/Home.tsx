@@ -5,10 +5,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { emit } from '@/lib/events';
 import { mediaKindOf, formatBytes } from '@/lib/media/pure';
-import { deleteProject, listProjects, relativeTime, type ProjectSummary } from '@/lib/persist';
+import { deleteProject, duplicateProject, listProjects, relativeTime, renameProject, type ProjectSummary } from '@/lib/persist';
+import { PROJECT_TEMPLATES } from './templates';
 import type { AspectRatio, MediaKind } from '@/lib/types';
 import { formatTime } from '@/lib/util';
-import { IconClose, IconFolder, IconImage, IconMusic, IconSpark, IconTrash, IconUpload, IconVideo } from './icons';
+import { IconClose, IconCopy, IconPencil, IconFolder, IconImage, IconMusic, IconSpark, IconTrash, IconUpload, IconVideo } from './icons';
 
 export interface WizardInput { brief: string; material: File[]; reference: File | null; aspect: AspectRatio }
 
@@ -91,8 +92,23 @@ function FormatCard({ f, on, onPick }: { f: (typeof FORMATS)[number]; on: boolea
 function ProjectsList({ onOpen, refreshKey }: { onOpen: (id: string) => void; refreshKey: number }) {
   const [items, setItems] = useState<ProjectSummary[] | null>(null);
   const [confirm, setConfirm] = useState<string | null>(null);
+  const [menu, setMenu] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [name, setName] = useState('');
   const load = () => listProjects().then(setItems).catch(() => setItems([]));
   useEffect(() => { void load(); }, [refreshKey]);
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  }, [menu]);
+
+  const commitRename = async (id: string) => {
+    const v = name.trim();
+    setRenaming(null);
+    if (v) { await renameProject(id, v); void load(); }
+  };
 
   if (items === null) return <div className="ep-projgrid"><div className="ep-skel" style={{ height: 150 }} /><div className="ep-skel" style={{ height: 150 }} /></div>;
   if (!items.length) {
@@ -106,19 +122,33 @@ function ProjectsList({ onOpen, refreshKey }: { onOpen: (id: string) => void; re
   return (
     <div className="ep-projgrid">
       {items.map((p) => (
-        <div key={p.id} className="ep-proj" role="button" tabIndex={0} onClick={() => onOpen(p.id)} onKeyDown={(e) => { if (e.key === 'Enter') onOpen(p.id); }}>
+        <div key={p.id} className="ep-proj" role="button" tabIndex={0} onClick={() => renaming !== p.id && onOpen(p.id)} onKeyDown={(e) => { if (e.key === 'Enter' && renaming !== p.id) onOpen(p.id); }}>
           <div className={`ep-proj-cover a-${p.aspect.replace(':', 'x')}`}>
             {p.cover ? <img src={p.cover} alt="" /> : <IconVideo size={22} />}
             <span className="ep-proj-dur mono">{formatTime(p.duration)}</span>
           </div>
           <div className="ep-proj-meta">
-            <b title={p.name}>{p.name}</b>
+            {renaming === p.id ? (
+              <input
+                className="ep-input ep-proj-rename" autoFocus value={name} aria-label="Novo nome"
+                onClick={(e) => e.stopPropagation()} onChange={(e) => setName(e.target.value)}
+                onBlur={() => void commitRename(p.id)}
+                onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setRenaming(null); }}
+              />
+            ) : <b title={p.name}>{p.name}</b>}
             <span>{relativeTime(p.updatedAt)} · {p.aspect} · {p.clipCount} clipe{p.clipCount === 1 ? '' : 's'}</span>
           </div>
           <button
-            type="button" className="ep-proj-del" aria-label={`Apagar ${p.name}`} title="Apagar projeto"
-            onClick={(e) => { e.stopPropagation(); setConfirm(p.id); }}
-          ><IconTrash size={15} /></button>
+            type="button" className="ep-proj-more" aria-label={`Opções de ${p.name}`} title="Opções" aria-expanded={menu === p.id}
+            onClick={(e) => { e.stopPropagation(); setMenu(menu === p.id ? null : p.id); }}
+          >⋯</button>
+          {menu === p.id && (
+            <div className="ep-proj-menu" onClick={(e) => e.stopPropagation()}>
+              <button type="button" onClick={() => { setMenu(null); setName(p.name); setRenaming(p.id); }}><IconPencil size={15} />Renomear</button>
+              <button type="button" onClick={async () => { setMenu(null); const id = await duplicateProject(p.id); if (id) { void load(); emit('ep:toast', { text: 'Projeto duplicado', kind: 'ok' }); } }}><IconCopy size={15} />Duplicar</button>
+              <button type="button" className="danger" onClick={() => { setMenu(null); setConfirm(p.id); }}><IconTrash size={15} />Excluir</button>
+            </div>
+          )}
           {confirm === p.id && (
             <div className="ep-proj-confirm" onClick={(e) => e.stopPropagation()}>
               <p>Apagar “{p.name}”? A mídia dele também sai deste navegador.</p>
@@ -134,8 +164,21 @@ function ProjectsList({ onOpen, refreshKey }: { onOpen: (id: string) => void; re
   );
 }
 
-export default function Home({ onStart, onEmpty, onOpen, busy, canResume, onResume, focusWizard }: {
-  focusWizard?: boolean;
+function TemplatesRow({ onTemplate }: { onTemplate: (id: string) => void }) {
+  return (
+    <div className="ep-tplrow">
+      {PROJECT_TEMPLATES.map((t) => (
+        <button key={t.id} type="button" className="ep-ptpl" onClick={() => onTemplate(t.id)}>
+          <span className="em">{t.emoji}</span>
+          <span className="tx"><b>{t.label}</b><span>{t.desc}</span></span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export default function Home({ onStart, onEmpty, onOpen, onTemplate, busy, canResume, onResume, focusWizard }: {
+  focusWizard?: boolean; onTemplate: (id: string) => void;
   onStart: (w: WizardInput) => void; onEmpty: (aspect: AspectRatio) => void; onOpen: (id: string) => void;
   busy: string | null; canResume?: string | null; onResume?: () => void;
 }) {
@@ -215,6 +258,11 @@ export default function Home({ onStart, onEmpty, onOpen, busy, canResume, onResu
             </button>
           </div>
         </form>
+
+        <section className="ep-projs">
+          <h2>Começar de um modelo</h2>
+          <TemplatesRow onTemplate={onTemplate} />
+        </section>
 
         <section className="ep-projs">
           <h2>Meus projetos</h2>

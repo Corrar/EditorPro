@@ -1,35 +1,39 @@
 'use client';
-/* celular (≤900px): barra inferior de botões circulares + bottom-sheet "Menu" (padrão Radar) */
+/* celular (≤899px): barra inferior de botões circulares (Mídia, Texto, Legendas,
+   Efeitos, IA, Menu) + bottom-sheet "Menu" com tudo (padrão Radar) */
 import { useState } from 'react';
 import { useInstallPrompt } from '@/lib/pwa';
-import { IconChat, IconCog, IconDownload, IconFolder, IconGrid, IconLogout, IconMoon, IconSun, IconTimeline } from './icons';
+import { useEditor } from '@/lib/store';
+import { IconChat, IconCog, IconDownload, IconFolder, IconGrid, IconLogout, IconMoon, IconSun } from './icons';
 import type { NavProps } from './Sidebar';
 import { logout } from './session';
-import { TOOLS, type ToolId } from './tools';
+import { TOOLS, toolDef, type ToolId } from './tools';
 
-export type Pane = 'timeline' | 'chat' | 'side';
+const PRIMARY: ToolId[] = ['media', 'text', 'captions', 'effects'];
 
-export default function MobileNav({ pane, onPane, ...p }: NavProps & { pane: Pane; onPane: (x: Pane) => void }) {
+export default function MobileNav({ chatOpen, onChat, ...p }: NavProps & { chatOpen: boolean; onChat: (open: boolean) => void }) {
   const [open, setOpen] = useState(false);
   const { canInstall, install, iosHint } = useInstallPrompt();
+  const hasSel = useEditor((s) => s.selection.length > 0);
   const ed = p.view === 'editor';
-  const isTool = (id: ToolId) => ed && pane === 'side' && p.tool === id;
+  const isTool = (id: ToolId) => ed && p.toolOpen && p.tool === id;
   const go = (fn: () => void) => { fn(); setOpen(false); };
-  const primary: { key: string; label: string; icon: React.ReactNode; active: boolean; run: () => void }[] = [
-    { key: 'timeline', label: 'Timeline', icon: <IconTimeline size={21} />, active: ed && pane === 'timeline', run: () => onPane('timeline') },
-    { key: 'media', label: 'Mídia', icon: (() => { const I = TOOLS[0].Icon; return <I size={21} />; })(), active: isTool('media'), run: () => p.onTool('media') },
-    { key: 'text', label: 'Texto', icon: (() => { const I = TOOLS[1].Icon; return <I size={21} />; })(), active: isTool('text'), run: () => p.onTool('text') },
-    { key: 'chat', label: 'Chat IA', icon: <IconChat size={21} />, active: ed && pane === 'chat', run: () => onPane('chat') },
-  ];
+  const primary = hasSel ? (['edit', ...PRIMARY.slice(0, 3)] as ToolId[]) : PRIMARY;
 
   return (
     <>
-      <nav className="ep-bottomnav" aria-label="Navegação">
-        {primary.map((b) => (
-          <button key={b.key} type="button" className={`ep-bnitem${b.active ? ' active' : ''}`} onClick={() => go(b.run)} aria-label={b.label} title={b.label}>
-            <span className="ic">{b.icon}</span><span className="lb">{b.label}</span>
-          </button>
-        ))}
+      <nav className={`ep-bottomnav${ed && chatOpen ? ' chat' : ''}`} aria-label="Ferramentas">
+        {primary.map((id) => {
+          const { label, Icon } = toolDef(id);
+          return (
+            <button key={id} type="button" className={`ep-bnitem${isTool(id) ? ' active' : ''}`} onClick={() => go(() => { onChat(false); p.onTool(id); })} aria-label={label} title={label}>
+              <span className="ic"><Icon size={21} /></span><span className="lb">{label}</span>
+            </button>
+          );
+        })}
+        <button type="button" className={`ep-bnitem${ed && chatOpen ? ' active' : ''}`} onClick={() => go(() => onChat(!chatOpen))} aria-label="Chat com a IA" title="IA">
+          <span className="ic"><IconChat size={21} /></span><span className="lb">IA</span>
+        </button>
         <button type="button" className={`ep-bnitem${open ? ' active' : ''}`} onClick={() => setOpen((v) => !v)} aria-label="Abrir menu" title="Menu">
           <span className="ic"><IconGrid size={21} /></span><span className="lb">Menu</span>
         </button>
@@ -41,8 +45,8 @@ export default function MobileNav({ pane, onPane, ...p }: NavProps & { pane: Pan
             <div className="ep-menugrip" />
             <div className="ep-menutitle">Ferramentas</div>
             <div className="ep-menugrid">
-              {TOOLS.map(({ id, label, Icon }) => (
-                <button key={id} type="button" className={`ep-menucell${isTool(id) ? ' active' : ''}`} onClick={() => go(() => p.onTool(id))}>
+              {TOOLS.filter((t) => t.id !== 'edit' || hasSel).map(({ id, label, Icon }) => (
+                <button key={id} type="button" className={`ep-menucell${isTool(id) ? ' active' : ''}`} onClick={() => go(() => { onChat(false); p.onTool(id); })}>
                   <Icon size={20} /><span className="t">{label}</span>
                 </button>
               ))}

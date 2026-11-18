@@ -50,6 +50,7 @@ export default function Sidebar({ min, onToggleMin, ...p }: NavProps & { min: bo
   const clipCount = useEditor((s) => s.project.tracks.reduce((n, t) => n + t.clips.length, 0));
   const assetCount = useEditor((s) => Object.keys(s.assets).length);
   const segCount = useEditor((s) => s.project.captions.segments.length);
+  const hasSel = useEditor((s) => s.selection.length > 0);
 
   useEffect(() => {
     if (!menu) return;
@@ -59,7 +60,7 @@ export default function Sidebar({ min, onToggleMin, ...p }: NavProps & { min: bo
   }, [menu]);
 
   const ql = q.trim().toLowerCase();
-  const tools = TOOLS.filter((t) => !ql || t.label.toLowerCase().includes(ql));
+  const tools = TOOLS.filter((t) => (t.id !== 'edit' || hasSel || p.tool === 'edit') && (!ql || t.label.toLowerCase().includes(ql)));
   const account = [
     { id: 'projects', label: 'Meus projetos', Icon: IconFolder, on: p.view === 'home', go: p.onHome },
     { id: 'settings', label: 'Configurações', Icon: IconCog, on: false, go: p.onSettings },
