@@ -187,15 +187,15 @@ function rippleCaptions(segs: CaptionSegment[], start: Seconds, end: Seconds): C
   const shift = (t: Seconds) => (t >= end ? t - gap : t > start ? start : t);
   return segs
     .filter((s) => !(s.start >= start - EPS && s.end <= end + EPS)) // totalmente dentro do corte
-    .map((s) => ({
-      ...s,
-      start: shift(s.start),
-      end: shift(s.end),
-      words: s.words
+    .map((s) => {
+      const words = s.words
         ?.filter((w) => !(w.start >= start - EPS && w.end <= end + EPS))
-        .map((w) => ({ ...w, start: shift(w.start), end: shift(w.end) })),
-    }))
-    .filter((s) => s.end - s.start > EPS);
+        .map((w) => ({ ...w, start: shift(w.start), end: shift(w.end) }));
+      // se o corte removeu palavras, o texto do segmento passa a ser o das palavras que sobraram
+      const text = words && s.words && words.length !== s.words.length ? words.map((w) => w.text).join(' ') : s.text;
+      return { ...s, start: shift(s.start), end: shift(s.end), words, text };
+    })
+    .filter((s) => s.end - s.start > EPS && (s.words ? s.words.length > 0 : true));
 }
 
 export class OpError extends Error {}

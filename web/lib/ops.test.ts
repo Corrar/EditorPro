@@ -155,5 +155,6 @@ describe('ops — cortes ancorados em palavras', () => {
     const words = r.captions.segments[0].words!;
     expect(words.map((w) => w.id)).toEqual(['w0', 'w3']);
     expect(words[1].start).toBeCloseTo(4, 5);
+    expect(r.captions.segments[0].text).toBe('olá pessoal');
   });
 });
