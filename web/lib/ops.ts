@@ -42,6 +42,8 @@ export type EditOp = (
   | { op: 'remove_marker'; markerId: Id }
   /** reordena trilhas (camadas): move a trilha para o índice */
   | { op: 'move_track'; trackId: Id; index: number }
+  /** corta as palavras de fromWordId até toWordId (ids de CaptionWord) com ripple — cortes ancorados na fala */
+  | { op: 'remove_words'; fromWordId: string; toWordId: string; padding?: Seconds }
 ) & {
   /** id único da operação (preenchido por normalizeOp se faltar) */
   id?: Id;
@@ -187,6 +189,21 @@ function rippleCaptions(segs: CaptionSegment[], start: Seconds, end: Seconds): C
 }
 
 export class OpError extends Error {}
+
+/** todas as palavras das legendas, em ordem */
+export function allWords(p: Project): import('./types').CaptionWord[] {
+  return p.captions.segments.flatMap((s) => s.words ?? []);
+}
+
+/** intervalo de tempo (timeline) coberto pelas palavras fromId..toId (inclusive) */
+export function wordRange(p: Project, fromId: string, toId: string): { start: Seconds; end: Seconds } | null {
+  const words = allWords(p);
+  const a = words.findIndex((w) => w.id === fromId);
+  const b = words.findIndex((w) => w.id === toId);
+  if (a < 0 || b < 0) return null;
+  const [i, j] = a <= b ? [a, b] : [b, a];
+  return { start: words[i].start, end: words[j].end };
+}
 
 export function applyOp(p: Project, op: EditOp): Project {
   const next = applyOpInner(p, op);
@@ -361,6 +378,13 @@ function applyOpInner(p: Project, op: EditOp): Project {
     case 'remove_marker':
       return { ...p, markers: (p.markers ?? []).filter((m) => m.id !== op.markerId) };
 
+    case 'remove_words': {
+      const r = wordRange(p, op.fromWordId, op.toWordId);
+      if (!r) throw new OpError(`palavras não encontradas: ${op.fromWordId}..${op.toWordId}`);
+      const pad = op.padding ?? 0.02;
+      return applyOpInner(p, { op: 'ripple_delete', start: Math.max(0, r.start - pad), end: r.end + pad });
+    }
+
     case 'move_track': {
       const i = p.tracks.findIndex((t) => t.id === op.trackId);
       if (i < 0) throw new OpError(`trilha não encontrada: ${op.trackId}`);
@@ -408,6 +432,7 @@ export function opFocus(p: Project, op: EditOp): { time?: Seconds; clipId?: Id }
     case 'update_caption': { const s = p.captions.segments.find((x) => x.id === op.segmentId); return { time: s?.start }; }
     case 'duplicate_clip': { const f = findClip(p, op.clipId); return { time: op.start ?? (f ? clipEnd(f.clip) : undefined), clipId: op.newId }; }
     case 'add_marker': return { time: op.marker.t };
+    case 'remove_words': { const r = wordRange(p, op.fromWordId, op.toWordId); return { time: r?.start }; }
     default: return {};
   }
 }

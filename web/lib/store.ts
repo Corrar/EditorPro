@@ -7,7 +7,7 @@
    - live: fila de operações da IA sendo aplicadas "ao vivo"
    ===================================================================== */
 import { create } from 'zustand';
-import type { ChatMessage, Id, MediaAsset, Project, Seconds } from './types';
+import type { ChatContext, ChatMessage, Id, MediaAsset, Project, Seconds } from './types';
 import { applyOp, normalizeOp, opFocus, projectDuration, type EditOp } from './ops';
 import { createProject } from './defaults';
 import { sleep, uid } from './util';
@@ -37,6 +37,8 @@ export interface EditorState {
 
   messages: ChatMessage[];
   live: LiveState;
+  /** "apontar para qualquer coisa": timeline/preview/legendas definem; o chat anexa à próxima mensagem */
+  chatContext?: ChatContext;
 
   /* ações do documento */
   dispatch: (op: EditOp | EditOp[], opts?: { history?: boolean }) => void;
@@ -59,6 +61,7 @@ export interface EditorState {
   /* chat */
   pushMessage: (m: Omit<ChatMessage, 'id' | 'createdAt'> & { id?: Id }) => Id;
   updateMessage: (id: Id, patch: Partial<ChatMessage>) => void;
+  setChatContext: (c?: ChatContext) => void;
 
   /** aplica ops da IA uma a uma, com pausa, movendo o playhead e destacando ("editando ao vivo").
    *  Tudo vira UM passo de desfazer. Retorna os ids das ops aplicadas. */
@@ -135,6 +138,7 @@ export const useEditor = create<EditorState>((set, get) => ({
     return id;
   },
   updateMessage: (id, patch) => set((s) => ({ messages: s.messages.map((m) => (m.id === id ? { ...m, ...patch } : m)) })),
+  setChatContext: (c) => set({ chatContext: c }),
 
   applyLive: async (rawOps, opts = {}) => {
     const token = ++liveToken;
