@@ -186,7 +186,7 @@ function ToolbarInner({ actions }: { actions: ToolbarActions }) {
   const magnetic = useTimelineUi((s) => s.magnetic);
   const setUi = useTimelineUi((s) => s.set);
   const open = useTimelineUi((s) => (s.overflowOpen ? 'more' : s.addTrackOpen ? 'add' : s.speedPop ? 'speed' : null)) as PopKind;
-  const { compact } = useDims();
+  const { barCompact: compact } = useDims();
   const moreRef = useRef<HTMLButtonElement>(null);
   const speedRef = useRef<HTMLButtonElement>(null);
   const addRef = useRef<HTMLButtonElement>(null);

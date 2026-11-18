@@ -129,7 +129,7 @@ export default function Timeline() {
       const r = el.getBoundingClientRect();
       const next = dimsFor(r.width, r.height, !!mq?.matches);
       const cur = useTimelineUi.getState().dims;
-      if (next.compact !== cur.compact || next.short !== cur.short || next.coarse !== cur.coarse) setUi({ dims: next });
+      if (next.compact !== cur.compact || next.barCompact !== cur.barCompact || next.short !== cur.short || next.coarse !== cur.coarse) setUi({ dims: next });
     };
     measure();
     const ro = new ResizeObserver(measure);
