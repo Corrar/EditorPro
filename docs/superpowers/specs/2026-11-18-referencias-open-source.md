@@ -1,0 +1,10 @@
+# Referências open source analisadas (2026-11-18)
+
+| Repo | Licença | O que é | O que aproveitamos |
+|---|---|---|---|
+| rtadewald/agent-video-editor | **sem licença** (todos os direitos reservados) | Claude Code como editor: do bruto ao Reels, app de revisão estilo frame.io | **Só ideias, nenhum código.** (1) cortes **ancorados nas palavras** da transcrição (ids `w00012`), não em segundos → op `remove_words` + `CaptionWord.id`; (2) **revisão por comentários** presos a um ponto/trecho do vídeo que a IA aplica e responde → `Marker.kind='comment'`; (3) aprendizados do criador entre vídeos (futuro: "preferências" salvas). |
+| heygen-com/hyperframes | **Apache-2.0** | HTML/CSS/GSAP → MP4 determinístico; player web, SDK de composição, **transições em shader WebGL** | Pode reutilizar código com atribuição (NOTICE). **Transições em shader** (domain-warp, ridged-burn, whip-pan, sdf-iris, ripple, gravitational-lens, cinematic-zoom, chromatic-split, glitch, swirl, thermal, flash-through-white, cross-warp-morph, light-leak) → portar os GLSL para o engine WebGL. Catálogo de "blocks" de motion → inspiração p/ modelos de texto/motion. Futuro: render 4K no servidor com `@hyperframes/engine` (Puppeteer+FFmpeg) num serviço no **Render**. |
+| OpenMontageInc/OpenMontage | **AGPL-3.0** | Sistema agêntico de produção (pesquisa, roteiro, assets, Remotion) | **Não copiar código** (AGPL obrigaria abrir o EditorPro inteiro por uso em rede). Ideias: "cole um vídeo que você ama" → engenharia reversa de estilo (já temos o vídeo-exemplo); corpus de footage gratuito (Pexels/Pixabay) para B-roll. |
+| openfilm/openfilm | **MIT** | Agente + editores ao vivo: tudo que o agente muda aparece na hora; "aponte para qualquer coisa" | Pode reutilizar com atribuição. **"Apontar para qualquer coisa"**: selecionar clipe, momento, trecho, ponto da imagem ou linha de legenda e pedir ao chat → `ChatContext` (store.chatContext + `ChatMessage.context`). Edição à mão de tudo que a IA cria (já é o nosso modelo de ops). |
+
+Regra: código de Apache-2.0/MIT só entra com o aviso de licença/atribuição em `web/THIRD_PARTY_NOTICES.md`.

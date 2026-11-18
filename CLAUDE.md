@@ -8,8 +8,10 @@
 
 ## Stack
 - `web/` — Next.js 14 (app router) + TypeScript + zustand. Vitest p/ testes.
-- IA: Gemini via rotas server-side `/api/ai/*` (`GEMINI_API_KEY` no servidor; ver
-  `web/.env.example`). Sem chave → modo demo (planejador local).
+- IA: **Claude (API da Anthropic)** via rotas server-side `/api/ai/*` (`ANTHROPIC_API_KEY` só no
+  servidor; modelo `claude-opus-5-5`; ver `web/.env.example`). Claude não recebe vídeo/áudio: o
+  navegador extrai quadros (vídeo-exemplo/material) e transcreve com Whisper local
+  (transformers.js, grátis). Sem chave → modo demo (planejador local).
 - Sem CapCut: não há API pública. Ponte com outros editores = export MP4/SRT/FCPXML.
 
 ## Contrato (NÃO quebrar)
@@ -22,6 +24,16 @@
   `playhead/playing/zoom/selection`, `messages`, `applyLive(ops)` (edição ao vivo, 1 desfazer).
 - Mudanças no contrato só aditivas (campo opcional / op nova + teste em `ops.test.ts`).
 
+## PWA (instalável) e design
+- `web/public/manifest.webmanifest`, `web/public/sw.js` (shell offline; nunca cacheia `/api/`),
+  ícones gerados (play + ponto, no estilo da marca do Radar). `web/lib/pwa.ts` = `registerPWA()`
+  (chamado em `app/pwa-register.tsx`) + hook `useInstallPrompt()` p/ o botão "Instalar app".
+- Responsivo em tudo (desktop, Android, iPhone/iPad, app instalado). Breakpoints: ≥1440 · 1100–1439 ·
+  900–1099 (chat/painel viram gavetas) · ≤899 empilhado tipo CapCut mobile (preview em cima, timeline
+  embaixo, barra inferior + bottom-sheets) · ≤480 · paisagem no celular. Toque via Pointer Events,
+  long-press no lugar do botão direito, alvos ≥44px, nada depende de hover, safe-area, sem scroll horizontal.
+- Modelo visual: `design/radar-reference/` (cópia somente leitura do painel Radar Local).
+
 ## Módulos (cada um com dono; não editar pasta alheia)
 - Timeline: `components/timeline/**`, `lib/timeline/**`, `styles/timeline.css`
 - Engine/Preview/Export: `lib/engine/**`, `lib/export/**`, `components/preview/**`, `styles/preview.css`
@@ -29,6 +41,15 @@
 - Shell/Mídia/Painéis/Persistência: `components/{shell,media,panels}/**`, `lib/{media,persist}/**`,
   `app/page.tsx`, `styles/{shell,media,panels}.css`
 - Classes CSS: `.ep-*` compartilhadas em `app/globals.css` (tokens em `.ep-root`, `--green` = laranja).
+
+## Deploy (Vercel)
+- Projeto Vercel **`editor-pro`** (`prj_4ow4vaCopsLqpdQbcUuBrdyRbspF`, team `team_boHR5HKaBgxuWff3stQypEfG`),
+  Root Directory = `web`. URL: **https://editorpro-ia.vercel.app** (público, com login próprio;
+  previews ficam atrás do login da Vercel). Produção acompanha a branch `claude/ai-video-editor-r0tr67`
+  (push nela = deploy). Envs: `ANTHROPIC_MODEL`, `DASH_PASSWORD` (sensível), `ANTHROPIC_API_KEY` (Bruno coloca).
+- Login por senha (`middleware.ts` + `lib/auth.ts`, portado do Radar) protege `/`, `/dev/*` e `/api/ai/*`.
+- Sem backend extra: as rotas `/api/ai/*` do Next rodam como funções da Vercel. Render/Neon/R2 só
+  quando houver salvar na nuvem (projetos em Neon, mídia/efeitos em R2) — hoje tudo fica no navegador.
 
 ## Branches
 - Integração: `claude/ai-video-editor-r0tr67`. Sessões de módulo: `claude/ai-video-editor-r0tr67-<módulo>`.
