@@ -7,6 +7,7 @@ import { useEditor } from '@/lib/store';
 import { IconChev, IconCog, IconCollapse, IconDownload, IconFolder, IconLogout, IconMoon, IconSearch, IconShare, IconSun } from './icons';
 import Logo from './Logo';
 import { logout } from './session';
+import { usePendingComments } from '@/components/panels/ReviewTab';
 import { TOOLS, type ToolId } from './tools';
 
 export interface NavProps {
@@ -51,6 +52,7 @@ export default function Sidebar({ min, onToggleMin, ...p }: NavProps & { min: bo
   const assetCount = useEditor((s) => Object.keys(s.assets).length);
   const segCount = useEditor((s) => s.project.captions.segments.length);
   const hasSel = useEditor((s) => s.selection.length > 0);
+  const pendingCm = usePendingComments();
 
   useEffect(() => {
     if (!menu) return;
@@ -87,7 +89,7 @@ export default function Sidebar({ min, onToggleMin, ...p }: NavProps & { min: bo
             return (
               <button key={id} type="button" className={`ep-navitem${active ? ' active' : ''}`} onClick={() => p.onTool(id)} title={label} aria-pressed={active}>
                 <span className="ib"><Icon size={17} /></span><span className="t">{label}</span>
-                {counts[id] ? <span className="c mono">{counts[id]}</span> : null}
+                {id === 'review' && pendingCm ? <span className="nb mono">{pendingCm}</span> : counts[id] ? <span className="c mono">{counts[id]}</span> : null}
               </button>
             );
           })}

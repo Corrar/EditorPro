@@ -7,6 +7,7 @@ import { useEditor } from '@/lib/store';
 import { IconChat, IconCog, IconDownload, IconFolder, IconGrid, IconLogout, IconMoon, IconSun } from './icons';
 import type { NavProps } from './Sidebar';
 import { logout } from './session';
+import { usePendingComments } from '@/components/panels/ReviewTab';
 import { TOOLS, toolDef, type ToolId } from './tools';
 
 const PRIMARY: ToolId[] = ['media', 'text', 'captions', 'effects'];
@@ -15,6 +16,7 @@ export default function MobileNav({ chatOpen, onChat, ...p }: NavProps & { chatO
   const [open, setOpen] = useState(false);
   const { canInstall, install, iosHint } = useInstallPrompt();
   const hasSel = useEditor((s) => s.selection.length > 0);
+  const pendingCm = usePendingComments();
   const ed = p.view === 'editor';
   const isTool = (id: ToolId) => ed && p.toolOpen && p.tool === id;
   const go = (fn: () => void) => { fn(); setOpen(false); };
@@ -35,7 +37,7 @@ export default function MobileNav({ chatOpen, onChat, ...p }: NavProps & { chatO
           <span className="ic"><IconChat size={21} /></span><span className="lb">IA</span>
         </button>
         <button type="button" className={`ep-bnitem${open ? ' active' : ''}`} onClick={() => setOpen((v) => !v)} aria-label="Abrir menu" title="Menu">
-          <span className="ic"><IconGrid size={21} /></span><span className="lb">Menu</span>
+          <span className="ic"><IconGrid size={21} />{pendingCm ? <span className="bdot" /> : null}</span><span className="lb">Menu</span>
         </button>
       </nav>
 
@@ -48,6 +50,7 @@ export default function MobileNav({ chatOpen, onChat, ...p }: NavProps & { chatO
               {TOOLS.filter((t) => t.id !== 'edit' || hasSel).map(({ id, label, Icon }) => (
                 <button key={id} type="button" className={`ep-menucell${isTool(id) ? ' active' : ''}`} onClick={() => go(() => { onChat(false); p.onTool(id); })}>
                   <Icon size={20} /><span className="t">{label}</span>
+                  {id === 'review' && pendingCm ? <span className="c nb mono">{pendingCm}</span> : null}
                 </button>
               ))}
             </div>

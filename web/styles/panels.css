@@ -311,3 +311,28 @@
   .ep-posgrid { width:150px; }
   .ep-segjump, .ep-segdel { width:36px; height:36px; }
 }
+
+/* "apontar para qualquer coisa" + revisão */
+.ep-selwrap { display:inline-flex; align-items:center; gap:6px; min-width:0; }
+.ep-askai { flex:none; border:1px solid var(--tintGBl); background:var(--tintG); color:var(--tintGInk); border-radius:999px; padding:4px 10px; font:inherit; font-size:11px; font-weight:700; cursor:pointer; white-space:nowrap; min-height:28px; }
+.ep-askai:hover { background:var(--green); color:#fff; border-color:var(--green); }
+.ep-segask { width:26px; height:26px; flex:none; border-radius:8px; border:0; background:none; cursor:pointer; margin-left:auto; font-size:13px; }
+.ep-segask:hover { background:var(--tintG); }
+.ep-segask + .ep-segdel { margin-left:0; }
+.ep-cmnew { display:flex; flex-direction:column; gap:8px; }
+.ep-cmtime { align-self:flex-start; font-size:11px; font-weight:600; color:var(--amberInk); background:var(--amberTint); border-radius:999px; padding:3px 9px; }
+.ep-cmnew-row { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+.ep-cmspan { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--sub); }
+.ep-cmspan input { accent-color:var(--green); width:16px; height:16px; }
+.ep-cmlist { display:flex; flex-direction:column; gap:8px; }
+.ep-cm { border:1px solid var(--line); border-left:3px solid #E0A32E; background:var(--box); border-radius:12px; padding:9px 10px; }
+.ep-cm.on { border-color:var(--green); border-left-color:var(--green); background:var(--tintG); }
+.ep-cm.done { border-left-color:#3BA55C; opacity:.7; }
+.ep-cm.done .ep-cm-text { text-decoration:line-through; }
+.ep-cm-go { border:0; background:none; color:var(--green); font-size:11px; font-weight:700; cursor:pointer; padding:2px 0; }
+.ep-cm-text { font-size:12.5px; line-height:1.45; margin:3px 0 8px; color:var(--ink); white-space:pre-wrap; word-break:break-word; }
+.ep-cm-acts { display:flex; align-items:center; gap:6px; }
+.ep-cm-acts .ep-segdel { margin-left:auto; }
+.ep-mini.ok { color:#2f8a4c; }
+.ep-menucell .c.nb { background:var(--red); color:#fff; }
+.ep-bnitem .bdot { position:absolute; top:-4px; right:-7px; width:8px; height:8px; border-radius:50%; background:var(--red); border:1.5px solid var(--card); }

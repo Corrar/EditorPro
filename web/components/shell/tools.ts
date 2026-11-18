@@ -1,6 +1,6 @@
 import type { InspectorTool } from '@/components/panels/Inspector';
 import {
-  IconAudio, IconCanvas, IconCaptions, IconEdit, IconEffects, IconFilters, IconMedia, IconSliders, IconSticker, IconText, IconTransitions,
+  IconAudio, IconCanvas, IconReview, IconCaptions, IconEdit, IconEffects, IconFilters, IconMedia, IconSliders, IconSticker, IconText, IconTransitions,
 } from './icons';
 
 export type ToolId = 'media' | InspectorTool;
@@ -18,6 +18,7 @@ export const TOOLS: { id: ToolId; label: string; Icon: typeof IconMedia }[] = [
   { id: 'captions', label: 'Legendas', Icon: IconCaptions },
   { id: 'adjust', label: 'Ajustes', Icon: IconSliders },
   { id: 'canvas', label: 'Formatos', Icon: IconCanvas },
+  { id: 'review', label: 'Revisão', Icon: IconReview },
 ];
 
 export const toolDef = (id: ToolId) => TOOLS.find((t) => t.id === id)!;

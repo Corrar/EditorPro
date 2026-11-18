@@ -8,6 +8,7 @@ import { IconCaptions, IconPlus, IconSpark, IconTrash } from '@/components/shell
 import { ColorField, CommitInput, EmptyHint, Section, Slider, TextField, Toggle } from './controls';
 import { CAPTION_PRESETS, FONTS, TEXT_ANIMATIONS, parseTimeInput } from './presets';
 import { textSampleStyle } from './TextTab';
+import { askAI } from '@/components/shell/ui';
 
 function CaptionSample({ style }: { style: Partial<CaptionStyle> }) {
   const base = textSampleStyle({
@@ -112,6 +113,7 @@ export default function CaptionsTab() {
                   <CommitInput className="ep-input mono ep-tin" value={s.start} format={fmt} parse={parseTimeInput} onCommit={(v) => upd(s.id, { start: Math.min(v, s.end - 0.1) })} ariaLabel="Início" />
                   <span className="ep-segdash">→</span>
                   <CommitInput className="ep-input mono ep-tin" value={s.end} format={fmt} parse={parseTimeInput} onCommit={(v) => upd(s.id, { end: Math.max(v, s.start + 0.1) })} ariaLabel="Fim" />
+                  <button type="button" className="ep-segask" title="Perguntar à IA sobre esta legenda" aria-label="Perguntar à IA sobre esta legenda" onClick={() => askAI({ segmentId: s.id, range: { start: s.start, end: s.end }, label: `Legenda: “${s.text.slice(0, 32)}${s.text.length > 32 ? '…' : ''}”` })}>✨</button>
                   <button type="button" className="ep-segdel" title="Remover legenda" onClick={() => removeSeg(s.id)}><IconTrash size={14} /></button>
                 </div>
                 <TextField value={s.text} onChange={(v, h) => upd(s.id, { text: v, words: undefined }, h)} />

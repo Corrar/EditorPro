@@ -14,8 +14,11 @@ import EditTab from './EditTab';
 import StickersTab from './StickersTab';
 import CanvasTab from './CanvasTab';
 import { AdjustTool, EffectsTool, FiltersTool } from './LookTabs';
+import ReviewTab from './ReviewTab';
+import { askAI } from '@/components/shell/ui';
+import { formatTime } from '@/lib/util';
 
-export type InspectorTool = 'edit' | 'text' | 'stickers' | 'captions' | 'effects' | 'filters' | 'adjust' | 'transitions' | 'audio' | 'canvas';
+export type InspectorTool = 'review' | 'edit' | 'text' | 'stickers' | 'captions' | 'effects' | 'filters' | 'adjust' | 'transitions' | 'audio' | 'canvas';
 
 export const INSPECTOR_TABS: { id: InspectorTool; label: string }[] = [
   { id: 'edit', label: 'Editar' },
@@ -28,6 +31,7 @@ export const INSPECTOR_TABS: { id: InspectorTool; label: string }[] = [
   { id: 'captions', label: 'Legendas' },
   { id: 'adjust', label: 'Ajustes' },
   { id: 'canvas', label: 'Formatos' },
+  { id: 'review', label: 'Revisão' },
 ];
 
 const TYPE_LABEL = { video: 'Vídeo', image: 'Imagem', audio: 'Áudio', text: 'Texto', sticker: 'Sticker', shape: 'Forma', adjustment: 'Ajuste' } as const;
@@ -37,10 +41,14 @@ function SelectionChip() {
   if (!found) return <span className="ep-selchip off">Nada selecionado</span>;
   const c = found.clip;
   const name = c.type === 'text' ? c.text : c.type === 'sticker' && c.emoji ? `${c.emoji} ${c.label ?? ''}` : c.label || TYPE_LABEL[c.type];
+  const ask = () => askAI({ clipIds: [c.id], range: { start: c.start, end: c.start + c.duration }, label: `${TYPE_LABEL[c.type]}: ${name.slice(0, 28)} · ${formatTime(c.start)}–${formatTime(c.start + c.duration)}` });
   return (
-    <span className="ep-selchip" title={name}>
-      <b>{TYPE_LABEL[c.type]}</b>
-      <span>{name}</span>
+    <span className="ep-selwrap">
+      <span className="ep-selchip" title={name}>
+        <b>{TYPE_LABEL[c.type]}</b>
+        <span>{name}</span>
+      </span>
+      <button type="button" className="ep-askai" onClick={ask} title="Pedir à IA para este clipe" aria-label="Pedir à IA para este clipe">✨ IA</button>
     </span>
   );
 }
@@ -53,7 +61,7 @@ export default function Inspector({ tool, title }: { tool?: InspectorTool; title
     <div className="ep-insp">
       <div className="ep-panelhead">
         <h3>{label}</h3>
-        {active !== 'captions' && active !== 'canvas' && <SelectionChip />}
+        {active !== 'captions' && active !== 'canvas' && active !== 'review' && <SelectionChip />}
       </div>
       {!tool && (
         <div className="ep-insp-tabs">
@@ -71,6 +79,7 @@ export default function Inspector({ tool, title }: { tool?: InspectorTool; title
         {active === 'filters' && <FiltersTool />}
         {active === 'adjust' && <AdjustTool />}
         {active === 'canvas' && <CanvasTab />}
+        {active === 'review' && <ReviewTab />}
         {active === 'transitions' && <TransitionsTab />}
         {active === 'audio' && <AudioTab />}
       </div>

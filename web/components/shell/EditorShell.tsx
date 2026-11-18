@@ -13,6 +13,7 @@ import { ingestFile, ingestFiles, listenAttachFiles } from '@/lib/media/ingest';
 import { projectNameFromBrief, sequenceOps } from '@/lib/media/place';
 import { flushAutosave, openProject, resetWorkspace, restoreLastProject, startAutosave, startFromProject } from '@/lib/persist';
 import { projectFromTemplate } from './templates';
+import { useShellUi } from './ui';
 import { useEditor } from '@/lib/store';
 import type { AspectRatio } from '@/lib/types';
 import Home, { type WizardInput } from './Home';
@@ -68,6 +69,14 @@ export default function EditorShell() {
     vv.addEventListener('scroll', upd);
     return () => { vv.removeEventListener('resize', upd); vv.removeEventListener('scroll', upd); };
   }, []);
+
+  // painéis pediram para abrir o chat ("apontar para qualquer coisa")
+  const chatRequest = useShellUi((s) => s.chatRequest);
+  useEffect(() => {
+    if (!chatRequest) return;
+    if (mq('(max-width: 1099px)')) setSideOpen(false);
+    setChatOpen(true);
+  }, [chatRequest]);
 
   // seleção de clipe: no celular a ferramenta "Editar" vira a primeira opção; se o painel Editar já estava aberto, segue
   const selCount = useEditor((s) => s.selection.length);
