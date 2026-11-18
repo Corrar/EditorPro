@@ -74,7 +74,7 @@ export function toFCPXML(p: Project, assets: Record<string, MediaAsset>): string
   res.push(`<format id="${fmtId}" name="FFVideoFormat${p.width}x${p.height}p${Math.round(fps)}" frameDuration="${num === 1 ? `1/${den}s` : `${num}/${den}s`}" width="${p.width}" height="${p.height}" colorSpace="1-1-1 (Rec. 709)"/>`);
 
   const used = new Set<string>();
-  for (const t of p.tracks) for (const c of t.clips) if ('assetId' in c) used.add(c.assetId);
+  for (const t of p.tracks) for (const c of t.clips) if ('assetId' in c && c.assetId) used.add(c.assetId);
   const assetRef = new Map<string, string>();
   const formatsBySize = new Map<string, string>();
   for (const id of used) {
@@ -123,8 +123,9 @@ export function toFCPXML(p: Project, assets: Record<string, MediaAsset>): string
     });
   };
   const clipAttrs = (c: Clip, offsetAttr: string, lane?: number) => {
-    const a = 'assetId' in c ? assets[c.assetId] : undefined;
-    const ref = 'assetId' in c ? assetRef.get(c.assetId) : undefined;
+    const aid = 'assetId' in c ? c.assetId : undefined;
+    const a = aid ? assets[aid] : undefined;
+    const ref = aid ? assetRef.get(aid) : undefined;
     const name = esc(c.label || a?.name || c.type);
     const srcIn = c.type === 'video' || c.type === 'audio' ? c.in : 0;
     const laneAttr = lane !== undefined ? ` lane="${lane}"` : '';
