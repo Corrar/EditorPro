@@ -1,0 +1,24 @@
+{
+  "name": "EditorPro — Editor de vídeo com IA",
+  "short_name": "EditorPro",
+  "description": "Descreva o vídeo, envie um exemplo e a IA edita ao vivo.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "orientation": "any",
+  "background_color": "#1A1310",
+  "theme_color": "#D9641E",
+  "lang": "pt-BR",
+  "categories": ["photo", "productivity", "entertainment"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "shortcuts": [
+    { "name": "Novo projeto", "url": "/?novo=1", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] }
+  ]
+}
