@@ -1,30 +1,34 @@
 /* =====================================================================
-   POST /api/ai/edit {project, assets, messages, userText, media?, mode?}
+   POST /api/ai/edit {project, assets, messages, userText, mode?, frames?}
    -> {reply, ops, dropped}
-   O modelo recebe o prompt do editor (prompts/edit-system.md), um resumo
-   compacto do projeto e (opcional) os vídeos do material bruto já enviados.
+   O Claude recebe o prompt do editor (prompts/edit-system.md, estável e
+   cacheado), um resumo compacto do projeto (com a transcrição em tempos de
+   timeline e o StyleProfile) e algumas miniaturas do material.
    As ops são validadas/sanitizadas aqui (lib/ai/validate.ts).
    ===================================================================== */
 import type { ChatMessage, MediaAsset, Project } from '@/lib/types';
-import { AIError, FILE_URI_RE, filePart, generateJSON } from '@/lib/ai/server/gemini';
+import { AIError, generateStructured, imageBlock, type UserContent } from '@/lib/ai/server/anthropic';
 import { fail, ok, readJson } from '@/lib/ai/server/http';
 import { loadPrompt } from '@/lib/ai/server/prompts';
-import { EDIT_SCHEMA } from '@/lib/ai/schemas';
+import { EditResponseSchema } from '@/lib/ai/schemas';
 import { summarizeProject } from '@/lib/ai/summary';
 import { sanitizeOps } from '@/lib/ai/validate';
-import { isObj, str } from '@/lib/ai/sanitize';
+import { isObj, num, str } from '@/lib/ai/sanitize';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
+export const maxDuration = 300;
+
+const MAX_FRAMES = 12;
 
 interface Body {
   project?: Project;
   assets?: Record<string, MediaAsset>;
   messages?: ChatMessage[];
   userText?: string;
-  media?: { uri: string; mime: string }[];
   mode?: 'first' | 'chat';
+  /** miniaturas do material: {assetId, t (s na mídia), data (base64), mediaType} */
+  frames?: unknown[];
 }
 
 function looksLikeProject(p: unknown): p is Project {
@@ -40,24 +44,28 @@ export async function POST(req: Request) {
     const project = body.project;
     const assets = isObj(body.assets) ? (body.assets as Record<string, MediaAsset>) : {};
     const messages = Array.isArray(body.messages) ? body.messages : [];
-    const media = (Array.isArray(body.media) ? body.media : [])
-      .filter((m) => isObj(m) && typeof m.uri === 'string' && FILE_URI_RE.test(m.uri) && typeof m.mime === 'string')
-      .slice(0, 4);
+    const first = body.mode === 'first';
+
+    const content: UserContent = [];
+    for (const f of (Array.isArray(body.frames) ? body.frames : []).filter(isObj).slice(0, MAX_FRAMES)) {
+      const img = typeof f.data === 'string' ? imageBlock(f.data, typeof f.mediaType === 'string' ? f.mediaType : 'image/jpeg') : null;
+      if (!img) continue;
+      const t = num(f.t);
+      content.push({ type: 'text', text: `Miniatura do material "${str(f.assetId, 80) ?? '?'}" em ${t !== undefined ? t.toFixed(1) : '?'} s da mídia:` }, img);
+    }
 
     const summary = summarizeProject(project, assets, messages);
-    const task = body.mode === 'first'
-      ? 'PRIMEIRA EDIÇÃO: transforme o material bruto no vídeo descrito no brief, aplicando o estilo do vídeo-exemplo (se houver). Corte silêncios/erros, aplique legendas no estilo certo, gancho, zooms, cor e transições.'
+    const task = first
+      ? 'PRIMEIRA EDIÇÃO: transforme o material bruto no vídeo descrito no brief, aplicando o estilo do vídeo-exemplo (se houver). Use a transcrição (legendas com tempos de timeline) para achar silêncios, erros, repetições e frases fortes. Corte, aplique legendas no estilo certo, gancho, zooms, cor e transições.'
       : 'AJUSTE PELO CHAT: faça exatamente o que o usuário pediu, sem refazer o resto.';
+    content.push({ type: 'text', text: `${task}\n\nPROJETO ATUAL (JSON):\n${JSON.stringify(summary)}\n\nPEDIDO DO USUÁRIO:\n${userText}` });
 
-    const raw = await generateJSON({
+    const raw = await generateStructured({
       system: await loadPrompt('edit-system'),
-      parts: [
-        ...media.map((m) => filePart(m.uri, m.mime)),
-        `${task}\n\nPROJETO ATUAL (JSON):\n${JSON.stringify(summary)}\n\nPEDIDO DO USUÁRIO:\n${userText}`,
-      ],
-      schema: EDIT_SCHEMA,
-      temperature: 0.35,
-      lowRes: true,
+      content,
+      schema: EditResponseSchema,
+      effort: first ? 'high' : 'medium',
+      maxTokens: 32000,
     });
 
     const reply = (isObj(raw) && str(raw.reply, 800)) || 'Pronto, apliquei as mudanças.';

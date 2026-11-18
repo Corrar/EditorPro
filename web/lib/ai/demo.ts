@@ -586,7 +586,7 @@ export function planFirstEdit(input: FirstEditInput): DemoResult {
   }
 
   const reply = ops.length
-    ? `Pronto! Editei no modo demonstração: ${said.join(', ')}. As legendas são de exemplo — conecte o Gemini para transcrição real. Me diga o que ajustar (ex.: "legenda maior", "tira o zoom", "corta os primeiros 2 s").`
+    ? `Pronto! Editei no modo demonstração: ${said.join(', ')}.${said.includes('legendas de exemplo nos trechos de fala') ? ' As legendas são de exemplo (a transcrição foi pulada).' : ''} Me diga o que ajustar (ex.: "legenda maior", "tira o zoom", "corta os primeiros 2 s").`
     : 'Não encontrei nada para editar ainda. Envie o material bruto (vídeo) e descreva o que você quer.';
   return { reply, ops };
 }

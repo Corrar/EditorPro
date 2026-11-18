@@ -1,22 +1,39 @@
 /* =====================================================================
-   Análise local no NAVEGADOR (modo demo e apoio):
-   - decodifica o áudio da mídia (decodeAudioData) -> amostras mono
-   - amostra quadros do vídeo-exemplo -> diferenças -> cortes -> StyleProfile
+   Análise local no NAVEGADOR:
+   - decodifica o áudio (decodeAudioData) -> mono (RMS p/ silêncios; 16 kHz p/ Whisper)
+   - vídeo-exemplo: quadros (p/ o Claude) + cortes de cena -> métricas de ritmo
    A lógica numérica fica em demo.ts (pura, testada).
    ===================================================================== */
-import type { Id, MediaAsset, StyleProfile } from '../types';
+import type { AspectRatio, Id, MediaAsset, StyleProfile } from '../types';
 import { cutsFromDiffs, detectSilences, styleFromCuts, type Range } from './demo';
+import { deviceProfile, sampleVideo, type Frame } from './frames';
 
 const MAX_DECODE_BYTES = 400 * 1024 * 1024;
 const silenceCache = new Map<string, Range[]>();
 
-/** áudio mono reamostrado (média por bloco) — suficiente para RMS */
-export async function decodeMono(url: string, targetRate = 8000): Promise<{ samples: Float32Array; sampleRate: number; duration: number }> {
+type OfflineCtor = typeof OfflineAudioContext;
+function offlineCtor(): OfflineCtor {
+  const g = globalThis as unknown as { OfflineAudioContext?: OfflineCtor; webkitOfflineAudioContext?: OfflineCtor };
+  const C = g.OfflineAudioContext ?? g.webkitOfflineAudioContext;
+  if (!C) throw new Error('Este navegador não decodifica áudio (OfflineAudioContext ausente).');
+  return C;
+}
+
+/** decodifica o áudio de uma mídia (vídeo ou áudio) */
+export async function decodeAudio(url: string): Promise<AudioBuffer> {
   const buf = await (await fetch(url)).arrayBuffer();
   if (buf.byteLength > MAX_DECODE_BYTES) throw new Error('arquivo grande demais para analisar no navegador');
-  const Ctx = (globalThis as unknown as { OfflineAudioContext: typeof OfflineAudioContext }).OfflineAudioContext;
-  const ctx = new Ctx(1, 1, 44100);
-  const audio = await ctx.decodeAudioData(buf);
+  const C = offlineCtor();
+  const ctx = new C(1, 1, 44100);
+  return new Promise<AudioBuffer>((resolve, reject) => {
+    // forma com callbacks: compatível com Safari antigo e moderno
+    const p = ctx.decodeAudioData(buf, resolve, reject) as Promise<AudioBuffer> | undefined;
+    p?.then?.(resolve, reject);
+  });
+}
+
+/** mono reamostrado por média em blocos (suficiente p/ RMS) */
+export function toMonoDecimated(audio: AudioBuffer, targetRate = 8000): { samples: Float32Array; sampleRate: number } {
   const step = Math.max(1, Math.floor(audio.sampleRate / targetRate));
   const n = Math.floor(audio.length / step);
   const out = new Float32Array(n);
@@ -27,7 +44,20 @@ export async function decodeMono(url: string, targetRate = 8000): Promise<{ samp
     for (const ch of chans) for (let k = 0; k < step; k++) sum += ch[base + k] ?? 0;
     out[i] = sum / (step * chans.length);
   }
-  return { samples: out, sampleRate: audio.sampleRate / step, duration: audio.duration };
+  return { samples: out, sampleRate: audio.sampleRate / step };
+}
+
+/** mono 16 kHz (entrada do Whisper), via OfflineAudioContext (filtro anti-aliasing do navegador) */
+export async function toMono16k(audio: AudioBuffer): Promise<Float32Array> {
+  const C = offlineCtor();
+  const len = Math.max(1, Math.ceil(audio.duration * 16000));
+  const ctx = new C(1, len, 16000);
+  const src = ctx.createBufferSource();
+  src.buffer = audio;
+  src.connect(ctx.destination);
+  src.start(0);
+  const rendered = await ctx.startRendering();
+  return rendered.getChannelData(0);
 }
 
 /** silêncios (tempos da mídia) de um asset, com cache por id+url */
@@ -37,7 +67,7 @@ export async function silencesOf(asset: MediaAsset): Promise<Range[]> {
   const hit = silenceCache.get(key);
   if (hit) return hit;
   try {
-    const { samples, sampleRate } = await decodeMono(asset.url);
+    const { samples, sampleRate } = toMonoDecimated(await decodeAudio(asset.url));
     const r = detectSilences(samples, sampleRate);
     silenceCache.set(key, r);
     return r;
@@ -54,58 +84,38 @@ export async function silencesFor(assets: MediaAsset[]): Promise<Record<Id, Rang
   return out;
 }
 
-function waitEvent(el: HTMLMediaElement, ev: string, ms = 4000): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const t = setTimeout(() => { el.removeEventListener(ev, h); reject(new Error(`timeout ${ev}`)); }, ms);
-    const h = () => { clearTimeout(t); el.removeEventListener(ev, h); resolve(); };
-    el.addEventListener(ev, h);
-  });
+export interface ReferenceSample {
+  frames: Frame[];
+  metrics: { duration: number; cuts: number[]; avgShotLength: number; pacing: StyleProfile['pacing']; aspect?: AspectRatio; width: number; height: number };
+  /** perfil heurístico (modo demo / fallback se a IA falhar) */
+  localStyle: StyleProfile;
 }
 
-/** amostra quadros do vídeo-exemplo e infere ritmo de cortes (sem IA) */
-export async function analyzeReferenceLocal(asset: MediaAsset, onProgress?: (f: number) => void): Promise<StyleProfile | undefined> {
+/** amostra o vídeo-exemplo: quadros p/ o Claude + métricas de corte medidas localmente */
+export async function sampleReference(asset: MediaAsset, onProgress?: (f: number) => void, withFrames = true): Promise<ReferenceSample | undefined> {
   if (!asset.url || asset.kind !== 'video') return undefined;
-  const video = document.createElement('video');
-  video.muted = true;
-  video.preload = 'auto';
-  video.playsInline = true;
-  video.src = asset.url;
   try {
-    await waitEvent(video, 'loadeddata', 8000);
-    const duration = Math.min(video.duration || asset.duration || 0, 90);
-    if (!duration) return undefined;
-    const W = 48, H = 27;
-    const canvas = document.createElement('canvas');
-    canvas.width = W; canvas.height = H;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (!ctx) return undefined;
-    const step = Math.max(0.2, duration / 240);
-    const times: number[] = [];
-    const diffs: number[] = [];
-    let prev: Uint8ClampedArray | null = null;
-    for (let t = 0; t < duration; t += step) {
-      video.currentTime = t;
-      try { await waitEvent(video, 'seeked', 3000); } catch { continue; }
-      ctx.drawImage(video, 0, 0, W, H);
-      const data = ctx.getImageData(0, 0, W, H).data;
-      const lum = new Uint8ClampedArray(W * H);
-      for (let i = 0; i < W * H; i++) lum[i] = (data[i * 4] * 0.299 + data[i * 4 + 1] * 0.587 + data[i * 4 + 2] * 0.114) | 0;
-      if (prev) {
-        let d = 0;
-        for (let i = 0; i < lum.length; i++) d += Math.abs(lum[i] - prev[i]);
-        diffs.push(d / (lum.length * 255));
-        times.push(t);
-      }
-      prev = lum;
-      onProgress?.(t / duration);
-    }
-    const cuts = cutsFromDiffs(diffs, times);
-    return styleFromCuts(cuts, duration, { width: video.videoWidth || asset.width, height: video.videoHeight || asset.height });
+    const dev = deviceProfile();
+    const s = await sampleVideo(asset.url, {
+      maxDuration: dev.weak ? 60 : 120,
+      maxFrames: withFrames ? undefined : 1,
+      onProgress,
+    });
+    if (!s.duration) return undefined;
+    const cuts = cutsFromDiffs(s.diffs, s.diffTimes);
+    const localStyle = styleFromCuts(cuts, s.duration, { width: s.width || asset.width, height: s.height || asset.height });
+    return {
+      frames: withFrames ? s.frames : [],
+      metrics: { duration: s.duration, cuts, avgShotLength: localStyle.avgShotLength, pacing: localStyle.pacing, aspect: localStyle.aspect, width: s.width, height: s.height },
+      localStyle,
+    };
   } catch (e) {
-    console.warn('[ai] análise local do exemplo falhou', e);
+    console.warn('[ai] amostragem do exemplo falhou', e);
     return undefined;
-  } finally {
-    video.removeAttribute('src');
-    video.load();
   }
+}
+
+/** compatível com a versão anterior: só o perfil heurístico */
+export async function analyzeReferenceLocal(asset: MediaAsset, onProgress?: (f: number) => void): Promise<StyleProfile | undefined> {
+  return (await sampleReference(asset, onProgress, false))?.localStyle;
 }

@@ -35,6 +35,17 @@ async function ingest(files: File[], role: MediaRole) {
   }
 }
 
+const DEV_CSS = `
+        .ep-devchat { height:100dvh; display:grid; grid-template-columns:minmax(0,1fr) 380px; }
+        .ep-devchat > main { grid-column:1; grid-row:1; }
+        .ep-devchat > section { grid-column:2; grid-row:1; }
+        @media (max-width: 760px) {
+          .ep-devchat { grid-template-columns:1fr; grid-template-rows:minmax(0,40dvh) minmax(0,60dvh); }
+          .ep-devchat > main { grid-row:1; padding:10px !important; }
+          .ep-devchat > section { grid-column:1; grid-row:2; border-left:0 !important; border-top:1px solid var(--line); border-radius:18px 18px 0 0; }
+        }
+      `;
+
 const COLORS: Record<string, string> = { video: '#D9641E', text: '#8B5CF6', audio: '#2ED573' };
 
 export default function DevChat() {
@@ -49,10 +60,16 @@ export default function DevChat() {
 
   useEffect(() => on('ep:attach-files', ({ files, role }) => { ingest(files, role ?? 'source'); }), []);
   useEffect(() => on('ep:toast', ({ text }) => setToasts((t) => [...t.slice(-3), text])), []);
+  // ?lang=en-US muda o idioma das legendas (teste da transcrição com áudio em inglês)
+  useEffect(() => {
+    const lang = new URLSearchParams(location.search).get('lang');
+    if (lang) useEditor.getState().dispatch([{ op: 'set_captions', segments: [], language: lang }, { op: 'toggle_captions', enabled: false }], { history: false });
+  }, []);
 
   return (
-    <div className="ep-root dark" style={{ height: '100vh', display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 380px', background: 'var(--canvasBg)' }}>
-      <main style={{ gridColumn: 1, gridRow: 1, minHeight: 0, padding: 20, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <div className="ep-root dark ep-devchat" style={{ background: 'var(--canvasBg)' }}>
+      <style dangerouslySetInnerHTML={{ __html: DEV_CSS }} />
+      <main style={{ minHeight: 0, padding: 20, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div className="ep-card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <b className="ep-title">Harness IA/Chat</b>
           <label className="ep-label">Material bruto <input data-testid="src" type="file" accept="video/*,audio/*" multiple onChange={(e) => ingest(Array.from(e.target.files ?? []), 'source')} /></label>
@@ -93,7 +110,7 @@ export default function DevChat() {
             ))}
             <div style={{ position: 'relative', height: 22, background: 'var(--track)', borderRadius: 8 }}>
               {project.captions.segments.map((s) => (
-                <div key={s.id} data-caption style={{ position: 'absolute', top: 3, bottom: 3, left: `${(s.start / dur) * 100}%`, width: `${((s.end - s.start) / dur) * 100}%`, background: project.captions.style.color, opacity: 0.7, borderRadius: 4 }} />
+                <div key={s.id} data-caption title={s.text} style={{ position: 'absolute', top: 3, bottom: 3, left: `${(s.start / dur) * 100}%`, width: `${((s.end - s.start) / dur) * 100}%`, background: project.captions.style.color, opacity: 0.7, borderRadius: 4 }} />
               ))}
             </div>
             <div style={{ position: 'absolute', top: -4, bottom: -4, left: `${(playhead / dur) * 100}%`, width: 2, background: '#fff', transition: 'left .2s' }} />
@@ -106,7 +123,7 @@ export default function DevChat() {
         </div>
         {toasts.length ? <div className="ep-meta" data-testid="toasts">{toasts.join(' | ')}</div> : null}
       </main>
-      <section className="ep-chat" style={{ gridColumn: 2, gridRow: 1, borderLeft: '1px solid var(--line)', background: 'var(--cardBg)', minHeight: 0 }}>
+      <section className="ep-chat" style={{ borderLeft: '1px solid var(--line)', background: 'var(--cardBg)', minHeight: 0 }}>
         <ChatPanel />
       </section>
     </div>

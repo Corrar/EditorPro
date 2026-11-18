@@ -1,112 +1,109 @@
 /* =====================================================================
-   JSON Schemas de saída estruturada (Gemini `responseJsonSchema`).
-   Espelham lib/types.ts e lib/ops.ts. O servidor ainda valida tudo
-   (validate.ts/sanitize.ts) — o schema só guia o modelo.
+   Schemas (zod) de saída estruturada do Claude (`output_config.format`).
+   São PERMISSIVOS de propósito (op como enum + campos opcionais): guiam o
+   modelo; a validação real é validate.ts/sanitize.ts.
    ===================================================================== */
+import { z } from 'zod';
 import { ASPECTS, CAPTION_PRESETS, COLOR_PRESETS, EASINGS, FILTER_KINDS, PACINGS, TEXT_ANIMATIONS, TRANSITIONS } from './sanitize';
+import { OP_KINDS } from './validate';
 
-type S = Record<string, unknown>;
-
-const n = (description?: string): S => ({ type: 'number', ...(description ? { description } : {}) });
-const s = (description?: string): S => ({ type: 'string', ...(description ? { description } : {}) });
-const b = (description?: string): S => ({ type: 'boolean', ...(description ? { description } : {}) });
-const e = (values: readonly string[], description?: string): S => ({ type: 'string', enum: [...values], ...(description ? { description } : {}) });
-const obj = (properties: Record<string, S>, required: string[] = []): S => ({ type: 'object', properties, required, additionalProperties: false });
-const arr = (items: S, maxItems?: number): S => ({ type: 'array', items, ...(maxItems ? { maxItems } : {}) });
-
-const position = obj({ x: n('0..1'), y: n('0..1 (0 = topo)') });
-const transform = obj({ x: n(), y: n(), scale: n('1 = cobre o quadro; 1.1-1.2 = punch-in'), rotation: n(), opacity: n() });
-const keyframe = obj({ t: n('segundos relativos ao início do clipe'), transform, easing: e(EASINGS) }, ['t', 'transform']);
-const filter = obj({ kind: e(FILTER_KINDS), value: n('-1..1') }, ['kind', 'value']);
-const transition = obj({ kind: e(TRANSITIONS), duration: n('0.2-0.8 s') }, ['kind', 'duration']);
-const textStyle = {
-  fontFamily: s(), fontSize: n('px relativos a 1920 de altura (60-110 típico)'), fontWeight: n(), color: s('hex'),
-  highlightColor: s('hex'), strokeColor: s('hex'), strokeWidth: n(), background: s("cor da caixa ou ''"),
-  shadow: b(), uppercase: b(), align: e(['left', 'center', 'right']),
+const position = z.object({ x: z.number(), y: z.number() });
+const transform = z.object({
+  x: z.number().optional(),
+  y: z.number().optional(),
+  scale: z.number().optional().describe('1 = cobre o quadro; 1.1-1.2 = punch-in'),
+  rotation: z.number().optional(),
+  opacity: z.number().optional(),
+});
+const keyframe = z.object({ t: z.number().describe('segundos desde o início do clipe'), transform, easing: z.enum(EASINGS).optional() });
+const filter = z.object({ kind: z.enum(FILTER_KINDS), value: z.number() });
+const transition = z.object({ kind: z.enum(TRANSITIONS), duration: z.number() });
+const textStyleShape = {
+  fontFamily: z.string().optional(),
+  fontSize: z.number().optional(),
+  fontWeight: z.number().optional(),
+  color: z.string().optional(),
+  highlightColor: z.string().optional(),
+  strokeColor: z.string().optional(),
+  strokeWidth: z.number().optional(),
+  background: z.string().optional(),
+  shadow: z.boolean().optional(),
+  uppercase: z.boolean().optional(),
+  align: z.enum(['left', 'center', 'right']).optional(),
 };
-const captionStyle = obj({
-  ...textStyle, preset: e(CAPTION_PRESETS), position, animation: e(TEXT_ANIMATIONS), maxWords: n('1-3 = estilo TikTok'),
+const textStyle = z.object(textStyleShape);
+const captionStyle = z.object({
+  ...textStyleShape,
+  preset: z.enum(CAPTION_PRESETS).optional(),
+  position: position.optional(),
+  animation: z.enum(TEXT_ANIMATIONS).optional(),
+  maxWords: z.number().optional(),
 });
 
-const clip = obj(
-  {
-    type: e(['video', 'image', 'audio', 'text']),
-    id: s('opcional'), assetId: s('obrigatório p/ video/image/audio'),
-    start: n('início na timeline (s)'), duration: n('duração na timeline (s)'), in: n('ponto de entrada na mídia (s)'),
-    speed: n(), volume: n('0..2'), label: s(),
-    text: s('p/ type=text'), style: obj(textStyle), position, animation: e(TEXT_ANIMATIONS),
-    transform, keyframes: arr(keyframe, 32), filters: arr(filter, 9), colorPreset: e(COLOR_PRESETS), transitionIn: transition,
-    fadeIn: n(), fadeOut: n(), duckUnderVoice: b(),
-  },
-  ['type', 'start'],
-);
+/** campos de clipe (para add_clip.clip e update_clip.patch) */
+const clipFields = {
+  start: z.number().optional(),
+  duration: z.number().optional(),
+  in: z.number().optional(),
+  speed: z.number().optional(),
+  volume: z.number().optional(),
+  muted: z.boolean().optional(),
+  label: z.string().optional(),
+  text: z.string().optional(),
+  style: textStyle.optional(),
+  position: position.optional(),
+  animation: z.enum(TEXT_ANIMATIONS).optional(),
+  transform: transform.optional(),
+  keyframes: z.array(keyframe).optional(),
+  filters: z.array(filter).optional(),
+  colorPreset: z.enum(COLOR_PRESETS).optional(),
+  transitionIn: transition.nullable().optional(),
+  fadeIn: z.number().optional(),
+  fadeOut: z.number().optional(),
+  duckUnderVoice: z.boolean().optional(),
+};
 
-const clipPatch = obj({
-  start: n(), duration: n(), in: n(), speed: n(), volume: n(), muted: b(), label: s(),
-  text: s(), style: obj(textStyle), position, animation: e(TEXT_ANIMATIONS),
-  transform, keyframes: arr(keyframe, 32), filters: arr(filter, 9), colorPreset: e(COLOR_PRESETS), transitionIn: transition,
-  fadeIn: n(), fadeOut: n(), duckUnderVoice: b(),
+const word = z.object({ start: z.number(), end: z.number(), text: z.string() });
+const segment = z.object({ start: z.number(), end: z.number(), text: z.string(), words: z.array(word).optional() });
+
+export const EditOpSchema = z.object({
+  op: z.enum(OP_KINDS as [string, ...string[]]),
+  explain: z.string().describe('frase curta em PT-BR mostrada ao usuário enquanto aplica'),
+  clipId: z.string().optional(),
+  trackId: z.string().optional(),
+  segmentId: z.string().optional(),
+  start: z.number().optional(),
+  end: z.number().optional(),
+  at: z.number().optional(),
+  newId: z.string().optional(),
+  ripple: z.boolean().optional(),
+  enabled: z.boolean().optional(),
+  aspect: z.enum(ASPECTS).optional(),
+  language: z.string().optional(),
+  index: z.number().optional(),
+  clip: z.object({ type: z.enum(['video', 'image', 'audio', 'text']), id: z.string().optional(), assetId: z.string().optional(), ...clipFields }).optional(),
+  patch: z.object({ ...clipFields, name: z.string().optional(), hidden: z.boolean().optional(), locked: z.boolean().optional(), background: z.string().optional(), emphasis: z.array(z.string()).optional() }).optional(),
+  style: captionStyle.optional(),
+  segments: z.array(segment).optional(),
+  track: z.object({ id: z.string().optional(), kind: z.enum(['video', 'audio', 'text']), name: z.string().optional() }).optional(),
 });
 
-const word = obj({ start: n(), end: n(), text: s() }, ['start', 'end', 'text']);
-const segment = obj({ start: n(), end: n(), text: s(), words: arr(word), emphasis: arr(s()) }, ['start', 'end', 'text']);
+export const EditResponseSchema = z.object({
+  reply: z.string().describe('resposta curta em PT-BR para o chat'),
+  ops: z.array(EditOpSchema),
+});
 
-const explain = s('frase curta em PT-BR mostrada ao usuário enquanto aplica');
-const opVariant = (op: string, props: Record<string, S>, required: string[]): S =>
-  obj({ op: e([op]), explain, ...props }, ['op', 'explain', ...required]);
-
-export const EDIT_SCHEMA: S = obj(
-  {
-    reply: s('resposta curta em PT-BR para o chat'),
-    ops: arr(
-      {
-        anyOf: [
-          opVariant('ripple_delete', { start: n(), end: n() }, ['start', 'end']),
-          opVariant('split_clip', { clipId: s(), at: n(), newId: s() }, ['clipId', 'at']),
-          opVariant('trim_clip', { clipId: s(), start: n(), end: n() }, ['clipId']),
-          opVariant('remove_clip', { clipId: s(), ripple: b() }, ['clipId']),
-          opVariant('move_clip', { clipId: s(), start: n(), trackId: s() }, ['clipId', 'start']),
-          opVariant('update_clip', { clipId: s(), patch: clipPatch }, ['clipId', 'patch']),
-          opVariant('add_clip', { trackId: s(), clip }, ['trackId', 'clip']),
-          opVariant('set_caption_style', { style: captionStyle }, ['style']),
-          opVariant('toggle_captions', { enabled: b() }, ['enabled']),
-          opVariant('update_caption', { segmentId: s(), patch: obj({ start: n(), end: n(), text: s(), emphasis: arr(s()) }) }, ['segmentId', 'patch']),
-          opVariant('set_captions', { segments: arr(segment), language: s() }, ['segments']),
-          opVariant('set_aspect', { aspect: e(ASPECTS) }, ['aspect']),
-          opVariant('add_track', { track: obj({ id: s(), kind: e(['video', 'audio', 'text']), name: s() }, ['kind']), index: n() }, ['track']),
-          opVariant('update_track', { trackId: s(), patch: obj({ name: s(), muted: b(), hidden: b(), locked: b() }) }, ['trackId', 'patch']),
-          opVariant('remove_track', { trackId: s() }, ['trackId']),
-          opVariant('set_project', { patch: obj({ name: s(), background: s() }) }, ['patch']),
-        ],
-      },
-      60,
-    ),
-  },
-  ['reply', 'ops'],
-);
-
-export const STYLE_SCHEMA: S = obj(
-  {
-    summary: s('descrição do estilo em PT-BR, 1-3 frases'),
-    pacing: e(PACINGS),
-    avgShotLength: n('duração média de cada tomada em segundos'),
-    aspect: e(ASPECTS),
-    transitions: arr(e(TRANSITIONS), 6),
-    colorPreset: e(COLOR_PRESETS),
-    zoomPunchIns: b('há zooms rápidos/punch-ins em frases-chave?'),
-    captions: obj({ present: b(), ...textStyle, preset: e(CAPTION_PRESETS), position, animation: e(TEXT_ANIMATIONS), maxWords: n() }, ['present']),
-    music: obj({ present: b(), energy: e(['low', 'medium', 'high']), genre: s() }, ['present', 'energy']),
-    textOverlays: obj({ present: b(), examples: arr(s(), 8) }, ['present']),
-    hook: s('como o vídeo prende nos 3 primeiros segundos'),
-    structure: arr(s(), 10),
-  },
-  ['summary', 'pacing', 'avgShotLength', 'transitions', 'zoomPunchIns'],
-);
-
-export const TRANSCRIPT_SCHEMA: S = obj(
-  {
-    language: s(),
-    segments: arr(segment),
-  },
-  ['segments'],
-);
+export const StyleSchema = z.object({
+  summary: z.string(),
+  pacing: z.enum(PACINGS),
+  avgShotLength: z.number(),
+  aspect: z.enum(ASPECTS).optional(),
+  transitions: z.array(z.enum(TRANSITIONS)),
+  colorPreset: z.enum(COLOR_PRESETS).optional(),
+  zoomPunchIns: z.boolean(),
+  captions: captionStyle.extend({ present: z.boolean() }).optional(),
+  music: z.object({ present: z.boolean(), energy: z.enum(['low', 'medium', 'high']), genre: z.string().optional() }).optional(),
+  textOverlays: z.object({ present: z.boolean(), examples: z.array(z.string()).optional() }).optional(),
+  hook: z.string().optional(),
+  structure: z.array(z.string()).optional(),
+});

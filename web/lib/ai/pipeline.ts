@@ -1,19 +1,21 @@
 /* =====================================================================
-   Pipeline da IA (navegador): orquestra upload -> análise do exemplo ->
-   transcrição -> pedido de edição -> aplicação AO VIVO (store.applyLive).
-   Funciona com Gemini (rotas /api/ai/*) ou no MODO DEMO (local, sem custo).
+   Pipeline da IA (navegador): orquestra análise do exemplo (quadros) ->
+   transcrição (Whisper local) -> pedido de edição (Claude) -> aplicação
+   AO VIVO (store.applyLive). Sem chave: MODO DEMO (local, sem custo).
    ===================================================================== */
 import type { CaptionSegment, Clip, Id, MediaAsset, Project, StyleProfile } from '../types';
 import { clipEnd, projectDuration, type EditOp } from '../ops';
 import { makeAudioClip, makeImageClip, makeVideoClip } from '../defaults';
 import { useEditor } from '../store';
-import {
-  AIClientError, analyzeReference, getStatus, requestEdit, transcribe, uploadForAI, type AIStatus,
-} from './client';
-import { analyzeReferenceLocal, silencesFor } from './analysis';
+import { AIClientError, analyzeReference, getStatus, requestEdit, type AIStatus, type EditFrame } from './client';
+import { sampleReference, silencesFor } from './analysis';
 import { chatIntent, demoCaptions, demoNeeds, planFirstEdit, speechRanges, type Range } from './demo';
+import { deviceProfile, framesFromThumbnails, sampleVideo } from './frames';
 import { captionsMediaToTimeline } from './timemap';
 import { sanitizeOps } from './validate';
+import { chooseWhisper, transcribeMedia } from './whisper';
+
+export interface AskOption { id: string; label: string }
 
 export interface PipelineOptions {
   /** narração do que está acontecendo agora ("Transcrevendo…"), com progresso 0..1 opcional */
@@ -22,6 +24,12 @@ export interface PipelineOptions {
   onLog?: (text: string) => void;
   /** aplica um lote de ops ao vivo; padrão = store.applyLive */
   apply?: (ops: EditOp[], opts?: { delayMs?: number }) => Promise<Id[]>;
+  /** pergunta ao usuário no chat (botões); sem isso, segue sem perguntar */
+  ask?: (text: string, options: AskOption[]) => Promise<string>;
+  /** etapa pulável: devolve um AbortSignal (botão "Pular" no chat); null = terminou */
+  skippable?: (label: string | null) => AbortSignal | undefined;
+  /** usar o Whisper no navegador (padrão true) */
+  whisper?: boolean;
 }
 
 export interface PipelineResult {
@@ -49,6 +57,13 @@ export function referenceAsset(assets: Record<Id, MediaAsset>, p: Project): Medi
 function allClips(p: Project): Clip[] {
   return p.tracks.flatMap((t) => t.clips);
 }
+function onTimeline(p: Project): Set<Id> {
+  return new Set(allClips(p).map((c) => ('assetId' in c ? c.assetId : '')));
+}
+function errText(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+const isAbort = (e: unknown) => e instanceof DOMException && e.name === 'AbortError';
 
 /** ops que colocam o material bruto na timeline (se ainda não estiver) + brief/referência */
 export function prelimOps(p: Project, assets: Record<Id, MediaAsset>, brief: string): EditOp[] {
@@ -59,7 +74,7 @@ export function prelimOps(p: Project, assets: Record<Id, MediaAsset>, brief: str
   if (ref && p.referenceAssetId !== ref.id) patch.referenceAssetId = ref.id;
   if (Object.keys(patch).length) ops.push({ op: 'set_project', patch, explain: 'Guardando o seu pedido' });
 
-  const used = new Set(allClips(p).map((c) => ('assetId' in c ? c.assetId : '')));
+  const used = onTimeline(p);
   const videoTrack = p.tracks.find((t) => t.kind === 'video')?.id ?? 'track_video_1';
   const audioTrack = p.tracks.find((t) => t.kind === 'audio')?.id ?? 'track_audio_1';
   let vEnd = Math.max(0, ...(p.tracks.find((t) => t.id === videoTrack)?.clips.map(clipEnd) ?? [0]));
@@ -93,60 +108,76 @@ export async function withSingleUndo<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-async function blobOf(a: MediaAsset): Promise<Blob> {
-  if (!a.url) throw new AIClientError(`A mídia "${a.name}" não está carregada.`, 400, 'no_url');
-  const res = await fetch(a.url);
-  if (!res.ok) throw new AIClientError(`Não consegui ler "${a.name}".`, 400, 'no_blob');
-  return res.blob();
+/* ---------- miniaturas do material (p/ o Claude "ver") ---------- */
+
+const frameCache = new Map<string, EditFrame[]>();
+
+/** poucas miniaturas pequenas por fonte: usa asset.thumbnails (shell) ou amostra o vídeo */
+export async function sourceFrames(sources: MediaAsset[], allowSampling: boolean, max = 10): Promise<EditFrame[]> {
+  const vids = sources.filter((a) => a.kind === 'video' || a.kind === 'image');
+  if (!vids.length) return [];
+  const per = Math.max(2, Math.floor(max / vids.length));
+  const out: EditFrame[] = [];
+  for (const a of vids) {
+    const key = `${a.id}|${a.url}|${per}`;
+    let fr = frameCache.get(key);
+    if (!fr) {
+      const thumbs = framesFromThumbnails(a.thumbnails, a.duration, per).map((f) => ({ ...f, assetId: a.id }));
+      if (thumbs.length) fr = thumbs;
+      else if (allowSampling && a.kind === 'video' && a.url) {
+        try {
+          const s = await sampleVideo(a.url, { noDiffs: true, maxFrames: per, maxSide: 384, quality: 0.6, budgetBytes: 900_000 });
+          fr = s.frames.map((f) => ({ ...f, assetId: a.id }));
+        } catch {
+          fr = [];
+        }
+      } else fr = [];
+      frameCache.set(key, fr);
+    }
+    out.push(...fr);
+  }
+  return out.slice(0, max);
 }
 
-/** garante que o asset foi enviado ao Gemini (guarda aiFileUri no store) */
-async function ensureUploaded(a: MediaAsset, onProgress?: (f: number) => void, force = false): Promise<MediaAsset> {
-  const cur = store().assets[a.id] ?? a;
-  if (cur.aiFileUri && !force) return cur;
-  const { uri, mime } = await uploadForAI(cur, await blobOf(cur), onProgress);
-  store().updateAsset(cur.id, { aiFileUri: uri, aiFileMime: mime });
-  return { ...cur, aiFileUri: uri, aiFileMime: mime };
-}
+/* ---------- transcrição (Whisper no navegador) ---------- */
 
-/** chama `fn` com o asset enviado; se o arquivo expirou no provedor, reenvia uma vez */
-async function withFile<T>(a: MediaAsset, fn: (a: MediaAsset) => Promise<T>, onProgress?: (f: number) => void): Promise<T> {
-  const up = await ensureUploaded(a, onProgress);
+/** transcreve as fontes com Whisper e converte p/ tempos da timeline. null = pulada/falhou/desligada. */
+async function whisperCaptions(sources: MediaAsset[], language: string, opts: PipelineOptions, warnings: string[]): Promise<CaptionSegment[] | null> {
+  const media = sources.filter((a) => (a.kind === 'video' || a.kind === 'audio') && a.url);
+  if (!media.length || opts.whisper === false) return null;
+  const dev = deviceProfile();
+  const total = media.reduce((n, a) => n + (a.duration || 0), 0);
+  const choice = await chooseWhisper();
+  // aparelho fraco ou áudio longo no celular: pergunta antes de baixar/processar
+  if (opts.ask && (dev.weak || (dev.mobile && total > 600))) {
+    const pick = await opts.ask(
+      `Para legendar, transcrevo a fala aqui no aparelho (${choice.label}, ~${choice.sizeMB} MB na 1ª vez${total > 120 ? `, ${Math.round(total / 60)} min de áudio` : ''}). Neste aparelho pode demorar.`,
+      [{ id: 'go', label: `Transcrever (~${choice.sizeMB} MB)` }, { id: 'skip', label: 'Pular legendas' }],
+    );
+    if (pick !== 'go') {
+      opts.onLog?.('Transcrição pulada');
+      return null;
+    }
+  }
+  const signal = opts.skippable?.('Pular transcrição');
   try {
-    return await fn(up);
+    const segs: CaptionSegment[] = [];
+    for (const a of media) {
+      const mediaSegs = await transcribeMedia(a, { language, choice, signal, onStatus: (t, f) => opts.onStatus?.(media.length > 1 ? `${t} ("${a.name}")` : t, f) });
+      segs.push(...captionsMediaToTimeline(store().project, a.id, mediaSegs));
+    }
+    return segs.sort((x, y) => x.start - y.start);
   } catch (e) {
-    if (e instanceof AIClientError && (e.code === 'file_gone' || e.code === 'not_uploaded')) return fn(await ensureUploaded(a, onProgress, true));
-    throw e;
+    if (isAbort(e)) {
+      opts.onLog?.('Transcrição pulada');
+      return null;
+    }
+    warnings.push(`sem transcrição (${errText(e)})`);
+    opts.onLog?.(`A transcrição falhou neste navegador (${errText(e)})`);
+    return null;
+  } finally {
+    opts.skippable?.(null);
   }
-}
-
-async function uploadAll(list: MediaAsset[], opts: PipelineOptions): Promise<MediaAsset[]> {
-  const pending = list.filter((a) => !store().assets[a.id]?.aiFileUri);
-  if (!pending.length) return list.map((a) => store().assets[a.id] ?? a);
-  const prog = new Map<Id, number>();
-  const report = () => {
-    const f = [...prog.values()].reduce((x, y) => x + y, 0) / pending.length;
-    opts.onStatus?.(`Enviando ${pending.length > 1 ? `${pending.length} arquivos` : `"${pending[0].name}"`} para a IA… ${Math.round(f * 100)}%`, f);
-  };
-  report();
-  await Promise.all(pending.map((a) => ensureUploaded(a, (f) => { prog.set(a.id, f); report(); })));
-  opts.onLog?.(pending.length > 1 ? `${pending.length} arquivos enviados` : `"${pending[0].name}" enviado`);
-  return list.map((a) => store().assets[a.id] ?? a);
-}
-
-function errText(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
-}
-
-/** transcreve (Gemini) e converte para tempos da timeline conforme os clipes atuais */
-async function transcribeToTimeline(sources: MediaAsset[], language: string, opts: PipelineOptions): Promise<CaptionSegment[]> {
-  const segs: CaptionSegment[] = [];
-  for (const a of sources.filter((x) => x.kind !== 'image')) {
-    opts.onStatus?.(sources.length > 1 ? `Transcrevendo "${a.name}"…` : 'Transcrevendo a fala…');
-    const media = await withFile(a, (up) => transcribe(up, language));
-    segs.push(...captionsMediaToTimeline(store().project, a.id, media));
-  }
-  return segs.sort((x, y) => x.start - y.start);
 }
 
 /* ---------- 1ª edição ---------- */
@@ -167,65 +198,53 @@ export async function runFirstEdit(opts: PipelineOptions & { brief: string }): P
     const pre = prelimOps(store().project, assets, brief);
     if (pre.length) await apply(pre, { delayMs: 260 });
 
+    // 1) vídeo-exemplo: quadros + cortes medidos aqui; o Claude descreve o estilo
+    let style: StyleProfile | undefined = store().project.style;
+    if (ref && !style) {
+      opts.onStatus?.('Analisando seu vídeo-exemplo…');
+      const sample = await sampleReference(ref, (f) => opts.onStatus?.(`Analisando seu vídeo-exemplo… ${Math.round(f * 100)}%`, f), status.configured);
+      if (sample) {
+        style = sample.localStyle;
+        if (status.configured) {
+          try {
+            opts.onStatus?.('A IA está estudando o estilo do exemplo…');
+            style = await analyzeReference(sample);
+          } catch (e) {
+            warnings.push(`análise do exemplo pela IA falhou (${errText(e)})`);
+          }
+        }
+        await apply([{ op: 'set_project', patch: { style }, explain: 'Guardando o estilo do vídeo-exemplo' }], { delayMs: 200 });
+        opts.onLog?.(`Vídeo-exemplo analisado: ${style.summary}`);
+      } else opts.onLog?.('Não consegui ler o vídeo-exemplo — sigo sem ele');
+    }
+
+    // 2) legendas reais (Whisper local, grátis)
+    const media = sources.filter((a) => a.kind !== 'image');
+    if (!store().project.captions.segments.length && !/sem legenda/i.test(brief)) {
+      const lang = store().project.captions.language || 'pt-BR';
+      const segs = await whisperCaptions(media, lang, opts, warnings);
+      if (segs?.length) {
+        await apply([{ op: 'set_captions', segments: segs, language: lang, explain: `Colocando ${segs.length} legendas sincronizadas` }], { delayMs: 300 });
+        opts.onLog?.(`Fala transcrita: ${segs.length} legendas`);
+      } else if (segs) opts.onLog?.('Não encontrei fala para legendar');
+    }
+
     if (status.configured) {
-      const media = sources.filter((a) => a.kind !== 'image');
-      let uploaded: MediaAsset[] = [];
-      try {
-        uploaded = await uploadAll([...media, ...(ref ? [ref] : [])], opts);
-      } catch (e) {
-        throw new AIClientError(`Não consegui enviar o material para a IA: ${errText(e)}`, 502, 'upload_failed');
-      }
-
-      if (ref) {
-        opts.onStatus?.('Analisando seu vídeo-exemplo…');
-        try {
-          const style = await withFile(ref, analyzeReference);
-          await apply([{ op: 'set_project', patch: { style }, explain: 'Guardando o estilo do vídeo-exemplo' }], { delayMs: 200 });
-          opts.onLog?.(`Vídeo-exemplo analisado: ${style.summary}`);
-        } catch (e) {
-          warnings.push(`não analisei o vídeo-exemplo (${errText(e)})`);
-          opts.onLog?.('Não consegui analisar o vídeo-exemplo — sigo sem ele');
-        }
-      }
-
-      if (!store().project.captions.segments.length && !/sem legenda/i.test(brief)) {
-        try {
-          const segs = await transcribeToTimeline(media, store().project.captions.language || 'pt-BR', opts);
-          if (segs.length) {
-            await apply([{ op: 'set_captions', segments: segs, language: store().project.captions.language || 'pt-BR', explain: `Colocando ${segs.length} legendas sincronizadas` }], { delayMs: 300 });
-            opts.onLog?.(`Fala transcrita: ${segs.length} legendas`);
-          } else opts.onLog?.('Não encontrei fala para legendar');
-        } catch (e) {
-          warnings.push(`sem legendas (${errText(e)})`);
-          opts.onLog?.('A transcrição falhou — sigo sem legendas');
-        }
-      }
-
       opts.onStatus?.('Planejando a edição…');
-      const p = store().project;
+      const frames = await sourceFrames(sources, true, 10);
       const res = await requestEdit({
-        project: p, assets: store().assets, messages: store().messages, userText: brief || 'Edite este vídeo de forma profissional.',
-        mode: 'first',
-        media: uploaded.filter((a) => a.role === 'source' && a.aiFileUri).map((a) => ({ uri: a.aiFileUri!, mime: a.aiFileMime || a.mime })),
+        project: store().project, assets: store().assets, messages: store().messages, mode: 'first', frames,
+        userText: brief || 'Edite este vídeo de forma profissional.',
       });
       const { ops } = sanitizeOps(res.ops, store().project, store().assets);
       opts.onStatus?.('Editando…');
       const appliedIds = ops.length ? await apply(ops) : [];
-      return { reply: res.reply, ops, appliedIds, provider: 'gemini' as const, warnings };
+      return { reply: res.reply, ops, appliedIds, provider: 'anthropic' as const, warnings };
     }
 
     // ----- modo demo -----
-    let style: StyleProfile | undefined = store().project.style;
-    if (ref && !style) {
-      opts.onStatus?.('Analisando o ritmo do seu vídeo-exemplo…');
-      style = await analyzeReferenceLocal(ref, (f) => opts.onStatus?.(`Analisando o ritmo do seu vídeo-exemplo… ${Math.round(f * 100)}%`, f));
-      if (style) {
-        await apply([{ op: 'set_project', patch: { style }, explain: 'Guardando o estilo do vídeo-exemplo' }], { delayMs: 200 });
-        opts.onLog?.(`Vídeo-exemplo analisado: ${style.summary}`);
-      }
-    }
     opts.onStatus?.('Ouvindo o áudio para achar as pausas…');
-    const silences = await silencesFor(sources.filter((a) => a.kind !== 'image'));
+    const silences = await silencesFor(media);
     const nSil = Object.values(silences).reduce((n, r) => n + r.length, 0);
     opts.onLog?.(nSil ? `Áudio analisado: ${nSil} pausa${nSil > 1 ? 's' : ''} encontrada${nSil > 1 ? 's' : ''}` : 'Áudio analisado');
     opts.onStatus?.('Planejando a edição…');
@@ -243,32 +262,32 @@ export async function generateCaptions(opts: PipelineOptions & { language?: stri
   const apply = opts.apply ?? defaultApply;
   const status = await getStatus();
   const language = opts.language || store().project.captions.language || 'pt-BR';
-  const sources = sourceAssets(store().assets).filter((a) => a.kind !== 'image');
-  const onTimeline = new Set(allClips(store().project).map((c) => ('assetId' in c ? c.assetId : '')));
-  const used = sources.filter((a) => onTimeline.has(a.id));
+  const used = sourceAssets(store().assets).filter((a) => a.kind !== 'image' && onTimeline(store().project).has(a.id));
   if (!used.length) throw new AIClientError('Coloque o vídeo na timeline antes de gerar legendas.', 400, 'no_source');
+  const warnings: string[] = [];
 
-  let segs: CaptionSegment[];
-  if (status.configured) {
-    await uploadAll(used, opts);
-    segs = await transcribeToTimeline(used, language, opts);
-  } else {
+  let segs = await whisperCaptions(used, language, opts, warnings);
+  let real = !!segs;
+  if (!segs) {
+    // sem transcrição: no demo, legendas de exemplo nos trechos de fala
+    if (status.configured && warnings.length) throw new AIClientError(warnings[0], 500, 'transcribe_failed');
     opts.onStatus?.('Ouvindo o áudio…');
     const silences = await silencesFor(used);
     const speech: Record<Id, Range[]> = {};
     for (const a of used) speech[a.id] = speechRanges(silences[a.id] ?? [], a.duration);
     segs = demoCaptions(store().project, speech, store().project.brief);
+    real = false;
   }
-  if (!segs.length) return { reply: 'Não encontrei fala para legendar neste vídeo.', ops: [], appliedIds: [], provider: status.provider, warnings: [] };
+  if (!segs.length) return { reply: 'Não encontrei fala para legendar neste vídeo.', ops: [], appliedIds: [], provider: status.provider, warnings };
   const ops = sanitizeOps(
-    [{ op: 'set_captions', segments: segs, language, explain: `Colocando ${segs.length} legendas${status.configured ? ' sincronizadas' : ' de exemplo'}` }],
+    [{ op: 'set_captions', segments: segs, language, explain: `Colocando ${segs.length} legendas${real ? ' sincronizadas' : ' de exemplo'}` }],
     store().project, store().assets,
   ).ops;
   const appliedIds = await apply(ops, { delayMs: 300 });
-  const reply = status.configured
+  const reply = real
     ? `Pronto! Gerei ${segs.length} legendas sincronizadas com a fala. Quer mudar o estilo (ex.: "legendas estilo TikTok")?`
-    : `Coloquei ${segs.length} legendas de exemplo nos trechos de fala (modo demo — conecte o Gemini para a transcrição real).`;
-  return { reply, ops, appliedIds, provider: status.provider, warnings: [] };
+    : `Coloquei ${segs.length} legendas de exemplo nos trechos de fala (sem transcrição desta vez).`;
+  return { reply, ops, appliedIds, provider: status.provider, warnings };
 }
 
 /* ---------- chat ---------- */
@@ -277,8 +296,8 @@ async function demoChat(text: string, apply: NonNullable<PipelineOptions['apply'
   let silences: Record<Id, Range[]> | undefined;
   if (demoNeeds(text).silences) {
     opts.onStatus?.('Ouvindo o áudio…');
-    const onTimeline = new Set(allClips(store().project).map((c) => ('assetId' in c ? c.assetId : '')));
-    silences = await silencesFor(sourceAssets(store().assets).filter((a) => a.kind !== 'image' && onTimeline.has(a.id)));
+    const used = onTimeline(store().project);
+    silences = await silencesFor(sourceAssets(store().assets).filter((a) => a.kind !== 'image' && used.has(a.id)));
   }
   const r = chatIntent(text, { project: store().project, assets: store().assets, silencesByAsset: silences });
   if (r.undo) {
@@ -290,6 +309,28 @@ async function demoChat(text: string, apply: NonNullable<PipelineOptions['apply'
   return { reply: r.reply, ops, appliedIds, provider: 'demo', warnings: [] };
 }
 
+async function claudeChat(text: string, apply: NonNullable<PipelineOptions['apply']>, opts: PipelineOptions): Promise<PipelineResult> {
+  opts.onStatus?.('Pensando…');
+  try {
+    const s = store();
+    const frames = await sourceFrames(sourceAssets(s.assets), false, 6);
+    const res = await requestEdit({ project: s.project, assets: s.assets, messages: s.messages, userText: text, mode: 'chat', frames });
+    const { ops } = sanitizeOps(res.ops, store().project, store().assets);
+    if (ops.length) opts.onStatus?.('Editando…');
+    const appliedIds = ops.length ? await apply(ops) : [];
+    return { reply: res.reply, ops, appliedIds, provider: 'anthropic', warnings: [] };
+  } catch (e) {
+    // IA indisponível: tenta o intérprete local antes de desistir
+    const local = chatIntent(text, { project: store().project, assets: store().assets });
+    if (local.ops.length) {
+      const { ops } = sanitizeOps(local.ops, store().project, store().assets);
+      const appliedIds = ops.length ? await apply(ops) : [];
+      return { reply: `${local.reply} (A IA falhou: ${errText(e)} — usei o modo local.)`, ops, appliedIds, provider: 'demo', warnings: [errText(e)] };
+    }
+    throw e;
+  }
+}
+
 export async function chatEdit(text: string, opts: PipelineOptions = {}): Promise<PipelineResult> {
   const apply = opts.apply ?? defaultApply;
   const status = await getStatus();
@@ -299,37 +340,11 @@ export async function chatEdit(text: string, opts: PipelineOptions = {}): Promis
       const pre = prelimOps(store().project, store().assets, '');
       if (pre.length) await apply(pre, { delayMs: 260 });
     }
-    return status.configured ? geminiChat(text, apply, opts) : demoChat(text, apply, opts);
+    return status.configured ? claudeChat(text, apply, opts) : demoChat(text, apply, opts);
   });
-}
-
-async function geminiChat(text: string, apply: NonNullable<PipelineOptions['apply']>, opts: PipelineOptions): Promise<PipelineResult> {
-
-  opts.onStatus?.('Pensando…');
-  try {
-    const s = store();
-    const media = sourceAssets(s.assets)
-      .filter((a) => a.aiFileUri && a.kind !== 'image')
-      .map((a) => ({ uri: a.aiFileUri!, mime: a.aiFileMime || a.mime }));
-    const res = await requestEdit({ project: s.project, assets: s.assets, messages: s.messages, userText: text, mode: 'chat', media });
-    const { ops } = sanitizeOps(res.ops, store().project, store().assets);
-    if (ops.length) opts.onStatus?.('Editando…');
-    const appliedIds = ops.length ? await apply(ops) : [];
-    return { reply: res.reply, ops, appliedIds, provider: 'gemini', warnings: [] };
-  } catch (e) {
-    // Gemini indisponível: tenta o intérprete local antes de desistir
-    const local = chatIntent(text, { project: store().project, assets: store().assets });
-    if (local.ops.length) {
-      const { ops } = sanitizeOps(local.ops, store().project, store().assets);
-      const appliedIds = ops.length ? await apply(ops) : [];
-      return { reply: `${local.reply} (O Gemini falhou: ${errText(e)} — usei o modo local.)`, ops, appliedIds, provider: 'demo', warnings: [errText(e)] };
-    }
-    throw e;
-  }
 }
 
 /** duração útil p/ UI */
 export function timelineDuration(): number {
   return projectDuration(store().project);
 }
-

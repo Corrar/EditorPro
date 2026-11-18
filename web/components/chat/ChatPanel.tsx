@@ -57,7 +57,7 @@ function Steps({ run }: { run: RunState }) {
   );
 }
 
-function AssistantBubble({ m, run, canUndo, onUndo }: { m: ChatMessage; run?: RunState; canUndo: boolean; onUndo: () => void }) {
+function AssistantBubble({ m, run, canUndo, onUndo, onAnswer, onSkip }: { m: ChatMessage; run?: RunState; canUndo: boolean; onUndo: () => void; onAnswer: (id: string) => void; onSkip: () => void }) {
   const working = run && !run.done;
   return (
     <div className={`ep-ch-msg ai${m.status === 'error' ? ' err' : ''}`}>
@@ -77,6 +77,19 @@ function AssistantBubble({ m, run, canUndo, onUndo }: { m: ChatMessage; run?: Ru
           </div>
         ) : null}
         {working && run?.progress !== undefined ? <div className="ep-ch-bar thin"><i style={{ width: `${Math.round(run.progress * 100)}%` }} /></div> : null}
+        {working && run?.skipLabel ? (
+          <button className="ep-ch-skip" onClick={onSkip}>{run.skipLabel}</button>
+        ) : null}
+        {run?.question ? (
+          <div className="ep-ch-ask" role="group" aria-label="Pergunta da IA">
+            <p>{run.question.text}</p>
+            <div className="ep-ch-askbtns">
+              {run.question.options.map((o, i) => (
+                <button key={o.id} className={`ep-ch-askbtn${i === 0 ? ' primary' : ''}`} onClick={() => onAnswer(o.id)}>{o.label}</button>
+              ))}
+            </div>
+          </div>
+        ) : null}
         {run ? <Steps run={run} /> : null}
         {m.text ? <p className="ep-ch-text">{m.text}</p> : null}
         {canUndo ? (
@@ -93,7 +106,7 @@ export default function ChatPanel() {
   const messages = useEditor((s) => s.messages);
   const project = useEditor((s) => s.project);
   const assetCount = useEditor((s) => Object.keys(s.assets).length);
-  const { status, busy, runs, loadStatus, send, undoRun } = useAIChat();
+  const { status, busy, runs, loadStatus, send, undoRun, answer, skip, whisper, setWhisper } = useAIChat();
   const [text, setText] = useState('');
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -146,7 +159,7 @@ export default function ChatPanel() {
     if (fileRef.current) fileRef.current.value = '';
   };
 
-  const gemini = status?.configured;
+  const claude = status?.configured;
   const empty = messages.length === 0;
 
   return (
@@ -155,10 +168,18 @@ export default function ChatPanel() {
         <div className="ep-ch-avatar lg"><Icon d={I.spark} size={17} /></div>
         <div className="ep-ch-headtxt">
           <b>Assistente IA</b>
-          <span>{busy ? 'Trabalhando…' : gemini ? 'Pronto para editar' : 'Modo demonstração'}</span>
+          <span>{busy ? 'Trabalhando…' : claude ? 'Pronto para editar' : 'Modo demonstração'}</span>
         </div>
-        <span className={`ep-ch-badge${gemini ? ' on' : ''}`} title={gemini ? `Google Gemini (${status?.model})` : 'Sem chave de IA: planejador local, grátis'}>
-          {status ? (gemini ? 'Gemini' : 'Demo') : '…'}
+        <button
+          className={`ep-ch-cc${whisper ? ' on' : ''}`}
+          onClick={() => setWhisper(!whisper)}
+          aria-pressed={whisper}
+          title={whisper ? 'Transcrição no aparelho ligada (Whisper, grátis). Toque para desligar.' : 'Transcrição no aparelho desligada. Toque para ligar.'}
+        >
+          CC
+        </button>
+        <span className={`ep-ch-badge${claude ? ' on' : ''}`} title={claude ? `Claude (${status?.model})` : 'Sem chave de IA: planejador local, grátis'}>
+          {status ? (claude ? 'Claude' : 'Demo') : '…'}
         </span>
       </header>
 
@@ -172,7 +193,7 @@ export default function ChatPanel() {
                 ? 'Descreva o resultado ou use uma sugestão abaixo. Eu edito ao vivo na timeline e você corrige por aqui.'
                 : 'Envie o material bruto e um vídeo-exemplo, descreva o estilo e eu edito ao vivo.'}
             </p>
-            {!gemini && status ? <p className="ep-ch-demo">Modo demo: corto pausas pelo áudio, crio título, zoom, cor e legendas de exemplo — sem custo.</p> : null}
+            {!claude && status ? <p className="ep-ch-demo">Modo demo: corto pausas pelo áudio, legendo com o Whisper aqui no aparelho e crio título, zoom e cor — sem custo.</p> : null}
           </div>
         ) : (
           messages.map((m) => {
@@ -188,7 +209,7 @@ export default function ChatPanel() {
             }
             const run = runs[m.id];
             const canUndo = m.id === lastEditId && !busy && !!run?.after && project === run.after;
-            return <AssistantBubble key={m.id} m={m} run={run} canUndo={canUndo} onUndo={() => undoRun(m.id)} />;
+            return <AssistantBubble key={m.id} m={m} run={run} canUndo={canUndo} onUndo={() => undoRun(m.id)} onAnswer={(id) => answer(m.id, id)} onSkip={() => skip(m.id)} />;
           })
         )}
       </div>

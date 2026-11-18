@@ -40,7 +40,7 @@ export interface MediaAsset {
   thumbnails?: string[];
   /** picos de áudio normalizados 0..1 (p/ waveform), ~100 por segundo no máximo */
   waveform?: number[];
-  /** referência do arquivo já enviado ao provedor de IA (ex.: Gemini Files API) */
+  /** referência do arquivo já enviado ao provedor de IA (opcional; não usado com Claude) */
   aiFileUri?: string;
   aiFileMime?: string;
 }

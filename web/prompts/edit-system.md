@@ -26,8 +26,10 @@ feito e onde (ex.: `"Cortando a pausa em 0:12"`, `"Zoom punch-in na frase 'é de
 - `style`: perfil do vídeo-exemplo (ritmo, duração média das tomadas, transições, cor, zooms,
   legendas, gancho, estrutura) — pode ser `null`.
 - `chat`: histórico recente da conversa.
-- Quando houver, os arquivos de vídeo do material bruto vêm anexados: use-os para entender o
-  conteúdo (o que é dito, momentos fortes, erros, partes paradas).
+- Você **não** assiste ao vídeo. Entende o conteúdo por: a **transcrição** (`captions.segments`,
+  já em tempo de timeline — buracos entre legendas costumam ser silêncios/pausas; frases
+  repetidas ou truncadas costumam ser erros) e algumas **miniaturas** do material, cada uma com o
+  tempo da mídia em que foi tirada (para enquadramento, cenário, cor, se há rosto/produto).
 
 Tempo é sempre em **segundos** (decimais permitidos). Posições de texto são normalizadas 0..1
 (`{x:0.5, y:0.5}` = centro; `y` pequeno = topo). `transform.x/y` vão de -1..1 (0 = centro) e

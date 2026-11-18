@@ -10,7 +10,7 @@ import type { EditOp } from '../ops';
 import { useEditor } from '../store';
 import { emit } from '../events';
 import { getStatus, type AIStatus } from './client';
-import { chatEdit, generateCaptions, runFirstEdit, type PipelineOptions, type PipelineResult } from './pipeline';
+import { chatEdit, generateCaptions, runFirstEdit, type AskOption, type PipelineOptions, type PipelineResult } from './pipeline';
 
 export type StepState = 'pending' | 'active' | 'done' | 'skipped';
 export interface LiveStep { id: Id; text: string; state: StepState }
@@ -27,6 +27,10 @@ export interface RunState {
   after?: Project;
   error?: string;
   done: boolean;
+  /** pergunta pendente ao usuário (botões no chat) */
+  question?: { text: string; options: AskOption[] };
+  /** etapa em andamento que pode ser pulada (ex.: "Pular transcrição") */
+  skipLabel?: string;
 }
 
 interface AIChatState {
@@ -39,7 +43,22 @@ interface AIChatState {
   captions: (language?: string) => Promise<void>;
   /** desfaz a edição feita por uma mensagem (só se ela ainda for a última mudança) */
   undoRun: (msgId: Id) => void;
+  /** responde a uma pergunta feita pela IA no chat */
+  answer: (msgId: Id, optionId: string) => void;
+  /** pula a etapa em andamento (ex.: transcrição) */
+  skip: (msgId: Id) => void;
+  /** transcrição local com Whisper ligada? (preferência do aparelho) */
+  whisper: boolean;
+  setWhisper: (on: boolean) => void;
 }
+
+const WHISPER_KEY = 'ep_ai_whisper';
+function readWhisperPref(): boolean {
+  try { return typeof localStorage === 'undefined' || localStorage.getItem(WHISPER_KEY) !== 'off'; } catch { return true; }
+}
+
+const answers = new Map<Id, (optionId: string) => void>();
+const skips = new Map<Id, AbortController>();
 
 const editor = () => useEditor.getState();
 
@@ -85,6 +104,28 @@ export const useAIChat = create<AIChatState>((set, get) => {
         apply,
         onStatus: (phase, progress) => patchRun(msgId, { phase, progress }),
         onLog: (line) => patchRun(msgId, (r) => ({ log: [...r.log, line] })),
+        whisper: get().whisper,
+        ask: (text, options) =>
+          new Promise<string>((resolve) => {
+            answers.set(msgId, (id) => {
+              answers.delete(msgId);
+              patchRun(msgId, (r) => ({ question: undefined, log: [...r.log, options.find((o) => o.id === id)?.label ?? id] }));
+              resolve(id);
+            });
+            patchRun(msgId, { question: { text, options }, phase: 'Aguardando sua resposta…', progress: undefined });
+          }),
+        skippable: (label) => {
+          skips.get(msgId)?.abort();
+          skips.delete(msgId);
+          if (!label) {
+            patchRun(msgId, { skipLabel: undefined });
+            return undefined;
+          }
+          const ctrl = new AbortController();
+          skips.set(msgId, ctrl);
+          patchRun(msgId, { skipLabel: label });
+          return ctrl.signal;
+        },
       });
       const after = editor().project;
       const changed = !res.undo && after !== get().runs[msgId]?.before;
@@ -95,6 +136,9 @@ export const useAIChat = create<AIChatState>((set, get) => {
       patchRun(msgId, { phase: undefined, progress: undefined, done: true, error: msg });
       editor().updateMessage(msgId, { text: `Não consegui concluir: ${msg}`, status: 'error' });
     } finally {
+      answers.delete(msgId);
+      skips.delete(msgId);
+      patchRun(msgId, { question: undefined, skipLabel: undefined });
       set({ busy: false });
     }
   }
@@ -103,8 +147,25 @@ export const useAIChat = create<AIChatState>((set, get) => {
     status: null,
     busy: false,
     runs: {},
+    whisper: true,
+
+    setWhisper: (on) => {
+      try { localStorage.setItem(WHISPER_KEY, on ? 'on' : 'off'); } catch {}
+      set({ whisper: on });
+    },
+
+    answer: (msgId, optionId) => answers.get(msgId)?.(optionId),
+
+    skip: (msgId) => {
+      const c = skips.get(msgId);
+      if (!c) return;
+      skips.delete(msgId);
+      patchRun(msgId, { skipLabel: undefined, phase: 'Pulando…' });
+      c.abort();
+    },
 
     loadStatus: async () => {
+      set({ whisper: readWhisperPref() }); // só no cliente (evita divergência na hidratação)
       set({ status: await getStatus(true) });
     },
 

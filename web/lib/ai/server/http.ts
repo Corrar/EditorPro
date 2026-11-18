@@ -1,6 +1,6 @@
 /* utilitários das rotas /api/ai/* */
 import { NextResponse } from 'next/server';
-import { AIError, friendlyError } from './gemini';
+import { AIError, friendlyError } from './anthropic';
 
 export function ok(data: unknown, init?: ResponseInit) {
   return NextResponse.json(data, { ...init, headers: { 'Cache-Control': 'no-store', ...(init?.headers ?? {}) } });

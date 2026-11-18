@@ -88,3 +88,45 @@
 .ep-ch-input.busy .ep-ch-send:disabled { opacity:1; }
 .ep-root.dark .ep-ch-send { background:#A84D15; }
 .ep-ch-hint { font-size:10.5px; color:var(--faint); text-align:center; }
+
+/* ---------- interações novas: transcrição (CC), pular etapa, perguntas ---------- */
+.ep-ch-cc { flex:none; height:26px; min-width:34px; padding:0 8px; border-radius:8px; border:1.5px solid var(--line2); background:none; color:var(--faint); font:inherit; font-size:10.5px; font-weight:800; letter-spacing:.04em; cursor:pointer; transition:.15s; }
+.ep-ch-cc.on { border-color:var(--tintGBl); background:var(--tintG); color:var(--tintGInk); }
+.ep-ch-skip { display:inline-flex; align-items:center; margin:2px 0 8px; border:1px solid var(--line2); background:var(--card); color:var(--sub); border-radius:999px; padding:6px 12px; font:inherit; font-size:12px; font-weight:600; cursor:pointer; }
+.ep-ch-skip:active { background:var(--chip); }
+.ep-ch-ask { background:var(--amberTint); border-radius:13px; padding:10px 11px; margin:2px 0 8px; }
+.ep-ch-ask p { font-size:12.5px; line-height:1.45; color:var(--ink); }
+.ep-ch-askbtns { display:flex; flex-wrap:wrap; gap:6px; margin-top:9px; }
+.ep-ch-askbtn { border:1px solid var(--line2); background:var(--card); color:var(--sub); border-radius:999px; padding:7px 13px; font:inherit; font-size:12.5px; font-weight:600; cursor:pointer; }
+.ep-ch-askbtn.primary { background:var(--green); border-color:transparent; color:#fff; }
+.ep-root.dark .ep-ch-askbtn.primary { background:#A84D15; }
+
+/* ---------- responsivo: coluna no desktop, bottom-sheet/tela cheia no celular ----------
+   O shell decide o contêiner; o painel se adapta à PRÓPRIA largura (container query). */
+.ep-ch { container-type:inline-size; container-name:epch; width:100%; }
+.ep-ch-foot { padding-bottom:max(10px, env(safe-area-inset-bottom)); }
+.ep-ch-list { overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
+.ep-ch-chips { overscroll-behavior-x:contain; -webkit-overflow-scrolling:touch; scroll-snap-type:x proximity; }
+.ep-ch-chip { scroll-snap-align:start; }
+
+@container epch (max-width: 520px) {
+  .ep-ch-head { padding:10px 12px; gap:8px; }
+  .ep-ch-list { padding:12px 10px 6px; gap:10px; }
+  .ep-ch-bubble { max-width:92%; }
+  .ep-ch-msg.ai .ep-ch-avatar { display:none; }
+  .ep-ch-msg.ai .ep-ch-bubble { max-width:100%; }
+  .ep-ch-foot { padding-left:10px; padding-right:10px; }
+  .ep-ch-hint { display:none; }
+  /* iOS dá zoom ao focar campos com fonte < 16px */
+  .ep-ch-input textarea { font-size:16px; }
+}
+
+/* toque (celular/tablet): alvos ≥ 44px, nada depende de hover */
+@media (pointer: coarse) {
+  .ep-ch-input textarea { font-size:16px; padding:10px 4px; }
+  .ep-ch-send, .ep-ch-attach { width:44px; height:44px; }
+  .ep-ch-chip { padding:10px 14px; font-size:13px; }
+  .ep-ch-undo, .ep-ch-skip, .ep-ch-askbtn { min-height:40px; padding:9px 15px; font-size:13px; }
+  .ep-ch-cc { height:34px; min-width:40px; }
+  .ep-ch-steps ol { max-height:200px; }
+}
