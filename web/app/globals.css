@@ -175,7 +175,8 @@ body { background: var(--bg); }
    ├ rail ┴──────── timeline ─────────┴─────────┘                     */
 html, body { height: 100%; overflow: hidden; }
 .ep-app { display:grid; grid-template-columns: 64px minmax(240px,300px) minmax(0,1fr) minmax(300px,380px);
-  grid-template-rows: 56px minmax(0,1fr) var(--tl-h, 300px); height:100vh; background:var(--canvasBg); }
+  grid-template-rows: 56px minmax(0,1fr) var(--tl-h, 300px); height:100vh; height:100dvh;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); background:var(--canvasBg); }
 .ep-topbar { grid-column: 2 / -1; grid-row:1; display:flex; align-items:center; gap:10px; padding:0 16px; border-bottom:1px solid var(--line); background:var(--cardBg); backdrop-filter:blur(14px); }
 .ep-rail { grid-column:1; grid-row:1 / -1; display:flex; flex-direction:column; align-items:center; gap:4px; padding:10px 0; border-right:1px solid var(--line); background:var(--cardBg); }
 .ep-side { grid-column:2; grid-row:2; min-height:0; overflow:auto; border-right:1px solid var(--line); background:var(--cardBg); }
@@ -204,3 +205,19 @@ html, body { height: 100%; overflow: hidden; }
 .ep-login-err { color:var(--red); font-size:12.5px; margin-top:12px; min-height:16px; text-align:center; }
 .ep-installbtn { display:inline-flex; align-items:center; gap:6px; background:var(--green); color:#fff; border-color:var(--green); }
 .ep-installbtn:hover { background:var(--greenD); color:#fff; }
+
+/* ---------- responsividade base (o shell refina em styles/shell.css) ----------
+   Breakpoints do projeto: ≥1440 desktop largo · 1100–1439 desktop · 900–1099 tablet/notebook pequeno
+   · ≤899 celular/tablet retrato (layout empilhado + barra inferior) · ≤480 celular pequeno.
+   Regras: alvos de toque ≥44px em (pointer:coarse); inputs com font-size ≥16px no celular (evita zoom do iOS);
+   nada depende de :hover; respeitar safe-area e prefers-reduced-motion. */
+@media (pointer: coarse) {
+  .ep-root .ep-iconbtn, .ep-root .ep-pillbtn, .ep-root .ep-btn, .ep-root .ep-chipbtn { min-height: 44px; }
+  .ep-root .ep-iconbtn { min-width: 44px; }
+}
+@media (max-width: 899px) {
+  .ep-root .ep-input, .ep-root .ep-select, .ep-root .ep-textarea { font-size: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ep-root *, .ep-root *::before, .ep-root *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}

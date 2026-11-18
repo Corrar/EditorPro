@@ -28,6 +28,10 @@
 - `web/public/manifest.webmanifest`, `web/public/sw.js` (shell offline; nunca cacheia `/api/`),
   ícones gerados (play + ponto, no estilo da marca do Radar). `web/lib/pwa.ts` = `registerPWA()`
   (chamado em `app/pwa-register.tsx`) + hook `useInstallPrompt()` p/ o botão "Instalar app".
+- Responsivo em tudo (desktop, Android, iPhone/iPad, app instalado). Breakpoints: ≥1440 · 1100–1439 ·
+  900–1099 (chat/painel viram gavetas) · ≤899 empilhado tipo CapCut mobile (preview em cima, timeline
+  embaixo, barra inferior + bottom-sheets) · ≤480 · paisagem no celular. Toque via Pointer Events,
+  long-press no lugar do botão direito, alvos ≥44px, nada depende de hover, safe-area, sem scroll horizontal.
 - Modelo visual: `design/radar-reference/` (cópia somente leitura do painel Radar Local).
 
 ## Módulos (cada um com dono; não editar pasta alheia)

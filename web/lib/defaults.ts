@@ -1,6 +1,7 @@
 /* fábricas de objetos padrão (projeto, clipes, estilos) */
 import type {
   AspectRatio, AudioClip, CaptionStyle, MediaAsset, Project, Seconds, TextClip, TextStyle, VideoClip, ImageClip,
+  StickerClip, ShapeClip, ShapeKind, AdjustmentClip,
 } from './types';
 import { ASPECT_SIZES, DEFAULT_TRANSFORM } from './types';
 import { uid } from './util';
@@ -88,4 +89,16 @@ export function makeTextClip(text: string, start: Seconds, duration: Seconds = 2
     animation: 'pop',
     ...opts,
   };
+}
+
+export function makeStickerClip(start: Seconds, src: { assetId?: string; emoji?: string }, duration: Seconds = 3, opts: Partial<StickerClip> = {}): StickerClip {
+  return { id: uid('clip'), type: 'sticker', start, duration, ...src, transform: { ...DEFAULT_TRANSFORM, scale: 0.35 }, animationIn: { kind: 'pop', duration: 0.3 }, ...opts };
+}
+
+export function makeShapeClip(shape: ShapeKind, start: Seconds, duration: Seconds = 3, opts: Partial<ShapeClip> = {}): ShapeClip {
+  return { id: uid('clip'), type: 'shape', shape, start, duration, fill: '#D9641E', transform: { ...DEFAULT_TRANSFORM, scale: 0.3 }, ...opts };
+}
+
+export function makeAdjustmentClip(start: Seconds, duration: Seconds = 5, opts: Partial<AdjustmentClip> = {}): AdjustmentClip {
+  return { id: uid('clip'), type: 'adjustment', start, duration, filters: [], ...opts };
 }
