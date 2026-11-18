@@ -6,6 +6,8 @@
 import type { Clip, Id, Project, Seconds } from '../types';
 import { trackLayers, type LayerItem } from './timing';
 import { applyAdjustment, drawBackground, drawCaptions, drawLayer, drawTextClip } from './draw';
+import { isShaderTransition, runShaderTransition, shaderTransitionsAvailable } from './shaderTransitions';
+import { scratch } from './surface';
 
 export type MediaElement = HTMLVideoElement | HTMLImageElement | HTMLAudioElement | ImageBitmap;
 
@@ -47,7 +49,26 @@ export function renderFrame(ctx: CanvasRenderingContext2D, project: Project, t: 
   for (const track of project.tracks) {
     if (track.hidden) continue;
     if (track.kind === 'video' || track.kind === 'overlay') {
-      for (const layer of trackLayers(track, t)) drawLayer(ctx, layer, t, elFor(layer.clip), W, H, { offline: media.offline });
+      const layers = trackLayers(track, t);
+      const inL = layers.find((l) => l.transition?.role === 'in' && isShaderTransition(l.transition.kind));
+      if (inL && shaderTransitionsAvailable()) {
+        // transição em shader: "de" = quadro até aqui + clipe que sai; "para" = quadro até aqui + clipe que entra
+        const outL = layers.find((l) => l.transition?.role === 'out');
+        const plain = (l: LayerItem): LayerItem => ({ clip: l.clip });
+        const { c: base, ctx: bc } = scratch(ctx.canvas, W, H, 20);
+        bc.drawImage(ctx.canvas as CanvasImageSource, 0, 0);
+        const { c: from, ctx: fc } = scratch(ctx.canvas, W, H, 21);
+        fc.drawImage(base as CanvasImageSource, 0, 0);
+        if (outL) drawLayer(fc, plain(outL), t, elFor(outL.clip), W, H, { offline: media.offline });
+        const { c: to, ctx: tc } = scratch(ctx.canvas, W, H, 22);
+        tc.drawImage(base as CanvasImageSource, 0, 0);
+        drawLayer(tc, plain(inL), t, elFor(inL.clip), W, H, { offline: media.offline });
+        const mixed = runShaderTransition(inL.transition!.kind as never, from as TexImageSource, to as TexImageSource, inL.transition!.progress, W, H);
+        ctx.drawImage((mixed ?? to) as CanvasImageSource, 0, 0);
+        for (const l of layers) if (l !== inL && l !== outL) drawLayer(ctx, l, t, elFor(l.clip), W, H, { offline: media.offline });
+      } else {
+        for (const layer of layers) drawLayer(ctx, layer, t, elFor(layer.clip), W, H, { offline: media.offline });
+      }
     } else if (track.kind === 'text') {
       for (const c of track.clips) {
         if (c.type === 'text' && t >= c.start && t < c.start + c.duration && c.text.trim()) drawTextClip(ctx, c, t, W, H);
@@ -77,6 +98,7 @@ export { clipAnimFx, CLIP_ANIMATION_LABELS } from './animations';
 export { EFFECT_LABELS } from './effects';
 export { FILTER_LABELS } from './filters';
 export { ALL_TRANSITIONS } from './transitions';
+export { SHADER_TRANSITIONS, SHADER_TRANSITION_LABELS, isShaderTransition } from './shaderTransitions';
 export { TEXT_ANIMATION_LABELS } from './text';
 export { MASK_LABELS } from './masks';
 export { SHAPE_LABELS } from './shapes';

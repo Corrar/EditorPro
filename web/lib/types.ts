@@ -69,7 +69,11 @@ export type TransitionKind =
   | 'cut' | 'fade' | 'crossfade' | 'slide-left' | 'slide-right' | 'slide-up'
   | 'zoom-in' | 'zoom-out' | 'whip' | 'glitch' | 'flash'
   | 'slide-down' | 'dip-black' | 'dip-white' | 'blur' | 'spin' | 'wipe-left' | 'wipe-right'
-  | 'wipe-up' | 'circle-open' | 'pixelate' | 'shake' | 'rgb-split' | 'film-burn';
+  | 'wipe-up' | 'circle-open' | 'pixelate' | 'shake' | 'rgb-split' | 'film-burn'
+  /* transições em shader WebGL (portadas do HyperFrames, Apache-2.0) */
+  | 'domain-warp' | 'ridged-burn' | 'whip-pan' | 'sdf-iris' | 'ripple-waves' | 'gravitational-lens'
+  | 'cinematic-zoom' | 'chromatic-split' | 'digital-glitch' | 'swirl-vortex' | 'thermal-distortion'
+  | 'flash-through-white' | 'cross-warp-morph' | 'light-leak';
 
 /** efeitos visuais aplicados ao clipe (ou a uma camada de ajuste) */
 export type VisualEffectKind =
