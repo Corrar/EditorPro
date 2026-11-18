@@ -17,6 +17,7 @@
   `StyleProfile`, `MediaAsset`, `ChatMessage`. Tempo em segundos; posições normalizadas 0..1.
 - `web/lib/ops.ts` — `EditOp` + `applyOp`/`applyOps` (puro, imutável, testado). Toda edição
   (manual ou IA) é uma op. `opFocus()` diz onde a op mexe (p/ animar ao vivo).
+- `web/lib/events.ts` — eventos entre módulos (`emit`/`on`): open-export, start-ai-edit, generate-captions, attach-files, toast.
 - `web/lib/store.ts` — `useEditor`: `project`, `assets`, `dispatch`, `undo/redo`,
   `playhead/playing/zoom/selection`, `messages`, `applyLive(ops)` (edição ao vivo, 1 desfazer).
 - Mudanças no contrato só aditivas (campo opcional / op nova + teste em `ops.test.ts`).

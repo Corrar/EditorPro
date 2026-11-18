@@ -77,3 +77,9 @@ da sessão; a principal integra.
 2. "Editar com IA": envia mídia → analisa exemplo → transcreve → pede o plano → aplica ao vivo.
 3. Usuário ajusta pelo chat ou à mão (timeline + inspetor).
 4. Exporta MP4 / SRT / FCPXML.
+
+## Eventos entre módulos (`web/lib/events.ts`)
+`emit()/on()` tipados, para os módulos não importarem uns aos outros enquanto são construídos
+em paralelo: `ep:open-export` (shell→engine), `ep:start-ai-edit` (shell→ai),
+`ep:generate-captions` (shell→ai), `ep:attach-files` (ai→shell), `ep:toast` (todos→shell).
+Atalhos de teclado do editor são TODOS da timeline (espaço, S, Delete, Ctrl+Z, setas).
