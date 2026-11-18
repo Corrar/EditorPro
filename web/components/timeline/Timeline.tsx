@@ -409,10 +409,16 @@ export default function Timeline() {
     let dx = 0;
     if (lp.x < r.left + HEADER_W + EDGE) dx = -Math.ceil((r.left + HEADER_W + EDGE - lp.x) / 4);
     else if (lp.x > r.right - EDGE) dx = Math.ceil((lp.x - (r.right - EDGE)) / 4);
-    if (dx) {
-      const before = el.scrollLeft;
-      el.scrollLeft = Math.max(0, before + dx);
-      if (el.scrollLeft !== before) applyMove(lp.x, lp.y, lp.shift);
+    let dy = 0;
+    const top = r.top + RULER_H;
+    if (lp.y < top + EDGE / 2 && lp.y > r.top - EDGE) dy = -Math.ceil((top + EDGE / 2 - lp.y) / 4);
+    else if (lp.y > r.bottom - EDGE / 2) dy = Math.ceil((lp.y - (r.bottom - EDGE / 2)) / 4);
+    if (dx || dy) {
+      const bx = el.scrollLeft;
+      const by = el.scrollTop;
+      if (dx) el.scrollLeft = Math.max(0, bx + dx);
+      if (dy) el.scrollTop = Math.max(0, by + Math.max(-12, Math.min(12, dy)));
+      if (el.scrollLeft !== bx || el.scrollTop !== by) applyMove(lp.x, lp.y, lp.shift);
     }
     edgeRaf.current = requestAnimationFrame(edgeLoop);
   }, [applyMove]);
