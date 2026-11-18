@@ -1,1 +1,58 @@
-/* estilos do módulo media (dono: sessão media) — prefixo .ep-me- ou .ep-media- */
+/* =====================================================================
+   Biblioteca de mídia (dono: sessão "shell")
+   ===================================================================== */
+.ep-media { position:relative; min-height:100%; padding-bottom:16px; }
+.ep-mfilter { display:flex; gap:4px; margin:0 14px 12px; background:var(--chip); border:1px solid var(--line2); border-radius:12px; padding:3px; }
+.ep-mfilter button { flex:1; display:inline-flex; align-items:center; justify-content:center; gap:5px; border:0; background:none; font:inherit; font-size:11.5px; font-weight:600; color:var(--sub); padding:6px 2px; border-radius:9px; cursor:pointer; transition:.15s; }
+.ep-mfilter button .c { font-family:var(--font-mono),monospace; font-size:10px; color:var(--faint); }
+.ep-mfilter button:hover { color:var(--ink); }
+.ep-mfilter button.on { background:var(--card); color:var(--ink); box-shadow:0 2px 6px rgba(0,0,0,.10); }
+.ep-mfilter button.on .c { color:var(--green); }
+
+.ep-mgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(118px,1fr)); gap:10px; padding:0 14px; }
+.ep-asset { position:relative; border-radius:13px; background:var(--box); border:1px solid var(--line); overflow:hidden; cursor:grab; transition:transform .15s, box-shadow .15s, border-color .15s; animation:rise .3s cubic-bezier(.2,.7,.2,1) both; user-select:none; }
+.ep-asset:hover { transform:translateY(-2px); border-color:var(--tintGBl); box-shadow:0 10px 24px rgba(28,31,34,.12); }
+.ep-asset:active { cursor:grabbing; }
+.ep-asset.loading { cursor:progress; }
+.ep-asset.loading:hover { transform:none; }
+.ep-asset-thumb { position:relative; aspect-ratio:16/11; background:#120d0a; display:grid; place-items:center; overflow:hidden; }
+.ep-asset-thumb img { width:100%; height:100%; object-fit:cover; display:block; pointer-events:none; }
+.ep-asset.k-audio .ep-asset-thumb { background:linear-gradient(135deg,var(--tintG),var(--box)); }
+.ep-asset-wave { width:84%; height:56%; fill:var(--green); opacity:.9; }
+.ep-asset-skel { position:absolute; inset:0; background:linear-gradient(100deg,var(--skel1) 30%,var(--skel2) 50%,var(--skel1) 70%); background-size:200% 100%; animation:shimmer 1.3s linear infinite; }
+.ep-asset .ep-spin { position:relative; }
+.ep-asset-kind { position:absolute; left:6px; top:6px; width:22px; height:22px; border-radius:7px; background:rgba(0,0,0,.55); color:#fff; display:grid; place-items:center; backdrop-filter:blur(4px); }
+.ep-asset-dur { position:absolute; right:6px; bottom:6px; font-size:10px; font-weight:500; color:#fff; background:rgba(0,0,0,.62); border-radius:6px; padding:2px 6px; }
+.ep-asset-used { position:absolute; left:6px; bottom:6px; font-size:9.5px; font-weight:700; color:#fff; background:var(--green); border-radius:6px; padding:2px 6px; }
+.ep-asset-actions { position:absolute; right:6px; top:6px; display:flex; gap:4px; opacity:0; transform:translateY(-3px); transition:.15s; }
+.ep-asset:hover .ep-asset-actions, .ep-asset:focus-within .ep-asset-actions { opacity:1; transform:none; }
+.ep-asset-actions button { width:26px; height:26px; border-radius:8px; border:0; background:rgba(0,0,0,.6); color:#fff; display:grid; place-items:center; cursor:pointer; backdrop-filter:blur(4px); transition:.12s; }
+.ep-asset-actions button:first-child:hover { background:var(--green); }
+.ep-asset-actions button:last-child:hover { background:var(--red); }
+.ep-asset-confirm { position:absolute; inset:0; background:rgba(16,12,9,.86); color:#fff; display:flex; flex-direction:column; justify-content:center; gap:8px; padding:8px; font-size:11.5px; text-align:center; cursor:default; animation:toastIn .15s ease both; }
+.ep-asset-confirm small { color:#E7C9B2; font-size:10.5px; }
+.ep-asset-confirm div { display:flex; gap:5px; justify-content:center; }
+.ep-asset-confirm .ep-mini { padding:4px 9px; font-size:10.5px; }
+.ep-asset-meta { padding:7px 8px 8px; display:flex; flex-direction:column; gap:5px; min-width:0; }
+.ep-asset-name { font-size:11.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ep-asset-row { display:flex; align-items:center; justify-content:space-between; gap:6px; }
+.ep-asset-size { font-size:10px; color:var(--faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ep-role { appearance:none; -webkit-appearance:none; border:1px solid var(--line); background:var(--card); color:var(--sub); font:inherit; font-size:10px; font-weight:700; border-radius:999px; padding:2px 8px; cursor:pointer; outline:none; max-width:78px; }
+.ep-role:focus { border-color:var(--green); }
+.ep-role.r-source { background:var(--tintG); color:var(--tintGInk); border-color:var(--tintGBl); }
+.ep-role.r-reference { background:var(--amberTint); color:var(--amberInk); border-color:transparent; }
+.ep-role.r-music { background:var(--inverse); color:var(--inverseInk); border-color:transparent; }
+.ep-role.r-broll { background:var(--badge); color:var(--badgeInk); border-color:transparent; }
+
+.ep-mdrop { margin:6px 14px 0; width:calc(100% - 28px); border:1.5px dashed var(--dash); background:var(--box); border-radius:18px; padding:34px 16px; display:flex; flex-direction:column; align-items:center; gap:6px; font:inherit; color:var(--muted); font-size:12px; cursor:pointer; transition:.15s; text-align:center; }
+.ep-mdrop .ic { width:50px; height:50px; border-radius:50%; background:var(--tintG); color:var(--tintGInk); display:grid; place-items:center; margin-bottom:6px; transition:.2s; }
+.ep-mdrop b { color:var(--ink); font-size:13.5px; }
+.ep-mdrop:hover { border-color:var(--green); }
+.ep-mdrop:hover .ic { background:var(--green); color:#fff; transform:translateY(-2px); }
+.ep-mtip { font-size:11px; color:var(--faint); padding:14px 16px 0; line-height:1.45; }
+.ep-mover { position:absolute; inset:8px; border:2px dashed var(--green); border-radius:18px; background:rgba(217,100,30,.12); backdrop-filter:blur(2px); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; color:var(--tintGInk); font-size:14px; z-index:5; pointer-events:none; animation:toastIn .15s ease both; }
+/* toque: ações sempre visíveis (sem depender de hover) */
+@media (hover: none) {
+  .ep-asset-actions { opacity:1; transform:none; }
+  .ep-asset-actions button { width:32px; height:32px; }
+}

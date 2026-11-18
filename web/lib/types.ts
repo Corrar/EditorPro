@@ -40,7 +40,7 @@ export interface MediaAsset {
   thumbnails?: string[];
   /** picos de áudio normalizados 0..1 (p/ waveform), ~100 por segundo no máximo */
   waveform?: number[];
-  /** referência do arquivo já enviado ao provedor de IA (ex.: Gemini Files API) */
+  /** referência do arquivo já enviado ao provedor de IA (opcional; não usado com Claude) */
   aiFileUri?: string;
   aiFileMime?: string;
   /** batidas detectadas na música (segundos da mídia) — p/ sincronizar cortes */
@@ -210,6 +210,8 @@ export interface ImageClip extends BaseClip, VisualExtras {
   transform: Transform;
   keyframes?: Keyframe[]; // ex.: Ken Burns
   filters: Filter[];
+  /** (aditivo, sessão shell) predefinição de cor também em imagens */
+  colorPreset?: ColorPreset;
   transitionIn?: Transition;
 }
 
