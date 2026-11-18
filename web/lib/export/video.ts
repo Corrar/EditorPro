@@ -90,11 +90,20 @@ export async function exportVideo(p: Project, assets: Record<string, MediaAsset>
       console.warn('[export] falha ao mixar áudio, exportando sem som', e);
     }
     if (signal?.aborted) throw abortErr();
+    // 1) WebCodecs (rápido, quadro a quadro) — só se também souber codificar o áudio (ou não houver áudio)
+    // 2) MediaRecorder em tempo real (Safari: MP4; Firefox: WebM) — mantém o som
+    // 3) WebCodecs sem áudio, como último recurso
+    const recorder = recorderMime(opts.format);
     if (hasWebCodecs()) {
-      const blob = await encodeWithWebCodecs(p, pool, audio, opts, report);
-      if (blob) return blob;
+      const needAudio = !!audio;
+      const audioOk = !needAudio || !!(await pickAudio(opts.format === 'mp4' ? MP4_AUDIO : WEBM_AUDIO));
+      if (audioOk || !recorder) {
+        const blob = await encodeWithWebCodecs(p, pool, audioOk ? audio : null, opts, report);
+        if (blob) return blob;
+      }
     }
-    return await encodeWithMediaRecorder(p, pool, audio, opts, report);
+    if (recorder) return await encodeWithMediaRecorder(p, pool, audio, opts, report, recorder);
+    throw new Error('Este navegador não consegue gerar vídeo (sem WebCodecs nem MediaRecorder). Use Chrome, Edge, Safari 16.4+ ou Firefox atualizados, ou baixe o projeto (.fcpxml) e as legendas (.srt).');
   } finally {
     pool.dispose();
   }
@@ -199,12 +208,33 @@ async function encodeWithWebCodecs(
   return new Blob([buf], { type: format === 'mp4' ? 'video/mp4' : 'video/webm' });
 }
 
-/** fallback: grava o canvas + áudio mixado em tempo real (sai sempre WebM) */
+const MR_MP4 = ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4;codecs=avc1,mp4a', 'video/mp4'];
+const MR_WEBM = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+
+/** mimeType do MediaRecorder suportado, preferindo o formato pedido (null = sem MediaRecorder) */
+export function recorderMime(format: ExportOptions['format']): string | null {
+  if (typeof MediaRecorder === 'undefined' || typeof HTMLCanvasElement === 'undefined' || !('captureStream' in HTMLCanvasElement.prototype)) return null;
+  const order = format === 'mp4' ? [...MR_MP4, ...MR_WEBM] : [...MR_WEBM, ...MR_MP4];
+  const ok = order.find((m) => { try { return MediaRecorder.isTypeSupported(m); } catch { return false; } });
+  return ok ?? null;
+}
+
+/** o que este navegador vai usar para exportar no formato dado */
+export async function detectExportPath(format: ExportOptions['format']): Promise<{ path: 'webcodecs' | 'mediarecorder' | 'none'; container: 'mp4' | 'webm' | null }> {
+  if (hasWebCodecs()) {
+    const v = await pickVideo(format === 'mp4' ? MP4_VIDEO : WEBM_VIDEO, 1280, 720, 30, 4e6);
+    if (v) return { path: 'webcodecs', container: format };
+  }
+  const m = recorderMime(format);
+  if (m) return { path: 'mediarecorder', container: m.startsWith('video/mp4') ? 'mp4' : 'webm' };
+  return { path: 'none', container: null };
+}
+
+/** fallback: grava o canvas + áudio mixado em tempo real (MP4 no Safari, WebM no Firefox/Chrome) */
 async function encodeWithMediaRecorder(
   p: Project, pool: OfflineMediaPool, audio: AudioBuffer | null, opts: ExportOptions,
-  report: (f: number, s: string) => void,
+  report: (f: number, s: string) => void, mime: string,
 ): Promise<Blob> {
-  if (typeof MediaRecorder === 'undefined') throw new Error('Este navegador não consegue exportar vídeo (sem WebCodecs nem MediaRecorder).');
   const fps = p.fps || 30;
   const { width: W, height: H } = exportSize(p, opts.quality);
   const duration = projectDuration(p);
@@ -217,14 +247,14 @@ async function encodeWithMediaRecorder(
   let srcNode: AudioBufferSourceNode | null = null;
   if (audio) {
     actx = new AudioContext({ sampleRate: MIX_RATE });
+    await actx.resume().catch(() => {});
     const dest = actx.createMediaStreamDestination();
     srcNode = actx.createBufferSource();
     srcNode.buffer = audio;
     srcNode.connect(dest);
     dest.stream.getAudioTracks().forEach((tr) => stream.addTrack(tr));
   }
-  const mime = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find((m) => MediaRecorder.isTypeSupported(m)) ?? '';
-  const rec = new MediaRecorder(stream, { mimeType: mime || undefined, videoBitsPerSecond: videoBitrate(W, H, fps) });
+  const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: videoBitrate(W, H, fps) });
   const chunks: Blob[] = [];
   rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
   const stopped = new Promise<void>((r) => { rec.onstop = () => r(); });
@@ -260,5 +290,6 @@ async function encodeWithMediaRecorder(
   }
   if (opts.signal?.aborted) throw abortErr();
   report(1, 'Pronto');
-  return new Blob(chunks, { type: 'video/webm' });
+  const type = (rec.mimeType || mime).startsWith('video/mp4') ? 'video/mp4' : 'video/webm';
+  return new Blob(chunks, { type });
 }

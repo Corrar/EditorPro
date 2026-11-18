@@ -22,6 +22,10 @@ export class LiveMediaPool implements MediaSources {
   private byClip = new Map<string, AV>();
   private idle = new Map<string, AV[]>();
   private host: HTMLDivElement | null = null;
+  /** áudio destravado por gesto do usuário (iOS/Android só tocam mídia com som após um toque) */
+  private unlocked = false;
+  private actx: AudioContext | null = null;
+  private lastPlaying = false;
   /** chamado quando um quadro novo fica disponível (seek terminou / dados carregaram) */
   onFrame: () => void = () => {};
 
@@ -42,8 +46,13 @@ export class LiveMediaPool implements MediaSources {
     const el = document.createElement(kind);
     el.preload = 'auto';
     el.crossOrigin = 'anonymous';
+    // mudo até o 1º gesto: autoplay mudo é sempre permitido (iOS/Android)
+    el.muted = !this.unlocked;
+    el.defaultMuted = !this.unlocked;
     if (el instanceof HTMLVideoElement) {
       el.playsInline = true;
+      el.setAttribute('playsinline', '');
+      el.setAttribute('webkit-playsinline', '');
       el.disablePictureInPicture = true;
     }
     (el as HTMLMediaElement & { preservesPitch?: boolean }).preservesPitch = true;
@@ -112,6 +121,7 @@ export class LiveMediaPool implements MediaSources {
 
   /** sincroniza todos os elementos com o tempo t */
   sync(p: Project, assets: Record<string, MediaAsset>, t: Seconds, playing: boolean, fps = 30) {
+    this.lastPlaying = playing;
     const active: { clip: Clip; track: Track }[] = [];
     const preroll: { clip: Clip; track: Track }[] = [];
     for (const track of p.tracks) {
@@ -139,7 +149,7 @@ export class LiveMediaPool implements MediaSources {
       const target = sourceTime(clip, t);
       const gain = clipGainAt(p, track, clip, t);
       el.volume = Math.min(1, Math.max(0, gain));
-      el.muted = gain <= 0.0001;
+      el.muted = !this.unlocked || gain <= 0.0001;
       const rate = Math.min(16, Math.max(0.0625, clipSpeed(clip)));
       if (playing) {
         if (el.playbackRate !== rate) el.playbackRate = rate;
@@ -165,6 +175,46 @@ export class LiveMediaPool implements MediaSources {
     for (const [id, el] of [...this.byClip]) if (!keep.has(id)) this.release(id, el);
   }
 
+  get isUnlocked() {
+    return this.unlocked;
+  }
+
+  /**
+   * Chamar DENTRO de um gesto do usuário (toque/clique): destrava o áudio.
+   * Retoma um AudioContext e "abençoa" um elemento por asset (play+pause no
+   * gesto), que fica no pool livre p/ ser reaproveitado pelos clipes.
+   */
+  unlock(p: Project, assets: Record<string, MediaAsset>) {
+    if (this.unlocked) return;
+    this.unlocked = true;
+    try {
+      const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (AC) { this.actx = new AC(); void this.actx.resume().catch(() => {}); }
+    } catch { /* sem WebAudio */ }
+    const bless = (el: AV) => {
+      el.muted = false;
+      el.defaultMuted = false;
+      const pr = el.play();
+      // pausa de volta, a menos que o sync já o esteja usando na reprodução
+      if (pr) pr.then(() => { if (!this.lastPlaying || ![...this.byClip.values()].includes(el)) el.pause(); }).catch(() => {});
+    };
+    for (const el of this.byClip.values()) bless(el);
+    for (const list of this.idle.values()) list.forEach(bless);
+    const used = new Map<string, 'video' | 'audio'>();
+    for (const t of p.tracks) for (const c of t.clips) {
+      if (c.type !== 'video' && c.type !== 'audio') continue;
+      const a = assets[c.assetId];
+      if (a?.url && a.kind !== 'image') used.set(a.id, c.type === 'video' && a.kind !== 'audio' ? 'video' : 'audio');
+    }
+    for (const [id, kind] of used) {
+      const has = [...this.byClip.values(), ...(this.idle.get(id) ?? [])].some((e) => e.dataset.asset === id);
+      if (has) continue;
+      const el = this.create(assets[id], kind);
+      bless(el);
+      this.idle.set(id, [...(this.idle.get(id) ?? []), el]);
+    }
+  }
+
   pauseAll() {
     for (const el of this.byClip.values()) el.pause();
   }
@@ -175,5 +225,7 @@ export class LiveMediaPool implements MediaSources {
     this.byClip.clear();
     this.idle.clear();
     this.images.clear();
+    void this.actx?.close().catch(() => {});
+    this.actx = null;
   }
 }

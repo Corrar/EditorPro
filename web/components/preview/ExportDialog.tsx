@@ -5,8 +5,8 @@ import { useEditor } from '@/lib/store';
 import { emit } from '@/lib/events';
 import { projectDuration } from '@/lib/ops';
 import {
-  captionCues, downloadBlob, exportSize, exportVideo, hasWebCodecs, safeFileName, toFCPXML, toSRT, toVTT,
-  type ExportOptions,
+  canShareFiles, captionCues, detectExportPath, downloadBlob, exportSize, exportVideo, safeFileName, shareFile,
+  toFCPXML, toSRT, toVTT, type ExportOptions,
 } from '@/lib/export';
 import { formatTime } from '@/lib/util';
 import { IcCaption, IcClose, IcDownload, IcExport, IcProject } from './icons';
@@ -33,14 +33,27 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
   const [progress, setProgress] = useState(0);
   const [stage, setStage] = useState('');
   const [error, setError] = useState('');
-  const [result, setResult] = useState<{ url: string; name: string; size: number; type: string; secs: number } | null>(null);
+  const [result, setResult] = useState<{ url: string; blob: Blob; name: string; size: number; type: string; secs: number } | null>(null);
+  const [path, setPath] = useState<Awaited<ReturnType<typeof detectExportPath>> | null>(null);
+  const [smallDevice, setSmallDevice] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const startedRef = useRef(0);
 
   const duration = projectDuration(project);
   const size = exportSize(project, quality);
   const cues = useMemo(() => captionCues(project).length, [project]);
-  const webcodecs = typeof window !== 'undefined' && hasWebCodecs();
+
+  useEffect(() => {
+    let alive = true;
+    setPath(null);
+    detectExportPath(format).then((r) => { if (alive) setPath(r); }).catch(() => {});
+    return () => { alive = false; };
+  }, [format]);
+  useEffect(() => {
+    const coarse = matchMedia('(pointer: coarse)').matches;
+    const small = Math.min(window.screen?.width ?? 1920, window.screen?.height ?? 1080) < 900;
+    setSmallDevice(coarse || small);
+  }, []);
 
   useEffect(() => () => { abortRef.current?.abort(); }, []);
   useEffect(() => () => { if (result) URL.revokeObjectURL(result.url); }, [result]);
@@ -65,7 +78,7 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
       });
       const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
       const url = URL.createObjectURL(blob);
-      setResult({ url, name: safeFileName(project.name, ext), size: blob.size, type: ext, secs: (performance.now() - startedRef.current) / 1000 });
+      setResult({ url, blob, name: safeFileName(project.name, ext), size: blob.size, type: ext, secs: (performance.now() - startedRef.current) / 1000 });
       setPhase('done');
       emit('ep:toast', { text: 'Vídeo exportado! Clique em Baixar.', kind: 'ok' });
     } catch (e) {
@@ -82,7 +95,7 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
   const close = () => { if (phase === 'running') return; onClose(); };
 
   return (
-    <div className="ep-modal-bg" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
+    <div className="ep-modal-bg ep-ex-bg" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
       <div className="ep-modal ep-ex" role="dialog" aria-modal="true" aria-labelledby="ep-ex-title">
         <div className="ep-modal-top">
           <div>
@@ -110,8 +123,14 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
           </div>
           <div className="ep-ex-info mono">{size.width}×{size.height} · {format === 'mp4' ? 'H.264 · MP4' : 'VP9 · WebM'}</div>
         </div>
-        {!webcodecs && (
-          <div className="ep-ex-warn">Seu navegador não tem WebCodecs: o vídeo será gravado em tempo real no modo compatível (WebM). Para MP4 rápido, use Chrome ou Edge.</div>
+        {path?.path === 'mediarecorder' && (
+          <div className="ep-ex-warn">Modo compatível: o vídeo é gravado em tempo real ({formatTime(duration)}) e sai em {path.container?.toUpperCase()}. Mantenha esta aba aberta até terminar. Para exportar mais rápido, use Chrome ou Edge.</div>
+        )}
+        {path?.path === 'none' && (
+          <div className="ep-ex-err">Este navegador não consegue gerar vídeo. Use Chrome, Edge, Safari 16.4+ ou Firefox atualizados, ou leve o projeto para outro editor pelos botões abaixo.</div>
+        )}
+        {smallDevice && quality === 'full' && (
+          <div className="ep-ex-warn">Em celular, a resolução cheia pode ficar sem memória e travar. Recomendado: HD 720p.</div>
         )}
 
         {phase === 'running' && (
@@ -129,7 +148,12 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
               <span>{fmtSize(result.size)} · {result.type.toUpperCase()} · pronto em {result.secs.toFixed(1)} s
                 {format === 'mp4' && result.type !== 'mp4' ? ' · (MP4 indisponível neste navegador, salvo em WebM)' : ''}</span>
             </div>
-            <a className="ep-btn primary ep-ex-dl" href={result.url} download={result.name}><IcDownload size={15} /> Baixar</a>
+            <div className="ep-ex-dlrow">
+              {canShareFiles() && (
+                <button className="ep-btn sec ep-ex-dl" onClick={() => shareFile(result.blob, result.name)}>Compartilhar</button>
+              )}
+              <a className="ep-btn primary ep-ex-dl" href={result.url} download={result.name} target="_blank" rel="noopener"><IcDownload size={15} /> Baixar</a>
+            </div>
           </div>
         )}
 
@@ -137,7 +161,7 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
           {phase === 'running' ? (
             <button className="ep-btn danger" onClick={cancel}>Cancelar</button>
           ) : (
-            <button className="ep-btn primary" onClick={start} disabled={duration <= 0}>
+            <button className="ep-btn primary" onClick={start} disabled={duration <= 0 || path?.path === 'none'}>
               <IcExport size={15} /> {phase === 'done' ? 'Exportar de novo' : 'Exportar vídeo'}
             </button>
           )}

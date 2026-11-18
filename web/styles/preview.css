@@ -47,7 +47,7 @@
 .ep-pv-upload { display:inline-flex; align-items:center; gap:7px; margin-top:8px; }
 
 /* controles */
-.ep-pv-controls { flex:none; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:8px 10px 8px; box-shadow:0 4px 16px rgba(28,31,34,.05); }
+.ep-pv-controls { container-type:inline-size; flex:none; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:8px 10px 8px; box-shadow:0 4px 16px rgba(28,31,34,.05); }
 .ep-pv-scrub { position:relative; height:16px; cursor:pointer; touch-action:none; display:flex; align-items:center; margin:0 4px 2px; }
 .ep-pv-scrub::before { content:''; position:absolute; left:0; right:0; height:4px; border-radius:999px; background:var(--track); }
 .ep-pv-scrub .fill { position:absolute; left:0; right:0; height:4px; border-radius:999px; background:var(--green); transform-origin:left center; transform:scaleX(0); }
@@ -104,3 +104,64 @@
 .ep-ex-link span { display:flex; flex-direction:column; gap:1px; min-width:0; }
 .ep-ex-link b { font-size:12.5px; font-weight:600; color:var(--ink); }
 .ep-ex-link i { font-style:normal; font-size:11px; color:var(--muted); }
+
+/* ---------- responsivo / multiplataforma ---------- */
+.ep-pv-canvas { touch-action:manipulation; -webkit-tap-highlight-color:transparent; }
+.ep-pv-controls button, .ep-pv-scrub { -webkit-tap-highlight-color:transparent; }
+.ep-ex-dlrow { display:flex; gap:6px; flex:none; }
+
+/* tela cheia por CSS (iPhone/iPad sem Fullscreen API para canvas) */
+.ep-pv.is-cssfull { position:fixed; inset:0; z-index:200; background:#000; padding:max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); }
+.ep-pv.is-cssfull .ep-pv-frame { border-radius:0; box-shadow:none; }
+.ep-pv.is-cssfull .ep-pv-controls { background:rgba(20,14,11,.85); border-color:rgba(255,255,255,.08); }
+.ep-pv.is-cssfull .ep-pv-time { color:#fff; }
+
+/* palco baixo (celular deitado, timeline grande): compacta */
+@media (max-height: 560px) {
+  .ep-pv { padding:8px 10px 6px; gap:6px; }
+  .ep-pv-empty p { display:none; }
+  /* controles numa linha só: [⏮ ▶] [====barra====] tempo [área] [exportar] [tela cheia] */
+  .ep-pv-controls { display:flex; align-items:center; gap:6px; padding:4px 8px; border-radius:12px; }
+  .ep-pv-row { display:contents; }
+  .ep-pv-row > span[style] { display:none; }
+  .ep-pv-row > .ep-pv-btn:first-child, .ep-pv-play { order:-1; }
+  .ep-pv-scrub { flex:1; min-width:60px; margin:0 4px; }
+  .ep-pv-chip .lbl { display:none; }
+}
+/* palco estreito */
+@media (max-width: 700px) {
+  .ep-pv { padding:10px 10px 8px; gap:8px; }
+  .ep-pv-chip .lbl { display:none; }
+  .ep-pv-chip { padding:6px 8px; }
+  .ep-pv-time { font-size:11.5px; margin-left:2px; }
+  .ep-pv-live .txt { display:none; }
+  .ep-pv-frame { border-radius:10px; }
+}
+@container (max-width: 380px) { .ep-pv-time .tot, .ep-pv-time i { display:none; } }
+
+/* toque: alvos ≥ 44px, sem depender de hover */
+@media (pointer: coarse) {
+  .ep-pv-btn, .ep-pv-chip { min-width:44px; min-height:44px; }
+  .ep-pv-btn { width:44px; height:44px; }
+  .ep-pv-play { width:48px; height:48px; }
+  .ep-pv-chip { justify-content:center; }
+  .ep-pv-scrub { height:28px; }
+  .ep-pv-scrub::before, .ep-pv-scrub .fill { height:6px; }
+  .ep-ex-qbtn, .ep-ex-link, .ep-ex .ep-seg button, .ep-ex .ep-btn { min-height:44px; }
+  .ep-ex .ep-iconbtn.sm { width:44px; height:44px; }
+}
+
+/* diálogo vira bottom-sheet em telas ≤ 899px */
+@media (max-width: 899px) {
+  .ep-ex-bg { place-items:end center; padding:0; }
+  .ep-ex-bg .ep-modal.ep-ex { max-width:none; width:100%; max-height:92vh; max-height:92dvh; border-radius:22px 22px 0 0;
+    padding:10px 16px calc(16px + env(safe-area-inset-bottom)); animation:sheetUp .28s cubic-bezier(.2,.7,.2,1) both; }
+  .ep-ex-bg .ep-modal.ep-ex::before { content:''; display:block; width:40px; height:5px; border-radius:999px; background:var(--line); margin:0 auto 10px; }
+  .ep-ex-sect { margin-top:12px; }
+  .ep-ex-q { width:100%; }
+  .ep-ex-qbtn { flex:1; min-width:0; }
+  .ep-ex-done { flex-wrap:wrap; }
+  .ep-ex-dlrow { width:100%; }
+  .ep-ex-dlrow .ep-btn { flex:1; justify-content:center; }
+  .ep-ex-actions .ep-btn { width:100%; justify-content:center; }
+}

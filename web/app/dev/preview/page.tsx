@@ -134,8 +134,18 @@ export default function DevPreviewPage() {
   };
 
   return (
-    <div className={`ep-root${dark ? ' dark' : ''}`} style={{ height: '100vh', display: 'grid', gridTemplateColumns: '300px 1fr', background: 'var(--canvasBg)' }}>
-      <aside style={{ padding: 18, borderRight: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 10, overflow: 'auto' }}>
+    <div className={`ep-root ep-devpv${dark ? ' dark' : ''}`}>
+      <style dangerouslySetInnerHTML={{ __html: `
+        .ep-devpv { height:100vh; height:100dvh; display:grid; grid-template-columns:300px minmax(0,1fr); background:var(--canvasBg); }
+        .ep-devpv > aside { padding:18px; border-right:1px solid var(--line); display:flex; flex-direction:column; gap:10px; overflow:auto; }
+        @media (max-width: 800px) {
+          .ep-devpv { grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); }
+          .ep-devpv > aside { padding:10px; flex-direction:row; flex-wrap:wrap; border-right:0; border-bottom:1px solid var(--line); max-height:30vh; }
+          .ep-devpv > aside p, .ep-devpv > aside .ep-badges { display:none; }
+          .ep-devpv > aside .ep-btn { padding:8px 12px; }
+        }
+      ` }} />
+      <aside>
         <div className="ep-title">Harness · Engine</div>
         <p className="ep-cardsub">Carregue mídias para montar um projeto demo (transições, textos, legendas e música).</p>
         <input data-testid="files" type="file" multiple accept="video/*,image/*,audio/*" onChange={(e) => load(Array.from(e.target.files ?? []))} />

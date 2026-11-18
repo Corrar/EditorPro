@@ -16,7 +16,19 @@ import { IcExport, IcFilm, IcFull, IcPause, IcPlay, IcRewind, IcSafe, IcSpark, I
 
 /** lado menor máximo do canvas interno do preview (o export usa a resolução cheia) */
 const PREVIEW_MAX_SHORT = 720;
+const PREVIEW_MAX_SHORT_WEAK = 540;
 const PREVIEW_MIN_SHORT = 360;
+
+/** aparelho modesto (celular / poucos núcleos / pouca memória): resolução interna menor */
+function isWeakDevice(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const nav = navigator as Navigator & { deviceMemory?: number };
+  const coarse = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
+  return coarse || (nav.hardwareConcurrency ?? 8) <= 4 || (nav.deviceMemory ?? 8) <= 4;
+}
+
+type FsEl = HTMLElement & { webkitRequestFullscreen?: () => Promise<void> | void };
+type FsDoc = Document & { webkitFullscreenElement?: Element | null; webkitExitFullscreen?: () => Promise<void> | void };
 
 function fmt(t: number) {
   return formatTime(t, { decimals: true });
@@ -51,6 +63,8 @@ export default function Preview() {
   const [safe, setSafe] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  /** "tela cheia" por CSS (iPhone não tem Fullscreen API para elementos que não são <video>) */
+  const [cssFull, setCssFull] = useState(false);
 
   if (!poolRef.current && typeof window !== 'undefined') poolRef.current = new LiveMediaPool();
 
@@ -104,7 +118,7 @@ export default function Preview() {
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [projW, projH, fullscreen]);
+  }, [projW, projH, fullscreen, cssFull]);
 
   /* resolução interna adaptativa */
   useEffect(() => {
@@ -113,7 +127,8 @@ export default function Preview() {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const short = Math.min(projW, projH);
     const cssShort = Math.min(fit.w, fit.h) * dpr;
-    const targetShort = Math.max(PREVIEW_MIN_SHORT, Math.min(PREVIEW_MAX_SHORT, cssShort, short));
+    const maxShort = isWeakDevice() ? PREVIEW_MAX_SHORT_WEAK : PREVIEW_MAX_SHORT;
+    const targetShort = Math.max(Math.min(PREVIEW_MIN_SHORT, short), Math.min(maxShort, cssShort, short));
     const k = targetShort / short;
     const w = Math.round((projW * k) / 2) * 2;
     const h = Math.round((projH * k) / 2) * 2;
@@ -186,20 +201,57 @@ export default function Preview() {
   /* ---------- eventos / tela cheia ---------- */
   useEffect(() => on('ep:open-export', () => { setPlaying(false); setExportOpen(true); }), [setPlaying]);
   useEffect(() => {
-    const h = () => setFullscreen(document.fullscreenElement === frameRef.current?.parentElement);
+    const h = () => {
+      const d = document as FsDoc;
+      setFullscreen((d.fullscreenElement ?? d.webkitFullscreenElement ?? null) === frameRef.current?.parentElement);
+    };
     document.addEventListener('fullscreenchange', h);
-    return () => document.removeEventListener('fullscreenchange', h);
+    document.addEventListener('webkitfullscreenchange', h);
+    return () => { document.removeEventListener('fullscreenchange', h); document.removeEventListener('webkitfullscreenchange', h); };
   }, []);
 
-  const togglePlay = () => setPlaying(!useEditor.getState().playing);
+  /* destrava o áudio no 1º gesto do usuário em qualquer lugar da página (política de autoplay iOS/Android) */
+  const unlock = useCallback(() => {
+    const st = useEditor.getState();
+    poolRef.current?.unlock(st.project, st.assets);
+  }, []);
+  useEffect(() => {
+    const h = () => {
+      unlock();
+      window.removeEventListener('pointerdown', h, true);
+      window.removeEventListener('keydown', h, true);
+    };
+    window.addEventListener('pointerdown', h, true);
+    window.addEventListener('keydown', h, true);
+    return () => { window.removeEventListener('pointerdown', h, true); window.removeEventListener('keydown', h, true); };
+  }, [unlock]);
+
+  /* sai da tela cheia CSS com Esc (só enquanto ativa) e trava a rolagem da página */
+  useEffect(() => {
+    if (!cssFull) return;
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') setCssFull(false); };
+    window.addEventListener('keydown', h);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { window.removeEventListener('keydown', h); document.body.style.overflow = prev; };
+  }, [cssFull]);
+
+  const togglePlay = () => { unlock(); setPlaying(!useEditor.getState().playing); };
   const toStart = () => { setPlayhead(0); if (playing) clockRef.current = { t0: 0, wall0: performance.now() }; };
   const toggleFull = async () => {
-    const el = frameRef.current?.parentElement;
+    const el = frameRef.current?.parentElement as FsEl | null | undefined;
     if (!el) return;
+    if (cssFull) { setCssFull(false); return; }
+    const d = document as FsDoc;
     try {
-      if (document.fullscreenElement) await document.exitFullscreen();
-      else await el.requestFullscreen();
-    } catch { /* sem permissão */ }
+      if (d.fullscreenElement || d.webkitFullscreenElement) {
+        await (d.exitFullscreen ? d.exitFullscreen() : d.webkitExitFullscreen?.());
+        return;
+      }
+      if (el.requestFullscreen) { await el.requestFullscreen(); return; }
+      if (el.webkitRequestFullscreen) { await el.webkitRequestFullscreen(); return; }
+    } catch { /* recusado: cai no modo CSS */ }
+    setCssFull(true);
   };
   const seekFromBar = (e: React.PointerEvent<HTMLDivElement>) => {
     const r = e.currentTarget.getBoundingClientRect();
@@ -211,7 +263,7 @@ export default function Preview() {
   const isVertical = projAspect === '9:16';
 
   return (
-    <div className={`ep-pv${fullscreen ? ' is-full' : ''}`}>
+    <div className={`ep-pv${fullscreen ? ' is-full' : ''}${cssFull ? ' is-cssfull' : ''}`}>
       <div className="ep-pv-box" ref={boxRef}>
         <div className="ep-pv-frame" ref={frameRef} style={{ width: fit.w, height: fit.h }} data-aspect={aspect}>
           <canvas ref={canvasRef} className="ep-pv-canvas" onClick={empty ? undefined : togglePlay} aria-label="Pré-visualização do vídeo" />
@@ -274,10 +326,10 @@ export default function Preview() {
           <div className="ep-pv-time mono"><span ref={timeRef}>{fmt(0)}</span><i>/</i><span className="tot">{fmt(duration)}</span></div>
           <span style={{ flex: 1 }} />
           <button className={`ep-pv-chip${safe ? ' on' : ''}`} onClick={() => setSafe(!safe)} title="Guias de área segura (TikTok/Reels)" disabled={empty}>
-            <IcSafe size={14} /> Área segura
+            <IcSafe size={14} /> <span className="lbl">Área segura</span>
           </button>
           <button className="ep-pv-btn" onClick={() => emit('ep:open-export', {})} title="Exportar" aria-label="Exportar" disabled={empty}><IcExport size={16} /></button>
-          <button className="ep-pv-btn" onClick={toggleFull} title="Tela cheia" aria-label="Tela cheia"><IcFull size={16} /></button>
+          <button className="ep-pv-btn" onClick={toggleFull} title={fullscreen || cssFull ? 'Sair da tela cheia' : 'Tela cheia'} aria-label="Tela cheia"><IcFull size={16} /></button>
         </div>
       </div>
       {exportOpen && <ExportDialog onClose={() => setExportOpen(false)} />}

@@ -14,6 +14,32 @@ export async function exportVideo(p: Project, assets: Record<string, MediaAsset>
   const mod = await import('./video');
   return mod.exportVideo(p, assets, opts);
 }
+/** caminho de export disponível neste navegador (WebCodecs rápido, MediaRecorder em tempo real ou nenhum) */
+export async function detectExportPath(format: ExportOptions['format']) {
+  const mod = await import('./video');
+  return mod.detectExportPath(format);
+}
+
+/** compartilha/salva um arquivo pelo menu nativo (iOS/Android); false se indisponível */
+export async function shareFile(blob: Blob, filename: string): Promise<boolean> {
+  try {
+    const file = new File([blob], filename, { type: blob.type });
+    const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
+    if (!nav.share || !nav.canShare?.({ files: [file] })) return false;
+    await nav.share({ files: [file], title: filename });
+    return true;
+  } catch (e) {
+    return (e as Error)?.name === 'AbortError'; // usuário fechou o menu: não é erro
+  }
+}
+
+export function canShareFiles(): boolean {
+  try {
+    const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
+    return !!nav.share && !!nav.canShare?.({ files: [new File([''], 'x.mp4', { type: 'video/mp4' })] });
+  } catch { return false; }
+}
+
 export { toSRT, toVTT, captionCues } from './subtitles';
 export { toFCPXML, rational, timebase } from './fcpxml';
 export { mixProjectAudio } from './audioMix';
