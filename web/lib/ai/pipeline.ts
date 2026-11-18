@@ -58,7 +58,7 @@ function allClips(p: Project): Clip[] {
   return p.tracks.flatMap((t) => t.clips);
 }
 function onTimeline(p: Project): Set<Id> {
-  return new Set(allClips(p).map((c) => ('assetId' in c ? c.assetId : '')));
+  return new Set(allClips(p).map((c) => ('assetId' in c && c.assetId ? c.assetId : '')));
 }
 function errText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);

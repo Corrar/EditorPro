@@ -2,26 +2,30 @@
    Validação/sanitização das EditOp vindas da IA.
    - descarta ops desconhecidas/inválidas (com motivo)
    - prende tempos aos limites (mídia, clipe, projeto)
-   - gera ids faltantes (op, clipe, trilha, legenda)
+   - gera ids faltantes (op, clipe, trilha, legenda, marcador)
    - mescla patches parciais de objetos (style/transform/position) com o valor atual
    - simula a aplicação em sequência (ops posteriores podem usar clipes criados antes)
    Puro: roda no servidor (rota /api/ai/edit) e no cliente (modo demo).
    ===================================================================== */
-import type { CaptionSegment, Clip, Id, MediaAsset, Project, TextClip, Track, TrackKind } from '../types';
+import type { CaptionSegment, Clip, Id, Marker, MediaAsset, Project, TextClip, Track, TrackKind } from '../types';
 import { DEFAULT_TRANSFORM } from '../types';
-import { applyOp, clipEnd, findClip, projectDuration, trackKindFor, type EditOp, type EditOpKind } from '../ops';
+import { TRACK_NAMES, allWords, applyOp, clipEnd, findClip, projectDuration, trackKindFor, type EditOp, type EditOpKind } from '../ops';
 import { DEFAULT_TEXT_STYLE } from '../defaults';
 import { uid } from '../util';
 import {
-  ASPECTS, COLOR_PRESETS, TEXT_ANIMATIONS, bool, clampNum, isObj, num, oneOf, r3, sanitizeCaptionStyle, sanitizeFilters,
-  sanitizeKeyframes, sanitizePosition, sanitizeStyleProfile, sanitizeTextStyle, sanitizeTransform, sanitizeTransition,
-  sanitizeTranscript, str,
+  ASPECTS, COLOR_PRESETS, MARKER_KINDS, SHAPE_KINDS, TEXT_ANIMATIONS, bool, clampNum, color, isObj, num, oneOf, r3,
+  sanitizeAudioExtras, sanitizeCaptionStyle, sanitizeEffects, sanitizeFilters, sanitizeKeyframes, sanitizePosition,
+  sanitizeStyleProfile, sanitizeTextStyle, sanitizeTransform, sanitizeTransition, sanitizeTranscript, sanitizeVisualExtras, str,
 } from './sanitize';
 
 export const OP_KINDS: EditOpKind[] = [
-  'set_project', 'set_aspect', 'add_track', 'update_track', 'remove_track', 'add_clip', 'update_clip', 'remove_clip',
-  'move_clip', 'split_clip', 'trim_clip', 'ripple_delete', 'set_captions', 'update_caption', 'set_caption_style', 'toggle_captions',
+  'set_project', 'set_aspect', 'add_track', 'update_track', 'remove_track', 'move_track', 'add_clip', 'update_clip',
+  'remove_clip', 'duplicate_clip', 'move_clip', 'split_clip', 'trim_clip', 'ripple_delete', 'remove_words', 'set_captions',
+  'update_caption', 'set_caption_style', 'toggle_captions', 'add_marker', 'update_marker', 'remove_marker',
 ];
+
+export const CLIP_TYPES = ['video', 'image', 'audio', 'text', 'sticker', 'shape', 'adjustment'] as const;
+export const TRACK_KINDS: TrackKind[] = ['video', 'audio', 'text', 'overlay', 'effect'];
 
 export const MAX_OPS = 80;
 const EPS = 1e-3;
@@ -35,17 +39,23 @@ const DEFAULT_EXPLAIN: Record<EditOpKind, string> = {
   add_track: 'Criando uma trilha nova',
   update_track: 'Ajustando a trilha',
   remove_track: 'Removendo uma trilha',
+  move_track: 'Reordenando as camadas',
   add_clip: 'Adicionando um clipe',
   update_clip: 'Ajustando o clipe',
   remove_clip: 'Removendo um clipe',
+  duplicate_clip: 'Duplicando o clipe',
   move_clip: 'Reposicionando o clipe',
   split_clip: 'Dividindo o clipe',
   trim_clip: 'Aparando o clipe',
   ripple_delete: 'Cortando um trecho',
+  remove_words: 'Cortando um trecho da fala',
   set_captions: 'Colocando as legendas',
   update_caption: 'Corrigindo uma legenda',
   set_caption_style: 'Mudando o estilo das legendas',
   toggle_captions: 'Ligando/desligando as legendas',
+  add_marker: 'Marcando um ponto',
+  update_marker: 'Atualizando o marcador',
+  remove_marker: 'Removendo o marcador',
 };
 
 class Drop extends Error {}
@@ -59,32 +69,95 @@ function pickTrack(p: Project, kind: TrackKind, wanted?: unknown): Id {
   const id = str(wanted, 80);
   if (id) {
     const t = p.tracks.find((x) => x.id === id);
-    if (t && t.kind === kind) return id;
+    if (t && t.kind === kind && !t.locked) return id;
     if (!t) return id; // add_clip cria a trilha
   }
   const existing = p.tracks.find((t) => t.kind === kind && !t.locked);
   return existing?.id ?? `track_${kind}_${uid('t').slice(-6)}`;
 }
 
+/** emoji: no máximo alguns caracteres gráficos */
+function emojiOf(v: unknown): string | undefined {
+  const s = str(v, 16);
+  if (!s) return undefined;
+  return /\p{Extended_Pictographic}/u.test(s) ? s : undefined;
+}
+
 /** monta um clipe completo e válido a partir de dados parciais da IA */
 function buildClip(raw: Record<string, unknown>, p: Project, assets: Record<Id, MediaAsset>): Clip {
-  const type = oneOf(raw.type, ['video', 'image', 'audio', 'text'] as const) ?? fail('clip.type inválido');
+  const type = oneOf(raw.type, CLIP_TYPES) ?? fail('clip.type inválido');
   let id = str(raw.id, 80);
   if (!id || findClip(p, id)) id = uid('clip');
   const start = r3(clampNum(raw.start, 0, 24 * 3600) ?? 0);
   const label = str(raw.label, 60);
+  const lbl = label ? { label } : {};
 
   if (type === 'text') {
     const text = str(raw.text, 300) ?? fail('texto vazio');
     const duration = r3(clampNum(raw.duration, 0.2, 600) ?? 2.5);
+    const kf = sanitizeKeyframes(raw.keyframes, duration);
+    const out = oneOf(raw.animationOut, TEXT_ANIMATIONS);
+    const loop = oneOf(raw.animationLoop, TEXT_ANIMATIONS);
+    const rot = clampNum(raw.rotation, -360, 360);
+    const sc = clampNum(raw.scale, 0.1, 5);
+    const tpl = str(raw.templateId, 60);
     const clip: TextClip = {
       id, type, start, duration, text,
       style: { ...DEFAULT_TEXT_STYLE, ...(sanitizeTextStyle(raw.style) ?? {}) },
       position: sanitizePosition(raw.position) ?? { x: 0.5, y: 0.3 },
       animation: oneOf(raw.animation, TEXT_ANIMATIONS) ?? 'pop',
-      ...(label ? { label } : {}),
+      ...(out ? { animationOut: out } : {}), ...(loop ? { animationLoop: loop } : {}),
+      ...(rot !== undefined ? { rotation: rot } : {}), ...(sc !== undefined ? { scale: sc } : {}),
+      ...(kf?.length ? { keyframes: kf } : {}), ...(tpl ? { templateId: tpl } : {}),
+      ...lbl,
     };
     return clip;
+  }
+
+  if (type === 'adjustment') {
+    const duration = r3(clampNum(raw.duration, 0.1, 24 * 3600) ?? 3);
+    const cp = oneOf(raw.colorPreset, COLOR_PRESETS);
+    const fx = sanitizeEffects(raw.effects);
+    const filters = sanitizeFilters(raw.filters) ?? [];
+    if (!cp && !fx?.length && !filters.length) fail('camada de ajuste vazia');
+    return { id, type, start, duration, filters, ...(cp ? { colorPreset: cp } : {}), ...(fx?.length ? { effects: fx } : {}), ...lbl };
+  }
+
+  if (type === 'shape') {
+    const duration = r3(clampNum(raw.duration, 0.1, 600) ?? 3);
+    const kf = sanitizeKeyframes(raw.keyframes, duration);
+    const stroke = color(raw.stroke);
+    const sw = clampNum(raw.strokeWidth, 0, 60);
+    const cr = clampNum(raw.cornerRadius, 0, 200);
+    return {
+      id, type, start, duration,
+      shape: oneOf(raw.shape, SHAPE_KINDS) ?? 'rounded-rect',
+      fill: color(raw.fill) || '#D9641E',
+      ...(stroke ? { stroke } : {}), ...(sw !== undefined ? { strokeWidth: sw } : {}), ...(cr !== undefined ? { cornerRadius: cr } : {}),
+      transform: { ...DEFAULT_TRANSFORM, scale: 0.3, ...(sanitizeTransform(raw.transform) ?? {}) },
+      ...(kf?.length ? { keyframes: kf } : {}),
+      ...sanitizeVisualExtras(raw, duration),
+      ...lbl,
+    };
+  }
+
+  if (type === 'sticker') {
+    const duration = r3(clampNum(raw.duration, 0.1, 600) ?? 3);
+    const emoji = emojiOf(raw.emoji);
+    const assetId = str(raw.assetId, 80);
+    const asset = assetId ? assets[assetId] : undefined;
+    if (assetId && (!asset || asset.kind !== 'image')) fail(`sticker: imagem não existe: ${assetId}`);
+    if (!emoji && !asset) fail('sticker sem emoji nem imagem');
+    const kf = sanitizeKeyframes(raw.keyframes, duration);
+    return {
+      id, type, start, duration,
+      ...(asset ? { assetId: asset.id } : { emoji }),
+      transform: { ...DEFAULT_TRANSFORM, scale: 0.35, ...(sanitizeTransform(raw.transform) ?? {}) },
+      animationIn: { kind: 'pop', duration: 0.3 },
+      ...(kf?.length ? { keyframes: kf } : {}),
+      ...sanitizeVisualExtras(raw, duration),
+      ...lbl,
+    };
   }
 
   const assetId = str(raw.assetId, 80) ?? fail('clip sem assetId');
@@ -103,7 +176,8 @@ function buildClip(raw: Record<string, unknown>, p: Project, assets: Record<Id, 
       filters: sanitizeFilters(raw.filters) ?? [],
       ...(kf?.length ? { keyframes: kf } : {}),
       ...(tr ? { transitionIn: tr } : {}),
-      ...(label ? { label } : {}),
+      ...sanitizeVisualExtras(raw, duration),
+      ...lbl,
     };
   }
 
@@ -115,6 +189,7 @@ function buildClip(raw: Record<string, unknown>, p: Project, assets: Record<Id, 
   const volume = clampNum(raw.volume, 0, 2) ?? 1;
   const fadeIn = clampNum(raw.fadeIn, 0, duration / 2);
   const fadeOut = clampNum(raw.fadeOut, 0, duration / 2);
+  const audioX = sanitizeAudioExtras(raw);
 
   if (type === 'audio') {
     const duck = bool(raw.duckUnderVoice);
@@ -122,7 +197,8 @@ function buildClip(raw: Record<string, unknown>, p: Project, assets: Record<Id, 
       id, type, assetId, start, duration, in: inPt, speed, volume,
       ...(fadeIn ? { fadeIn } : {}), ...(fadeOut ? { fadeOut } : {}),
       ...(duck !== undefined ? { duckUnderVoice: duck } : {}),
-      ...(label ? { label } : {}),
+      ...audioX,
+      ...lbl,
     };
   }
 
@@ -139,14 +215,16 @@ function buildClip(raw: Record<string, unknown>, p: Project, assets: Record<Id, 
     ...(cp ? { colorPreset: cp } : {}),
     ...(muted !== undefined ? { muted } : {}),
     ...(fadeIn ? { fadeIn } : {}), ...(fadeOut ? { fadeOut } : {}),
-    ...(label ? { label } : {}),
+    ...sanitizeVisualExtras(raw, duration),
+    ...audioX,
+    ...lbl,
   };
 }
 
 /** patch de update_clip: só campos válidos para o tipo; objetos parciais mesclados com o atual */
 function buildClipPatch(raw: Record<string, unknown>, clip: Clip, assets: Record<Id, MediaAsset>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  const asset = 'assetId' in clip ? assets[clip.assetId] : undefined;
+  const asset = 'assetId' in clip && clip.assetId ? assets[clip.assetId] : undefined;
   const label = str(raw.label, 60); if (label) out.label = label;
   const locked = bool(raw.locked); if (locked !== undefined) out.locked = locked;
   const start = clampNum(raw.start, 0, 24 * 3600); if (start !== undefined) out.start = r3(start);
@@ -170,25 +248,46 @@ function buildClipPatch(raw: Record<string, unknown>, clip: Clip, assets: Record
     const fadeOut = clampNum(raw.fadeOut, 0, d / 2); if (fadeOut !== undefined) out.fadeOut = fadeOut;
     if (clip.type === 'audio') { const duck = bool(raw.duckUnderVoice); if (duck !== undefined) out.duckUnderVoice = duck; }
     if (clip.type === 'video') { const muted = bool(raw.muted); if (muted !== undefined) out.muted = muted; }
+    Object.assign(out, sanitizeAudioExtras(raw));
   }
   if (duration !== undefined) out.duration = r3(Math.max(0.05, duration));
   const d = (out.duration as number | undefined) ?? clip.duration;
 
-  if (clip.type === 'video' || clip.type === 'image') {
+  if (clip.type === 'video' || clip.type === 'image' || clip.type === 'sticker' || clip.type === 'shape') {
     const tf = sanitizeTransform(raw.transform, clip.transform); if (tf) out.transform = tf;
     const kf = sanitizeKeyframes(raw.keyframes, d); if (kf) out.keyframes = kf;
+    Object.assign(out, sanitizeVisualExtras(raw, d));
+  }
+  if (clip.type === 'video' || clip.type === 'image') {
     const fl = sanitizeFilters(raw.filters); if (fl) out.filters = fl;
     if (raw.transitionIn === null || ('transitionIn' in raw && raw.transitionIn === undefined)) out.transitionIn = undefined;
     else { const tr = sanitizeTransition(raw.transitionIn, d); if (tr) out.transitionIn = tr; }
   }
-  if (clip.type === 'video') {
+  if (clip.type === 'video' || clip.type === 'adjustment') {
     const cp = oneOf(raw.colorPreset, COLOR_PRESETS); if (cp) out.colorPreset = cp;
+  }
+  if (clip.type === 'adjustment') {
+    const fl = sanitizeFilters(raw.filters); if (fl) out.filters = fl;
+    const fx = raw.effects === null ? [] : sanitizeEffects(raw.effects); if (fx) out.effects = fx;
+  }
+  if (clip.type === 'sticker') { const e = emojiOf(raw.emoji); if (e) out.emoji = e; }
+  if (clip.type === 'shape') {
+    const sh = oneOf(raw.shape, SHAPE_KINDS); if (sh) out.shape = sh;
+    const f = color(raw.fill); if (f) out.fill = f;
+    const s = color(raw.stroke); if (s !== undefined) out.stroke = s;
+    const sw = clampNum(raw.strokeWidth, 0, 60); if (sw !== undefined) out.strokeWidth = sw;
+    const cr = clampNum(raw.cornerRadius, 0, 200); if (cr !== undefined) out.cornerRadius = cr;
   }
   if (clip.type === 'text') {
     const text = str(raw.text, 300); if (text) out.text = text;
     const st = sanitizeTextStyle(raw.style); if (st) out.style = { ...clip.style, ...st };
     const pos = sanitizePosition(raw.position, clip.position); if (pos) out.position = pos;
     const an = oneOf(raw.animation, TEXT_ANIMATIONS); if (an) out.animation = an;
+    const ao = oneOf(raw.animationOut, TEXT_ANIMATIONS); if (ao) out.animationOut = ao;
+    const al = oneOf(raw.animationLoop, TEXT_ANIMATIONS); if (al) out.animationLoop = al;
+    const rot = clampNum(raw.rotation, -360, 360); if (rot !== undefined) out.rotation = rot;
+    const sc = clampNum(raw.scale, 0.1, 5); if (sc !== undefined) out.scale = sc;
+    const kf = sanitizeKeyframes(raw.keyframes, d); if (kf) out.keyframes = kf;
   }
   if (!Object.keys(out).length) fail('patch vazio');
   return out;
@@ -197,6 +296,19 @@ function buildClipPatch(raw: Record<string, unknown>, clip: Clip, assets: Record
 function sanitizeSegments(raw: unknown, p: Project): CaptionSegment[] {
   const end = Math.max(projectDuration(p), 0.1);
   return sanitizeTranscript({ segments: raw }, { duration: end });
+}
+
+function sanitizeMarker(raw: Record<string, unknown>, p: Project, partial: boolean): Partial<Marker> {
+  const dur = Math.max(projectDuration(p), 0.1);
+  const out: Partial<Marker> = {};
+  const t = clampNum(raw.t, 0, dur); if (t !== undefined) out.t = r3(t);
+  const end = clampNum(raw.end, 0, dur); if (end !== undefined && end > (out.t ?? 0)) out.end = r3(end);
+  const label = str(raw.label, 80); if (label) out.label = label;
+  const c = color(raw.color); if (c) out.color = c;
+  const kind = oneOf(raw.kind, MARKER_KINDS); if (kind) out.kind = kind;
+  const res = bool(raw.resolved); if (res !== undefined) out.resolved = res;
+  if (!partial && out.t === undefined) fail('marcador sem tempo');
+  return out;
 }
 
 /** sanitiza UMA op contra o projeto atual (lança Drop se inválida) */
@@ -223,6 +335,19 @@ export function sanitizeOp(raw: unknown, p: Project, assets: Record<Id, MediaAss
       const brief = str(patch.brief, 4000); if (brief) out.brief = brief;
       const style = sanitizeStyleProfile(patch.style); if (style) out.style = style;
       const ref = str(patch.referenceAssetId, 80); if (ref && assets[ref]) out.referenceAssetId = ref;
+      if (isObj(patch.canvas)) {
+        const type = oneOf(patch.canvas.type, ['color', 'blur', 'image'] as const);
+        if (type) {
+          const img = str(patch.canvas.assetId, 80);
+          if (type === 'image' && !(img && assets[img]?.kind === 'image')) fail('canvas: imagem não existe');
+          out.canvas = {
+            type,
+            ...(type === 'color' ? { color: color(patch.canvas.color) || '#000000' } : {}),
+            ...(type === 'blur' ? { blur: clampNum(patch.canvas.blur, 0, 1) ?? 0.6 } : {}),
+            ...(type === 'image' ? { assetId: img } : {}),
+          };
+        }
+      }
       if (!Object.keys(out).length) fail('patch vazio');
       return { op: 'set_project', patch: out, ...meta };
     }
@@ -232,11 +357,10 @@ export function sanitizeOp(raw: unknown, p: Project, assets: Record<Id, MediaAss
     }
     case 'add_track': {
       const t = isObj(r.track) ? r.track : r;
-      const tk = oneOf(t.kind, ['video', 'audio', 'text'] as const) ?? fail('kind da trilha inválido');
+      const tk = oneOf(t.kind, TRACK_KINDS) ?? fail('kind da trilha inválido');
       let tid = str(t.id, 80);
       if (!tid || p.tracks.some((x) => x.id === tid)) tid = uid('track');
-      const names: Record<TrackKind, string> = { video: 'Vídeo', audio: 'Áudio', text: 'Texto' };
-      const name = str(t.name, 40) ?? `${names[tk]} ${p.tracks.filter((x) => x.kind === tk).length + 1}`;
+      const name = str(t.name, 40) ?? `${TRACK_NAMES[tk]} ${p.tracks.filter((x) => x.kind === tk).length + 1}`;
       const index = clampNum(r.index, 0, p.tracks.length);
       return { op: 'add_track', track: { id: tid, kind: tk, name }, ...(index !== undefined ? { index: Math.round(index) } : {}), ...meta };
     }
@@ -256,6 +380,12 @@ export function sanitizeOp(raw: unknown, p: Project, assets: Record<Id, MediaAss
       if (t.kind === 'video' && p.tracks.filter((x) => x.kind === 'video').length <= 1) fail('não remove a única trilha de vídeo');
       return { op: 'remove_track', trackId: tid, ...meta };
     }
+    case 'move_track': {
+      const tid = str(r.trackId, 80) ?? fail('trackId ausente');
+      if (!p.tracks.some((x) => x.id === tid)) fail(`trilha não existe: ${tid}`);
+      const index = Math.round(clampNum(r.index, 0, Math.max(0, p.tracks.length - 1)) ?? fail('index inválido'));
+      return { op: 'move_track', trackId: tid, index, ...meta };
+    }
     case 'add_clip': {
       const clip = buildClip(isObj(r.clip) ? r.clip : fail('clip ausente'), p, assets);
       const trackId = pickTrack(p, trackKindFor(clip), r.trackId);
@@ -270,6 +400,16 @@ export function sanitizeOp(raw: unknown, p: Project, assets: Record<Id, MediaAss
     case 'remove_clip': {
       const { clip } = clipOf();
       return { op: 'remove_clip', clipId: clip.id, ...(bool(r.ripple) ? { ripple: true } : {}), ...meta };
+    }
+    case 'duplicate_clip': {
+      const { clip, track } = clipOf();
+      let newId = str(r.newId, 80);
+      if (!newId || findClip(p, newId)) newId = uid('clip');
+      const start = clampNum(r.start, 0, 24 * 3600);
+      const tid = str(r.trackId, 80);
+      const dest = tid ? p.tracks.find((t) => t.id === tid) : undefined;
+      const trackOk = dest && dest.kind === track.kind && !dest.locked;
+      return { op: 'duplicate_clip', clipId: clip.id, newId, ...(start !== undefined ? { start: r3(start) } : {}), ...(trackOk ? { trackId: dest!.id } : {}), ...meta };
     }
     case 'move_clip': {
       const { clip, track } = clipOf();
@@ -311,6 +451,18 @@ export function sanitizeOp(raw: unknown, p: Project, assets: Record<Id, MediaAss
       if (dur > 0 && end - start >= dur - 0.25) fail('cortaria o vídeo inteiro');
       return { op: 'ripple_delete', start: r3(start), end: r3(end), ...meta };
     }
+    case 'remove_words': {
+      const from = str(r.fromWordId, 20) ?? fail('fromWordId ausente');
+      const to = str(r.toWordId, 20) ?? from;
+      const words = allWords(p);
+      const a = words.findIndex((w) => w.id === from);
+      const b = words.findIndex((w) => w.id === to);
+      if (a < 0 || b < 0) fail(`palavras não encontradas: ${from}..${to}`);
+      const [i, j] = a <= b ? [a, b] : [b, a];
+      if (dur > 0 && words[j].end - words[i].start >= dur - 0.25) fail('cortaria o vídeo inteiro');
+      const padding = clampNum(r.padding, 0, 0.3);
+      return { op: 'remove_words', fromWordId: words[i].id!, toWordId: words[j].id!, ...(padding !== undefined ? { padding } : {}), ...meta };
+    }
     case 'set_captions': {
       const segments = sanitizeSegments(r.segments, p);
       if (!segments.length) fail('nenhuma legenda válida');
@@ -330,10 +482,10 @@ export function sanitizeOp(raw: unknown, p: Project, assets: Record<Id, MediaAss
       if (e !== seg.end) out.end = r3(e);
       if (text) {
         out.text = text;
-        // palavras antigas não batem mais com o texto novo: redistribui
+        // palavras antigas não batem mais com o texto novo: redistribui (ids novos derivados do segmento)
         const words = text.split(/\s+/).filter(Boolean);
         const t0 = out.start ?? seg.start; const t1 = out.end ?? seg.end;
-        out.words = words.map((w, i) => ({ text: w, start: r3(t0 + ((t1 - t0) * i) / words.length), end: r3(t0 + ((t1 - t0) * (i + 1)) / words.length) }));
+        out.words = words.map((w, i) => ({ id: `${sid}_${i}`, text: w, start: r3(t0 + ((t1 - t0) * i) / words.length), end: r3(t0 + ((t1 - t0) * (i + 1)) / words.length) }));
       }
       if (Array.isArray(patch.emphasis)) out.emphasis = patch.emphasis.map((x) => str(x, 40)).filter((x): x is string => !!x).slice(0, 6);
       if (!Object.keys(out).length) fail('patch vazio');
@@ -346,6 +498,25 @@ export function sanitizeOp(raw: unknown, p: Project, assets: Record<Id, MediaAss
     case 'toggle_captions': {
       const enabled = bool(r.enabled) ?? fail('enabled inválido');
       return { op: 'toggle_captions', enabled, ...meta };
+    }
+    case 'add_marker': {
+      const m = isObj(r.marker) ? r.marker : r;
+      const out = sanitizeMarker(m, p, false);
+      let mid = str(m.id, 80);
+      if (!mid || p.markers?.some((x) => x.id === mid)) mid = uid('mk');
+      return { op: 'add_marker', marker: { kind: 'user', ...out, id: mid } as Marker, ...meta };
+    }
+    case 'update_marker': {
+      const mid = str(r.markerId, 80) ?? fail('markerId ausente');
+      if (!p.markers?.some((x) => x.id === mid)) fail(`marcador não existe: ${mid}`);
+      const patch = sanitizeMarker(isObj(r.patch) ? r.patch : fail('patch ausente'), p, true);
+      if (!Object.keys(patch).length) fail('patch vazio');
+      return { op: 'update_marker', markerId: mid, patch, ...meta };
+    }
+    case 'remove_marker': {
+      const mid = str(r.markerId, 80) ?? fail('markerId ausente');
+      if (!p.markers?.some((x) => x.id === mid)) fail(`marcador não existe: ${mid}`);
+      return { op: 'remove_marker', markerId: mid, ...meta };
     }
   }
   return fail('op não tratada');
