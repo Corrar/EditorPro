@@ -5,6 +5,7 @@ import { memo } from 'react';
 import { useEditor } from '@/lib/store';
 import { useDims, useTimelineUi } from '@/lib/timeline/ui';
 import { formatTick, rulerSteps } from '@/lib/timeline/edit';
+import { RulerMarkers } from './Markers';
 
 function Labels({ zoom, fps, width }: { zoom: number; fps: number; width: number }) {
   const scrollLeft = useTimelineUi((s) => s.scrollLeft);
@@ -62,6 +63,7 @@ function RulerInner({ zoom, width, onScrubStart }: { zoom: number; width: number
         title="Clique ou arraste para mover o cursor de reprodução"
       >
         {!short && <Labels zoom={zoom} fps={fps} width={width} />}
+        <RulerMarkers zoom={zoom} />
         <PlayheadHead zoom={zoom} />
       </div>
     </div>

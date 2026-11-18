@@ -4,7 +4,9 @@ import { useEffect, useRef, useState } from 'react';
 import { useEditor } from '@/lib/store';
 import { findClip, clipEnd } from '@/lib/ops';
 import { useTimelineUi } from '@/lib/timeline/ui';
-import { ICopy, IEye, IEyeOff, ILock, IMute, IRipple, ISparkle, ISplit, ITrash, IUnlock, IVolume } from './icons';
+import { IAsk, IAudioSplit, IClipboard, ICopy, IDiamond, IEye, IEyeOff, IGauge, ILock, IMute, IRipple, ISnowflake, ISparkle, ISplit, ITrash, IUnlock, IVolume } from './icons';
+import { askAiAboutCaption, askAiAboutClips, copyClips, detachAudio, freezeFrame, pasteClips, removeClips, setSpeed, toggleKeyframe } from '@/lib/timeline/actions';
+import { supportsKeyframes } from '@/lib/timeline/keyframes';
 
 export function LiveBanner() {
   const running = useEditor((s) => s.live.running);
@@ -35,9 +37,12 @@ export interface MenuActions {
   remove: (ids: string[], ripple: boolean) => void;
 }
 
+const SPEEDS = [0.5, 1, 1.5, 2, 3];
+
 export function ClipMenu({ actions }: { actions: MenuActions }) {
   const menu = useTimelineUi((s) => s.menu);
   const setUi = useTimelineUi((s) => s.set);
+  const hasClipboard = useTimelineUi((s) => s.clipboard.length > 0);
   const ref = useRef<HTMLDivElement>(null);
   const openedAt = useRef(0);
   useEffect(() => {
@@ -65,30 +70,74 @@ export function ClipMenu({ actions }: { actions: MenuActions }) {
 
   if (!menu) return null;
   const { project, playhead, selection } = useEditor.getState();
-  const found = findClip(project, menu.clipId);
-  if (!found) return null;
-  const ids = selection.includes(menu.clipId) ? selection : [menu.clipId];
-  const canSplit = ids.some((id) => {
-    const f = findClip(project, id);
-    return f && playhead > f.clip.start && playhead < clipEnd(f.clip);
-  });
-  const locked = !!found.track.locked || !!found.clip.locked;
   const run = (fn: () => void) => () => {
     if (menu.touch && performance.now() - openedAt.current < 350) return; // soltar o dedo do toque longo não aciona item
     setUi({ menu: null });
     fn();
   };
-  const x = Math.max(8, Math.min(menu.x, window.innerWidth - 236));
-  const y = Math.max(8, Math.min(menu.y, window.innerHeight - 250));
+  const x = Math.max(8, Math.min(menu.x, window.innerWidth - 248));
+  const y = Math.max(8, Math.min(menu.y, window.innerHeight - 420));
+
+  // ----- legenda -----
+  if (menu.capId) {
+    const seg = project.captions.segments.find((s) => s.id === menu.capId);
+    if (!seg) return null;
+    return (
+      <div ref={ref} className="ep-tl-menu" style={{ left: x, top: y }} role="menu" onContextMenu={(e) => e.preventDefault()}>
+        <div className="ep-tl-menuhead">Legenda · {seg.text.slice(0, 26)}</div>
+        <button role="menuitem" onClick={run(() => askAiAboutCaption(seg.id))}><IAsk size={14} /> Perguntar à IA sobre isto</button>
+        <div className="ep-tl-menusep" />
+        <button role="menuitem" className="danger" disabled={!project.captions.enabled} onClick={run(() => removeClips([], false))}>
+          <ITrash size={14} /> Excluir legenda <kbd>Del</kbd>
+        </button>
+      </div>
+    );
+  }
+
+  const clipId = menu.clipId!;
+  const found = findClip(project, clipId);
+  if (!found) return null;
+  const ids = selection.includes(clipId) ? selection : [clipId];
+  const inside = (id: string) => {
+    const f = findClip(project, id);
+    return !!f && playhead > f.clip.start && playhead < clipEnd(f.clip);
+  };
+  const canSplit = ids.some(inside);
+  const locked = !!found.track.locked || !!found.clip.locked;
+  const c = found.clip;
+  const isVideo = c.type === 'video';
+  const hasSpeed = c.type === 'video' || c.type === 'audio';
+  const curSpeed = hasSpeed ? (c as { speed: number }).speed : 1;
   return (
     <div ref={ref} className="ep-tl-menu" style={{ left: x, top: y }} role="menu" onContextMenu={(e) => e.preventDefault()}>
       <div className="ep-tl-menuhead">{ids.length > 1 ? `${ids.length} clipes selecionados` : found.track.name}</div>
+      <button role="menuitem" onClick={run(() => askAiAboutClips(ids))}><IAsk size={14} /> Perguntar à IA sobre isto</button>
+      <div className="ep-tl-menusep" />
       <button role="menuitem" disabled={!canSplit || locked} onClick={run(() => actions.split(ids))}>
         <ISplit size={14} /> Dividir no cursor <kbd>S</kbd>
       </button>
       <button role="menuitem" disabled={locked} onClick={run(() => actions.duplicate(ids))}>
-        <ICopy size={14} /> Duplicar
+        <ICopy size={14} /> Duplicar <kbd>Ctrl+D</kbd>
       </button>
+      <button role="menuitem" onClick={run(() => copyClips(ids))}><IClipboard size={14} /> Copiar <kbd>Ctrl+C</kbd></button>
+      <button role="menuitem" disabled={!hasClipboard} onClick={run(() => pasteClips())}><IClipboard size={14} /> Colar no cursor <kbd>Ctrl+V</kbd></button>
+      {hasSpeed && (
+        <div className="ep-tl-speedrow" role="group" aria-label="Velocidade">
+          <IGauge size={14} />
+          {SPEEDS.map((sp) => (
+            <button key={sp} className={Math.abs(curSpeed - sp) < 1e-3 ? 'on' : ''} disabled={locked} onClick={run(() => setSpeed(sp, ids))}>{sp}x</button>
+          ))}
+        </div>
+      )}
+      {isVideo && (
+        <button role="menuitem" disabled={locked} onClick={run(() => detachAudio(ids))}><IAudioSplit size={14} /> Separar áudio</button>
+      )}
+      {isVideo && (
+        <button role="menuitem" disabled={locked || !inside(clipId)} onClick={run(() => freezeFrame(undefined, { clipId }))}><ISnowflake size={14} /> Congelar quadro</button>
+      )}
+      {supportsKeyframes(c) && (
+        <button role="menuitem" disabled={locked || !inside(clipId)} onClick={run(() => toggleKeyframe([clipId]))}><IDiamond size={14} /> Keyframe no cursor <kbd>K</kbd></button>
+      )}
       <div className="ep-tl-menusep" />
       <button role="menuitem" className="danger" disabled={locked} onClick={run(() => actions.remove(ids, false))}>
         <ITrash size={14} /> Excluir <kbd>Del</kbd>
@@ -160,6 +209,20 @@ export function TrackPop() {
       <button role="menuitemcheckbox" aria-checked={!!track.locked} onClick={() => upd({ locked: !track.locked })}>
         {track.locked ? <ILock size={15} /> : <IUnlock size={15} />} {track.locked ? 'Destravar' : 'Travar'}
       </button>
+      <div className="ep-tl-menusep" />
+      {(['up', 'down'] as const).map((dir) => {
+        const tracks = useEditor.getState().project.tracks;
+        const i = tracks.findIndex((t) => t.id === track.id);
+        // trilhas visuais aparecem da camada mais alta p/ a mais baixa; áudio na ordem
+        const step = track.kind === 'audio' ? (dir === 'up' ? -1 : 1) : dir === 'up' ? 1 : -1;
+        const j = i + step;
+        const ok = j >= 0 && j < tracks.length && (tracks[j].kind === 'audio') === (track.kind === 'audio');
+        return (
+          <button key={dir} role="menuitem" disabled={!ok} onClick={() => dispatch({ op: 'move_track', trackId: track.id, index: j })}>
+            {dir === 'up' ? '↑ Mover para cima' : '↓ Mover para baixo'}
+          </button>
+        );
+      })}
     </div>
   );
 }
