@@ -193,3 +193,16 @@ describe('responsivo', () => {
     expect(rows.find((r) => r.kind === 'video')!.height).toBe(phone.rowH.video);
   });
 });
+
+describe('selos do clipe', () => {
+  it('clipBadges resume velocidade, reverso, efeitos, máscara e keyframes', async () => {
+    const { clipBadges, assetIdOf } = await import('./clip');
+    const { makeStickerClip, makeAdjustmentClip } = await import('../defaults');
+    const v = { ...makeVideoClip(vid, 0, { speed: 2, reverse: true, effects: [{ kind: 'glitch', intensity: 0.5 }], mask: { shape: 'circle', x: 0.5, y: 0.5, w: 0.5, h: 0.5, rotation: 0, feather: 0 } }) };
+    expect(clipBadges(v)).toMatchObject({ speed: '2x', reverse: true, effects: 1, mask: true });
+    expect(clipBadges({ ...v, speedPreset: 'hero' }).speed).toBe('herói');
+    expect(clipBadges(makeVideoClip(vid, 0)).speed).toBeUndefined();
+    expect(assetIdOf(makeStickerClip(0, { emoji: '🔥' }))).toBeUndefined();
+    expect(clipBadges(makeAdjustmentClip(0, 3, { colorPreset: 'warm', filters: [{ kind: 'contrast', value: 0.2 }] })).effects).toBe(2);
+  });
+});

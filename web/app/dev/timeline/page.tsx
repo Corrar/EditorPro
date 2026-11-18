@@ -6,7 +6,7 @@ import Timeline from '@/components/timeline/Timeline';
 import { useEditor } from '@/lib/store';
 import { on } from '@/lib/events';
 import { applyOps, projectDuration, type EditOp } from '@/lib/ops';
-import { createProject, makeAudioClip, makeImageClip, makeTextClip, makeVideoClip } from '@/lib/defaults';
+import { createProject, makeAdjustmentClip, makeAudioClip, makeImageClip, makeShapeClip, makeStickerClip, makeTextClip, makeVideoClip } from '@/lib/defaults';
 import type { MediaAsset } from '@/lib/types';
 
 function frames(hue: number, n: number, label: string): string[] {
@@ -58,10 +58,16 @@ function buildMock() {
   const ops: EditOp[] = [
     { op: 'add_clip', trackId: 'track_video_1', clip: { ...makeVideoClip(A.a_praia, 0, { duration: 4.5, in: 1, label: 'gancho' }), id: 'c_v1' } },
     { op: 'add_clip', trackId: 'track_video_1', clip: { ...makeVideoClip(A.a_entrev, 4.5, { duration: 6, in: 3, transitionIn: { kind: 'crossfade', duration: 0.4 } }), id: 'c_v2' } },
-    { op: 'add_clip', trackId: 'track_video_1', clip: { ...makeVideoClip(A.a_praia, 10.5, { duration: 5, in: 9, speed: 1.5 }), id: 'c_v3' } },
+    { op: 'add_clip', trackId: 'track_video_1', clip: { ...makeVideoClip(A.a_praia, 10.5, { duration: 5, in: 9, speed: 1.5, effects: [{ kind: 'glitch', intensity: 0.6 }] }), id: 'c_v3' } },
     { op: 'add_clip', trackId: 'track_video_1', clip: { ...makeImageClip(A.a_logo, 15.5, 2.5), id: 'c_img' } },
     { op: 'add_track', track: { id: 'track_video_2', kind: 'video', name: 'Sobreposição' } },
-    { op: 'add_clip', trackId: 'track_video_2', clip: { ...makeVideoClip(A.a_cidade, 6, { duration: 3, in: 2, label: 'b-roll' }), id: 'c_b1' } },
+    { op: 'add_clip', trackId: 'track_video_2', clip: { ...makeVideoClip(A.a_cidade, 6, { duration: 3, in: 2, label: 'b-roll', speedPreset: 'hero', reverse: true, mask: { shape: 'circle', x: 0.5, y: 0.5, w: 0.6, h: 0.6, rotation: 0, feather: 0.2 } }), id: 'c_b1' } },
+    { op: 'add_track', track: { id: 'track_overlay_1', kind: 'overlay', name: 'Stickers' } },
+    { op: 'add_clip', trackId: 'track_overlay_1', clip: { ...makeStickerClip(1, { emoji: '🔥' }, 2), id: 'c_st1' } },
+    { op: 'add_clip', trackId: 'track_overlay_1', clip: { ...makeShapeClip('arrow', 5.2, 2.2), id: 'c_sh1' } },
+    { op: 'add_clip', trackId: 'track_overlay_1', clip: { ...makeStickerClip(11, { emoji: '✨' }, 2.5), id: 'c_st2' } },
+    { op: 'add_track', track: { id: 'track_effect_1', kind: 'effect', name: 'Ajustes' } },
+    { op: 'add_clip', trackId: 'track_effect_1', clip: { ...makeAdjustmentClip(4.5, 6, { colorPreset: 'cinematic', effects: [{ kind: 'film-grain', intensity: 0.4 }] }), id: 'c_adj' } },
     { op: 'add_clip', trackId: 'track_text_1', clip: { ...makeTextClip('Você sabia?', 0.3, 2.2), id: 'c_t1' } },
     { op: 'add_clip', trackId: 'track_text_1', clip: { ...makeTextClip('3 dicas rápidas', 5, 2.5), id: 'c_t2' } },
     { op: 'add_clip', trackId: 'track_text_1', clip: { ...makeTextClip('Siga para mais!', 15.6, 2.4), id: 'c_t3' } },

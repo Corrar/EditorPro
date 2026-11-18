@@ -28,6 +28,7 @@ import { Ruler } from './Ruler';
 import { DragLayer, Guides, PlayheadLine, Rows, TouchHandles } from './Rows';
 import { ClipMenu, LiveBanner, TrackPop } from './Overlays';
 import { useShortcuts } from './useShortcuts';
+import { assetOf } from '@/lib/timeline/clip';
 
 const ASSET_MIME = 'application/x-ep-asset';
 const DRAG_THRESHOLD = 4;
@@ -674,7 +675,7 @@ export default function Timeline() {
       if (locked || (multi && was)) return;
 
       if (handle) {
-        const asset = 'assetId' in f.clip ? st.assets[f.clip.assetId] : undefined;
+        const asset = assetOf(f.clip, st.assets);
         const b = trimBounds(f.clip, f.track, asset, Math.max(MIN_CLIP, 1 / (p.fps || 30)));
         beginGesture(
           {

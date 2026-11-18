@@ -5,6 +5,7 @@ import type { Clip, TrackKind } from '@/lib/types';
 import { useEditor } from '@/lib/store';
 import { useTimelineUi } from '@/lib/timeline/ui';
 import { formatTime } from '@/lib/util';
+import { assetOf } from '@/lib/timeline/clip';
 import { ClipBody } from './ClipBody';
 
 interface Props {
@@ -18,7 +19,7 @@ interface Props {
 function ClipViewInner({ clip, kind, zoom, height, locked }: Props) {
   const selected = useEditor((s) => s.selection.includes(clip.id));
   const glowing = useEditor((s) => s.live.running && s.live.highlightClipId === clip.id);
-  const asset = useEditor((s) => ('assetId' in clip ? s.assets[clip.assetId] : undefined));
+  const asset = useEditor((s) => assetOf(clip, s.assets));
   // entra animado se nasceu durante a edição ao vivo da IA
   const enter = useRef(useEditor.getState().live.running);
   const drag = useTimelineUi((s) => {

@@ -3,7 +3,8 @@
 import { memo, useMemo } from 'react';
 import type { Clip, MediaAsset } from '@/lib/types';
 import { thumbIndexAt, waveformSlice } from '@/lib/timeline/edit';
-import { IAudio, ICaptions, IImage, IMute, IText, IVideo } from './icons';
+import { clipBadges } from '@/lib/timeline/clip';
+import { IAudio, ICaptions, IChroma, IImage, IMask, IMute, IReverse, IShape, ISliders, ISparkle, ISticker, IText, IVideo } from './icons';
 
 const MAX_TILES = 360;
 
@@ -86,10 +87,62 @@ function Fades({ clip, zoom }: { clip: Clip; zoom: number }) {
   );
 }
 
+const SHAPE_NAMES: Record<string, string> = {
+  rect: 'Retângulo', 'rounded-rect': 'Retângulo arredondado', circle: 'Círculo', triangle: 'Triângulo', star: 'Estrela',
+  arrow: 'Seta', line: 'Linha', heart: 'Coração', 'speech-bubble': 'Balão',
+};
+
+/** desenho mínimo de cada forma (viewBox 0 0 24 24) */
+function ShapeGlyph({ shape, fill, size = 18 }: { shape: string; fill: string; size?: number }) {
+  const common = { fill, stroke: 'rgba(0,0,0,.25)', strokeWidth: 1 };
+  let el;
+  switch (shape) {
+    case 'circle': el = <circle cx="12" cy="12" r="9" {...common} />; break;
+    case 'triangle': el = <path d="M12 3 22 20H2z" {...common} />; break;
+    case 'star': el = <path d="m12 2 3 6.6 7 .8-5.2 4.8 1.4 7L12 17.8 5.8 21.2l1.4-7L2 9.4l7-.8z" {...common} />; break;
+    case 'arrow': el = <path d="M3 10h11V5l7 7-7 7v-5H3z" {...common} />; break;
+    case 'line': el = <rect x="2" y="10.5" width="20" height="3" rx="1.5" {...common} />; break;
+    case 'heart': el = <path d="M12 21s-8-5.2-8-11a4.5 4.5 0 0 1 8-2.8A4.5 4.5 0 0 1 20 10c0 5.8-8 11-8 11z" {...common} />; break;
+    case 'speech-bubble': el = <path d="M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H10l-5 4v-4H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" {...common} />; break;
+    case 'rounded-rect': el = <rect x="3" y="5" width="18" height="14" rx="4" {...common} />; break;
+    default: el = <rect x="3" y="5" width="18" height="14" {...common} />;
+  }
+  return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden>{el}</svg>;
+}
+
+function Badges({ clip }: { clip: Clip }) {
+  const b = clipBadges(clip);
+  return (
+    <>
+      {b.speed && <span className="tag" title="Velocidade">{b.speed}</span>}
+      {b.reverse && <span className="ic" title="Reverso"><IReverse size={10} /></span>}
+      {b.effects ? <span className="ic" title={`${b.effects} efeito(s)`}><ISparkle size={10} />{b.effects > 1 ? b.effects : ''}</span> : null}
+      {b.mask && <span className="ic" title="Máscara"><IMask size={10} /></span>}
+      {b.chroma && <span className="ic" title="Chroma key"><IChroma size={10} /></span>}
+    </>
+  );
+}
+
+function clipName(clip: Clip, asset?: MediaAsset): string {
+  switch (clip.type) {
+    case 'text': return clip.text;
+    case 'sticker': return clip.emoji ? `Sticker ${clip.emoji}` : asset?.name ?? clip.label ?? 'Sticker';
+    case 'shape': return clip.label ?? SHAPE_NAMES[clip.shape] ?? 'Forma';
+    case 'adjustment': return clip.label ?? 'Ajuste';
+    default: return asset?.name ?? clip.label ?? 'Mídia';
+  }
+}
+
 function ClipBodyInner({ clip, asset, width, height, zoom }: { clip: Clip; asset?: MediaAsset; width: number; height: number; zoom: number }) {
-  const name = clip.type === 'text' ? clip.text : asset?.name ?? clip.label ?? 'Mídia';
-  const speed = (clip.type === 'video' || clip.type === 'audio') && clip.speed !== 1 ? `${+clip.speed.toFixed(2)}x` : null;
-  const Icon = clip.type === 'video' ? IVideo : clip.type === 'image' ? IImage : clip.type === 'audio' ? IAudio : IText;
+  const name = clipName(clip, asset);
+  const Icon =
+    clip.type === 'video' ? IVideo
+    : clip.type === 'image' ? IImage
+    : clip.type === 'audio' ? IAudio
+    : clip.type === 'sticker' ? ISticker
+    : clip.type === 'shape' ? IShape
+    : clip.type === 'adjustment' ? ISliders
+    : IText;
   const showLabel = width > 26;
 
   return (
@@ -97,6 +150,23 @@ function ClipBodyInner({ clip, asset, width, height, zoom }: { clip: Clip; asset
       {(clip.type === 'video' || clip.type === 'image') && <Thumbs clip={clip} asset={asset} width={width} height={height} />}
       {clip.type === 'audio' && <Wave clip={clip} asset={asset} width={width} />}
       {clip.type === 'text' && <div className="ep-tl-textbg" />}
+      {clip.type === 'sticker' && (
+        <div className="ep-tl-sticker">
+          {clip.emoji ? (
+            <span className="emo" style={{ fontSize: Math.max(12, height * 0.55) }}>{clip.emoji}</span>
+          ) : asset?.thumbnails?.[0] || asset?.url ? (
+            <span className="img" style={{ backgroundImage: `url("${asset.thumbnails?.[0] ?? asset.url}")`, width: height - 8, height: height - 8 }} />
+          ) : (
+            <ISticker size={Math.max(12, height * 0.45)} />
+          )}
+        </div>
+      )}
+      {clip.type === 'shape' && (
+        <div className="ep-tl-shape">
+          <ShapeGlyph shape={clip.shape} fill={clip.fill} size={Math.max(12, Math.min(26, height - 10))} />
+        </div>
+      )}
+      {clip.type === 'adjustment' && <div className="ep-tl-adjbg" />}
       <Fades clip={clip} zoom={zoom} />
       {'transitionIn' in clip && clip.transitionIn && clip.transitionIn.kind !== 'cut' && (
         <span className="ep-tl-trans" title={`Transição: ${clip.transitionIn.kind}`} style={{ width: Math.max(8, clip.transitionIn.duration * zoom) }} />
@@ -106,7 +176,7 @@ function ClipBodyInner({ clip, asset, width, height, zoom }: { clip: Clip; asset
           <Icon size={11} />
           <span className="nm">{name}</span>
           {clip.label && clip.type !== 'text' && clip.label !== name && <span className="tag">{clip.label}</span>}
-          {speed && <span className="tag">{speed}</span>}
+          <Badges clip={clip} />
           {clip.type === 'video' && clip.muted && <IMute size={11} />}
         </div>
       )}

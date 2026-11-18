@@ -1,15 +1,18 @@
 'use client';
 /* Cabeçalhos e faixas das trilhas, linha de legendas, camada de arraste, playhead. */
 import { memo, useEffect, useRef, useState } from 'react';
-import type { Clip, Project, Track } from '@/lib/types';
+import type { Clip, Project, Track, TrackKind } from '@/lib/types';
 import { useEditor } from '@/lib/store';
 import { findClip } from '@/lib/ops';
 import { type RowInfo, useDims, useTimelineUi } from '@/lib/timeline/ui';
+import { assetOf } from '@/lib/timeline/clip';
 import { ClipView } from './ClipView';
 import { CaptionBody, ClipBody } from './ClipBody';
-import { IAudio, ICaptions, IEye, IEyeOff, ILock, IMute, IPlus, IText, IUnlock, IVideo, IVolume } from './icons';
+import { ISliders, ISticker, IAudio, ICaptions, IEye, IEyeOff, ILock, IMute, IPlus, IText, IUnlock, IVideo, IVolume } from './icons';
 
 /* ---------------- cabeçalho ---------------- */
+
+export const TRACK_ICONS: Record<TrackKind, typeof IVideo> = { video: IVideo, audio: IAudio, text: IText, overlay: ISticker, effect: ISliders };
 
 function TrackHeaderInner({ track, height }: { track: Track; height: number }) {
   const dispatch = useEditor((s) => s.dispatch);
@@ -18,7 +21,7 @@ function TrackHeaderInner({ track, height }: { track: Track; height: number }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(track.name);
   useEffect(() => setName(track.name), [track.name]);
-  const Icon = track.kind === 'video' ? IVideo : track.kind === 'audio' ? IAudio : IText;
+  const Icon = TRACK_ICONS[track.kind] ?? IVideo;
   const upd = (patch: Partial<Track>) => dispatch({ op: 'update_track', trackId: track.id, patch });
   const commit = () => {
     setEditing(false);
@@ -69,7 +72,7 @@ function TrackHeaderInner({ track, height }: { track: Track; height: number }) {
         <small>{track.clips.length} {track.clips.length === 1 ? 'clipe' : 'clipes'}</small>
       </div>
       <div className="ep-tl-headbtns">
-        {track.kind !== 'text' && (
+        {(track.kind === 'video' || track.kind === 'audio') && (
           <button className={`ep-tl-hb${track.muted ? ' off' : ''}`} onClick={() => upd({ muted: !track.muted })} title={track.muted ? 'Ativar som' : 'Silenciar trilha'} aria-pressed={!!track.muted} aria-label="Mudo">
             {track.muted ? <IMute size={13} /> : <IVolume size={13} />}
           </button>
@@ -234,7 +237,7 @@ export const DragLayer = memo(function DragLayer({ project, rows, zoom }: { proj
             className={`ep-tl-clip ghost k-${clip.type}`}
             style={{ transform: `translate(${HEADER_W + clip.start * zoom}px, ${row.top + (row.height - h) / 2}px)`, width: w, height: h }}
           >
-            <ClipBody clip={clip} asset={'assetId' in clip ? assets[clip.assetId] : undefined} width={w} height={h} zoom={zoom} />
+            <ClipBody clip={clip} asset={assetOf(clip, assets)} width={w} height={h} zoom={zoom} />
           </div>
         );
       })}

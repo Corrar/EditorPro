@@ -82,7 +82,7 @@ export function dimsFor(width: number, height: number, coarse: boolean): Dims {
     coarse,
     headerW: compact ? 52 : 184,
     rulerH: short ? 16 : coarse ? 34 : 30,
-    rowH: { video: h(66), text: h(38), audio: h(50), captions: h(34), new: h(34) },
+    rowH: { video: h(66), text: h(38), audio: h(50), overlay: h(42), effect: h(32), captions: h(34), new: h(34) },
   };
 }
 

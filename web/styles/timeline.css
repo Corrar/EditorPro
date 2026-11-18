@@ -18,6 +18,10 @@
   --tl-cap: #8A5A3C;
   --tl-capBg: #EFE1D6;
   --tl-sel: #1C1F22;
+  --tl-overlay: #C2477A;
+  --tl-overlayBg: #F7DCE7;
+  --tl-effect: #6E5BB8;
+  --tl-effectBg: #E5E0F5;
   --tl-playhead: var(--green);
   position: relative;
   display: flex;
@@ -47,6 +51,10 @@
   --tl-cap: #D3A87F;
   --tl-capBg: #3A2A21;
   --tl-sel: #FFF3E8;
+  --tl-overlay: #E37BA6;
+  --tl-overlayBg: #40222F;
+  --tl-effect: #A595E8;
+  --tl-effectBg: #2C2640;
   --tl-lane: #1F1612;
   --tl-laneAlt: #1A1310;
 }
@@ -387,3 +395,19 @@
   .ep-tl-menu button { min-height: 46px; font-size: 14px; }
   .ep-tl-menu kbd { display: none; }
 }
+
+/* ---------- tipos novos: sticker, forma, ajuste; trilhas overlay/effect ---------- */
+.ep-tl-head.k-overlay .ep-tl-headic { background: var(--tl-overlayBg); color: var(--tl-overlay); }
+.ep-tl-head.k-effect .ep-tl-headic { background: var(--tl-effectBg); color: var(--tl-effect); }
+.ep-tl-clip.k-sticker, .ep-tl-clip.k-shape { --c: var(--tl-overlay); --cb: var(--tl-overlayBg); }
+.ep-tl-clip.k-adjustment { --c: var(--tl-effect); --cb: var(--tl-effectBg); }
+.ep-tl-sticker, .ep-tl-shape { position: absolute; inset: 0; display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; color: var(--c); pointer-events: none; }
+.ep-tl-sticker .emo { line-height: 1; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .25)); }
+.ep-tl-sticker .img { border-radius: 6px; background-size: contain; background-repeat: no-repeat; background-position: center; }
+.ep-tl-adjbg { position: absolute; inset: 0; background: repeating-linear-gradient(135deg, transparent 0 7px, color-mix(in srgb, var(--c) 22%, transparent) 7px 14px); }
+.ep-tl-clip.k-sticker .ep-tl-cliplabel, .ep-tl-clip.k-shape .ep-tl-cliplabel, .ep-tl-clip.k-adjustment .ep-tl-cliplabel {
+  top: 50%; transform: translateY(-50%); background: none; color: var(--ink); backdrop-filter: none; font-size: 11px;
+}
+.ep-tl-clip.k-sticker .ep-tl-cliplabel svg, .ep-tl-clip.k-shape .ep-tl-cliplabel svg, .ep-tl-clip.k-adjustment .ep-tl-cliplabel svg { color: var(--c); }
+.ep-tl-cliplabel .ic { flex: none; display: inline-flex; align-items: center; gap: 1px; padding: 1px 4px; border-radius: 999px; background: rgba(255, 255, 255, .22); font-size: 9.5px; }
+.ep-tl-clip.k-text .ep-tl-cliplabel .ic, .ep-tl-clip.k-sticker .ep-tl-cliplabel .ic, .ep-tl-clip.k-shape .ep-tl-cliplabel .ic, .ep-tl-clip.k-adjustment .ep-tl-cliplabel .ic { background: color-mix(in srgb, var(--c) 18%, transparent); color: var(--c); }

@@ -59,3 +59,18 @@ export const ISparkle = (p: P) => (
 export const IPlus = (p: P) => <Svg {...p}><path d="M12 5v14M5 12h14" /></Svg>;
 export const IGauge = (p: P) => <Svg {...p}><path d="m12 14 4-4" /><path d="M3.3 19a10 10 0 1 1 17.4 0" /></Svg>;
 export const IMore = (p: P) => <Svg {...p}><circle cx="5" cy="12" r="1.6" fill="currentColor" /><circle cx="12" cy="12" r="1.6" fill="currentColor" /><circle cx="19" cy="12" r="1.6" fill="currentColor" /></Svg>;
+export const ISticker = (p: P) => <Svg {...p}><path d="M15.5 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h9.5L21 14.5V5a2 2 0 0 0-2-2z" /><path d="M14 21v-5a2 2 0 0 1 2-2h5" /><path d="M8.5 13.5s1.2 1.5 3.5 1.5 3.5-1.5 3.5-1.5" /><path d="M9 9h.01M15 9h.01" /></Svg>;
+export const IShape = (p: P) => <Svg {...p}><circle cx="8" cy="8" r="5" /><rect x="11" y="11" width="10" height="10" rx="1.5" /></Svg>;
+export const ISliders = (p: P) => <Svg {...p}><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6" /></Svg>;
+export const IReverse = (p: P) => <Svg {...p}><path d="M3 7h13a5 5 0 0 1 0 10H8" /><path d="m7 3-4 4 4 4" /></Svg>;
+export const IMask = (p: P) => <Svg {...p}><circle cx="12" cy="12" r="9" /><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" /></Svg>;
+export const IChroma = (p: P) => <Svg {...p}><rect x="3" y="3" width="18" height="18" rx="3" /><path d="M3 15l5-5 4 4 3-3 6 6" /></Svg>;
+export const IDiamond = (p: P) => <Svg {...p}><path d="M12 2 22 12 12 22 2 12z" /></Svg>;
+export const IFlag = (p: P) => <Svg {...p}><path d="M4 22V4" /><path d="M4 4h13l-2 4 2 4H4" /></Svg>;
+export const IComment = (p: P) => <Svg {...p}><path d="M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-6.4A8 8 0 1 1 21 12z" /></Svg>;
+export const IClipboard = (p: P) => <Svg {...p}><rect x="8" y="2" width="8" height="4" rx="1" /><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /></Svg>;
+export const ISnowflake = (p: P) => <Svg {...p}><path d="M12 2v20M2 12h20M5 5l14 14M19 5 5 19" /></Svg>;
+export const IAudioSplit = (p: P) => <Svg {...p}><rect x="2" y="3" width="20" height="7" rx="2" /><path d="M4 17h1M7 14v6M10 15v4M13 13v8M16 15v4M19 16v2" /></Svg>;
+export const IMagnetTrack = (p: P) => <Svg {...p}><path d="M3 8h18v8H3z" /><path d="M9 8v8M15 8v8" /></Svg>;
+export const IAsk = (p: P) => <Svg {...p}><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" /><path d="M19 17v4M17 19h4" /></Svg>;
+export const IInsert = (p: P) => <Svg {...p}><path d="M3 12h7M14 12h7M12 4v16" /><path d="m7 9 3 3-3 3M17 9l-3 3 3 3" /></Svg>;

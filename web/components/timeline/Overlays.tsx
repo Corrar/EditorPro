@@ -147,7 +147,7 @@ export function TrackPop() {
         aria-label="Nome da trilha"
       />
       <small className="ep-tl-menuhead">{track.clips.length} {track.clips.length === 1 ? 'clipe' : 'clipes'}</small>
-      {track.kind !== 'text' && (
+      {(track.kind === 'video' || track.kind === 'audio') && (
         <button role="menuitemcheckbox" aria-checked={!!track.muted} onClick={() => upd({ muted: !track.muted })}>
           {track.muted ? <IMute size={15} /> : <IVolume size={15} />} {track.muted ? 'Ativar som' : 'Silenciar'}
         </button>
