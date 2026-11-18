@@ -321,6 +321,8 @@ export interface Track {
 /* ---------- legendas ---------- */
 
 export interface CaptionWord {
+  /** id estável da palavra ("w00012") — a IA ancora cortes em palavras, não em segundos */
+  id?: string;
   start: Seconds; // tempo NA TIMELINE
   end: Seconds;
   text: string;
@@ -404,15 +406,33 @@ export interface ChatMessage {
   createdAt: number;
   /** operações aplicadas por esta mensagem (para desfazer/ver) */
   opIds?: Id[];
+  /** para onde o usuário "apontou" ao escrever (clipe, trecho, ponto do quadro, linha de legenda) */
+  context?: ChatContext;
   status?: 'pending' | 'streaming' | 'applying' | 'done' | 'error';
   attachments?: Id[]; // assetIds
 }
 
-/* ---------- marcadores ---------- */
+/* ---------- marcadores / comentários de revisão ---------- */
 export interface Marker {
   id: Id;
   t: Seconds;
+  /** fim opcional (comentário sobre um trecho) */
+  end?: Seconds;
   label?: string;
   color?: string;
-  kind?: 'user' | 'beat' | 'chapter';
+  kind?: 'user' | 'beat' | 'chapter' | 'comment';
+  /** comentário de revisão: pendente até a IA aplicar */
+  resolved?: boolean;
+}
+
+/* ---------- "apontar para qualquer coisa" (contexto do chat) ---------- */
+export interface ChatContext {
+  clipIds?: Id[];
+  range?: { start: Seconds; end: Seconds };
+  /** ponto no quadro (normalizado 0..1) no tempo t */
+  point?: { x: number; y: number; t: Seconds };
+  segmentId?: Id;
+  markerId?: Id;
+  /** rótulo curto mostrado no chip acima do campo ("Clipe 2 · 0:04–0:09") */
+  label: string;
 }
