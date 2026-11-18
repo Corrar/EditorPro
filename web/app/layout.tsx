@@ -7,12 +7,26 @@ import '../styles/chat.css';
 import '../styles/panels.css';
 import '../styles/media.css';
 
+import PwaRegister from './pwa-register';
+
 export const metadata: Metadata = {
   title: 'EditorPro — Editor de vídeo com IA',
   description: 'Descreva o vídeo, envie um exemplo e a IA edita ao vivo.',
+  applicationName: 'EditorPro',
+  manifest: '/manifest.webmanifest',
+  icons: {
+    icon: [{ url: '/favicon-32.png', sizes: '32x32', type: 'image/png' }, { url: '/icon-192.png', sizes: '192x192', type: 'image/png' }, { url: '/icon.svg', type: 'image/svg+xml' }],
+    apple: [{ url: '/apple-touch-icon.png', sizes: '180x180' }],
+  },
+  appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'EditorPro' },
 };
 
-export const viewport: Viewport = { themeColor: '#D9641E', width: 'device-width', initialScale: 1 };
+export const viewport: Viewport = {
+  themeColor: '#D9641E',
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+};
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -25,7 +39,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        <PwaRegister />
+        {children}
+      </body>
     </html>
   );
 }
