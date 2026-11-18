@@ -107,8 +107,14 @@ export function silenceCutOps(p: Project, silencesByAsset: Record<Id, Range[]>):
     const clips = clipsOfAsset(p, assetId).filter((c) => c.type === 'video' || c.type === 'audio');
     for (const s of sil) for (const r of mediaRangeToTimeline(clips, s.start, s.end)) ranges.push(r);
   }
-  const merged = mergeRanges(ranges, 0.02).filter((r) => r.end - r.start >= 0.2);
   const total = projectDuration(p);
+  // une cortes separados por menos de 0,3 s de conteúdo (evita "piscadas" de 1-2 quadros)
+  const merged = mergeRanges(ranges, 0.3).filter((r) => r.end - r.start >= 0.2);
+  // sobra minúscula no fim/começo vira parte do corte
+  const last = merged[merged.length - 1];
+  if (last && total - last.end < 0.35) last.end = total;
+  const first = merged[0];
+  if (first && first.start < 0.35) first.start = 0;
   const ops: EditOp[] = [];
   let shift = 0;
   let removed = 0;
@@ -179,13 +185,13 @@ const COLOR_WORDS: [RegExp, string, string][] = [
 ];
 
 const PRESET_WORDS: [RegExp, ColorPreset, string][] = [
-  [/preto e branco|p&b|p\/b|monocrom/, 'bw', 'preto e branco'],
-  [/cinemat|filme|cinema/, 'cinematic', 'cinematográfico'],
-  [/quente|aconchegante|dourado/, 'warm', 'quente'],
-  [/\bfri[oa]s?\b|azulad/, 'cool', 'frio'],
-  [/vibrante|saturad|vivas?\b|colorid/, 'vibrant', 'vibrante'],
+  [/preto e branco|p&b|p\/b|monocrom/, 'bw', 'em preto e branco'],
+  [/cinemat|filme|cinema/, 'cinematic', 'cinematográficas'],
+  [/quente|aconchegante|dourado/, 'warm', 'quentes'],
+  [/\bfri[oa]s?\b|azulad/, 'cool', 'frias'],
+  [/vibrante|saturad|vivas?\b|colorid/, 'vibrant', 'vibrantes'],
   [/vintage|retro|antig|nostalg/, 'vintage', 'vintage'],
-  [/sombri|moody|dramatic|escur/, 'moody', 'sombrio'],
+  [/sombri|moody|dramatic|escur/, 'moody', 'sombrias'],
 ];
 
 const TRANSITION_WORDS: [RegExp, TransitionKind, string][] = [
@@ -200,7 +206,7 @@ const TRANSITION_WORDS: [RegExp, TransitionKind, string][] = [
 
 export function colorPresetFrom(text: string): { preset: ColorPreset; name: string } | undefined {
   const t = norm(text);
-  if (/(sem filtro|tira[r]? (o )?filtro|cor(es)? (normal|original)|remove[r]? (a )?cor)/.test(t)) return { preset: 'none', name: 'original' };
+  if (/(sem filtro|tira[r]? (o )?filtro|cor(es)? (normal|original)|remove[r]? (a )?cor)/.test(t)) return { preset: 'none', name: 'originais' };
   for (const [re, preset, name] of PRESET_WORDS) if (re.test(t)) return { preset, name };
   return undefined;
 }
@@ -364,7 +370,7 @@ export function removeZoomOps(p: Project): EditOp[] {
 export function colorOps(p: Project, preset: ColorPreset, name: string): EditOp[] {
   return videoClipsOf(p)
     .filter((c) => !c.locked)
-    .map((c, i) => ({ op: 'update_clip' as const, clipId: c.id, patch: { colorPreset: preset }, explain: i === 0 ? `Aplicando cor ${name}` : `Cor ${name} no clipe de ${fmt(c.start)}` }));
+    .map((c, i) => ({ op: 'update_clip' as const, clipId: c.id, patch: { colorPreset: preset }, explain: i === 0 ? `Aplicando cores ${name}` : `Cores ${name} no clipe de ${fmt(c.start)}` }));
 }
 
 export function transitionOps(p: Project, kind: TransitionKind | null, name: string): EditOp[] {
@@ -537,7 +543,7 @@ export function planFirstEdit(input: FirstEditInput): DemoResult {
 
   // 6) cor
   const color = intent.color ?? (style?.colorPreset && style.colorPreset !== 'none' ? { preset: style.colorPreset, name: 'do exemplo' } : undefined)
-    ?? (intent.calm ? { preset: 'warm' as ColorPreset, name: 'quente' } : undefined);
+    ?? (intent.calm ? { preset: 'warm' as ColorPreset, name: 'quentes' } : undefined);
   if (color) {
     const c = colorOps(p, color.preset, color.name);
     push(c);
@@ -605,7 +611,7 @@ function parseNumber(s: string): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
-const HELP = 'No modo demonstração eu entendo comandos como: "legenda maior/menor", "legenda amarela", "legenda em cima", "legendas estilo TikTok", "tira o zoom", "coloca zoom", "corta os primeiros 3 s", "corta os últimos 2 s", "cortar silêncios", "acelera 1.2x", "música mais baixa", "troca a transição para fade", "deixa preto e branco", "cores cinematográficas", "adicionar título \\"Seu texto\\"", "formato 16:9" e "deixar mais dinâmico".';
+const HELP = 'No modo demonstração eu entendo comandos como: "legenda maior/menor", "legenda amarela", "legenda em cima", "legendas estilo TikTok", "tira o zoom", "coloca zoom", "corta os primeiros 3 s", "corta os últimos 2 s", "cortar silêncios", "acelera 1.2x", "música mais baixa", "troca a transição para fade", "deixa preto e branco", "cores cinematográficas", "adicionar título “Seu texto”", "formato 16:9" e "deixar mais dinâmico".';
 
 export function chatIntent(text: string, ctx: ChatContext): DemoResult {
   const t = norm(text);
