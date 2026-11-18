@@ -4,7 +4,11 @@
    modelo; a validação real é validate.ts/sanitize.ts.
    ===================================================================== */
 import { z } from 'zod';
-import { ASPECTS, CAPTION_PRESETS, COLOR_PRESETS, EASINGS, FILTER_KINDS, PACINGS, TEXT_ANIMATIONS, TRANSITIONS } from './sanitize';
+import {
+  ASPECTS, AUDIO_EFFECTS, BLEND_MODES, CAPTION_PRESETS, CLIP_ANIMATIONS, COLOR_PRESETS, EASINGS, EFFECT_KINDS, FILTER_KINDS, FIT_MODES,
+  MARKER_KINDS, MASK_SHAPES, PACINGS, SHAPE_KINDS, SPEED_PRESETS, TEXT_ANIMATIONS, TRANSITIONS,
+} from './sanitize';
+import { CLIP_TYPES, TRACK_KINDS } from './validate';
 import { OP_KINDS } from './validate';
 
 const position = z.object({ x: z.number(), y: z.number() });
@@ -30,6 +34,13 @@ const textStyleShape = {
   shadow: z.boolean().optional(),
   uppercase: z.boolean().optional(),
   align: z.enum(['left', 'center', 'right']).optional(),
+  italic: z.boolean().optional(),
+  underline: z.boolean().optional(),
+  letterSpacing: z.number().optional(),
+  lineHeight: z.number().optional(),
+  gradient: z.object({ from: z.string(), to: z.string(), angle: z.number() }).optional(),
+  backgroundRadius: z.number().optional(),
+  opacity: z.number().optional(),
 };
 const textStyle = z.object(textStyleShape);
 const captionStyle = z.object({
@@ -40,8 +51,40 @@ const captionStyle = z.object({
   maxWords: z.number().optional(),
 });
 
+const effect = z.object({ kind: z.enum(EFFECT_KINDS), intensity: z.number().describe('0..1'), speed: z.number().optional() });
+const audioEffect = z.object({ kind: z.enum(AUDIO_EFFECTS), amount: z.number().describe('0..1') });
+const clipAnim = z.object({ kind: z.enum(CLIP_ANIMATIONS), duration: z.number() });
+const mask = z.object({ shape: z.enum(MASK_SHAPES), x: z.number(), y: z.number(), w: z.number(), h: z.number(), rotation: z.number(), feather: z.number(), invert: z.boolean().optional() });
+
 /** campos de clipe (para add_clip.clip e update_clip.patch) */
 const clipFields = {
+  // estilo CapCut
+  fit: z.enum(FIT_MODES).optional(),
+  crop: z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() }).optional(),
+  flipH: z.boolean().optional(),
+  flipV: z.boolean().optional(),
+  blendMode: z.enum(BLEND_MODES).optional(),
+  mask: mask.nullable().optional(),
+  chromaKey: z.object({ color: z.string(), similarity: z.number(), smoothness: z.number() }).nullable().optional(),
+  effects: z.array(effect).optional(),
+  removeBackground: z.boolean().optional(),
+  animationIn: clipAnim.nullable().optional(),
+  animationOut: clipAnim.nullable().optional(),
+  animationLoop: clipAnim.nullable().optional(),
+  audioEffects: z.array(audioEffect).optional(),
+  pitch: z.number().optional(),
+  reverse: z.boolean().optional(),
+  speedCurve: z.array(z.object({ t: z.number(), speed: z.number() })).nullable().optional(),
+  speedPreset: z.enum(SPEED_PRESETS).nullable().optional(),
+  emoji: z.string().optional(),
+  shape: z.enum(SHAPE_KINDS).optional(),
+  fill: z.string().optional(),
+  stroke: z.string().optional(),
+  strokeWidth: z.number().optional(),
+  cornerRadius: z.number().optional(),
+  rotation: z.number().optional(),
+  scale: z.number().optional(),
+  templateId: z.string().optional(),
   start: z.number().optional(),
   duration: z.number().optional(),
   in: z.number().optional(),
@@ -81,16 +124,31 @@ export const EditOpSchema = z.object({
   aspect: z.enum(ASPECTS).optional(),
   language: z.string().optional(),
   index: z.number().optional(),
-  clip: z.object({ type: z.enum(['video', 'image', 'audio', 'text']), id: z.string().optional(), assetId: z.string().optional(), ...clipFields }).optional(),
-  patch: z.object({ ...clipFields, name: z.string().optional(), hidden: z.boolean().optional(), locked: z.boolean().optional(), background: z.string().optional(), emphasis: z.array(z.string()).optional() }).optional(),
+  fromWordId: z.string().optional(),
+  toWordId: z.string().optional(),
+  padding: z.number().optional(),
+  markerId: z.string().optional(),
+  marker: z.object({ id: z.string().optional(), t: z.number(), end: z.number().optional(), label: z.string().optional(), color: z.string().optional(), kind: z.enum(MARKER_KINDS).optional(), resolved: z.boolean().optional() }).optional(),
+  clip: z.object({ type: z.enum(CLIP_TYPES), id: z.string().optional(), assetId: z.string().optional(), ...clipFields }).optional(),
+  patch: z.object({
+    ...clipFields, name: z.string().optional(), hidden: z.boolean().optional(), locked: z.boolean().optional(), background: z.string().optional(),
+    emphasis: z.array(z.string()).optional(), t: z.number().optional(), end: z.number().optional(), resolved: z.boolean().optional(),
+    canvas: z.object({ type: z.enum(['color', 'blur', 'image']), color: z.string().optional(), blur: z.number().optional(), assetId: z.string().optional() }).optional(),
+  }).optional(),
   style: captionStyle.optional(),
   segments: z.array(segment).optional(),
-  track: z.object({ id: z.string().optional(), kind: z.enum(['video', 'audio', 'text']), name: z.string().optional() }).optional(),
+  track: z.object({ id: z.string().optional(), kind: z.enum(TRACK_KINDS as [string, ...string[]]), name: z.string().optional() }).optional(),
 });
 
 export const EditResponseSchema = z.object({
   reply: z.string().describe('resposta curta em PT-BR para o chat'),
   ops: z.array(EditOpSchema),
+  /** só ao aplicar comentários de revisão: uma resposta curta por comentário */
+  comments: z.array(z.object({ markerId: z.string(), reply: z.string() })).optional(),
+});
+
+export const TranslateSchema = z.object({
+  segments: z.array(z.object({ id: z.string(), text: z.string() })),
 });
 
 export const StyleSchema = z.object({

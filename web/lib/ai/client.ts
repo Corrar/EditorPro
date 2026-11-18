@@ -4,7 +4,7 @@
    imagens: vídeo-exemplo vira quadros + métricas; fala vira transcrição
    (Whisper no navegador, ver whisper.ts).
    ===================================================================== */
-import type { ChatMessage, MediaAsset, Project, StyleProfile } from '../types';
+import type { ChatContext, ChatMessage, MediaAsset, Project, StyleProfile } from '../types';
 import type { EditOp } from '../ops';
 import type { Frame } from './frames';
 import type { ReferenceSample } from './analysis';
@@ -19,8 +19,10 @@ export interface EditRequest {
   assets: Record<string, MediaAsset>;
   messages: ChatMessage[];
   userText: string;
-  /** 'first' = primeira edição a partir do brief; 'chat' = ajuste pontual (padrão) */
-  mode?: 'first' | 'chat';
+  /** 'first' = 1ª edição a partir do brief; 'chat' = ajuste pontual (padrão); 'comments' = aplicar comentários de revisão */
+  mode?: 'first' | 'chat' | 'comments';
+  /** para onde o usuário apontou */
+  context?: ChatContext;
   /** miniaturas do material p/ o Claude "ver" o vídeo */
   frames?: EditFrame[];
 }
@@ -28,6 +30,8 @@ export interface EditRequest {
 export interface EditResponse {
   reply: string; // resposta em PT-BR para o chat
   ops: EditOp[]; // cada uma com `explain`
+  /** respostas por comentário (modo 'comments') */
+  comments?: { markerId: string; reply: string }[];
 }
 
 /** erro com código vindo da rota (ex.: 'rate_limited', 'not_configured', 'refusal') */
@@ -87,10 +91,17 @@ export async function requestEdit(req: EditRequest): Promise<EditResponse> {
     messages: req.messages.slice(-12).map((m) => ({ id: m.id, role: m.role, text: m.text, createdAt: m.createdAt })),
     userText: req.userText,
     mode: req.mode ?? 'chat',
+    ...(req.context ? { context: req.context } : {}),
   };
   let frames = req.frames ?? [];
   const baseLen = JSON.stringify(base).length;
   while (frames.length && baseLen + JSON.stringify(frames).length > MAX_BODY) frames = frames.length > 2 ? frames.filter((_, i) => i % 2 === 0) : [];
-  const { reply, ops } = await postJson<EditResponse>('/api/ai/edit', { ...base, frames });
-  return { reply, ops };
+  const { reply, ops, comments } = await postJson<EditResponse>('/api/ai/edit', { ...base, frames });
+  return { reply, ops, comments };
+}
+
+/** traduz legendas (Claude); devolve o texto novo por id de segmento */
+export async function translateSegments(segments: { id: string; text: string }[], to: string, from = 'pt-BR'): Promise<Map<string, string>> {
+  const { segments: out } = await postJson<{ segments: { id: string; text: string }[] }>('/api/ai/translate', { segments, to, from });
+  return new Map(out.map((s) => [s.id, s.text]));
 }

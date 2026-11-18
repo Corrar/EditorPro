@@ -6,6 +6,7 @@
    ===================================================================== */
 import type { AspectRatio, Id, MediaAsset, StyleProfile } from '../types';
 import { cutsFromDiffs, detectSilences, styleFromCuts, type Range } from './demo';
+import { detectBeats } from './features';
 import { deviceProfile, sampleVideo, type Frame } from './frames';
 
 const MAX_DECODE_BYTES = 400 * 1024 * 1024;
@@ -118,4 +119,17 @@ export async function sampleReference(asset: MediaAsset, onProgress?: (f: number
 /** compatível com a versão anterior: só o perfil heurístico */
 export async function analyzeReferenceLocal(asset: MediaAsset, onProgress?: (f: number) => void): Promise<StyleProfile | undefined> {
   return (await sampleReference(asset, onProgress, false))?.localStyle;
+}
+
+/** batidas de uma música (segundos da mídia); usa asset.beats se o shell/engine já detectou */
+export async function beatsOf(asset: MediaAsset): Promise<number[]> {
+  if (asset.beats?.length) return asset.beats;
+  if (!asset.url || asset.kind === 'image') return [];
+  try {
+    const { samples, sampleRate } = toMonoDecimated(await decodeAudio(asset.url), 11025);
+    return detectBeats(samples, sampleRate);
+  } catch (e) {
+    console.warn('[ai] não deu para achar as batidas de', asset.name, e);
+    return [];
+  }
 }

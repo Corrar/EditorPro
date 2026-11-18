@@ -27,6 +27,15 @@ function clipLine(c: Clip): Record<string, unknown> {
   if (c.type === 'video' && c.colorPreset) base.colorPreset = c.colorPreset;
   if (c.type === 'audio' && c.duckUnderVoice) base.duck = true;
   if (c.type === 'text') Object.assign(base, { text: c.text, position: c.position, animation: c.animation, fontSize: c.style.fontSize, color: c.style.color });
+  if (c.type === 'sticker') Object.assign(base, c.emoji ? { emoji: c.emoji } : { assetId: c.assetId });
+  if (c.type === 'shape') Object.assign(base, { shape: c.shape, fill: c.fill });
+  if (c.type === 'adjustment') Object.assign(base, { ...(c.colorPreset ? { colorPreset: c.colorPreset } : {}), ...(c.effects?.length ? { effects: c.effects.map((e) => e.kind) } : {}) });
+  // extras estilo CapCut (só o que estiver ligado, para economizar tokens)
+  const x = c as unknown as Record<string, unknown>;
+  for (const k of ['speedPreset', 'reverse', 'pitch', 'blendMode', 'fit', 'flipH', 'flipV', 'removeBackground'] as const) if (x[k] !== undefined && x[k] !== false) base[k] = x[k];
+  if (Array.isArray(x.effects) && c.type !== 'adjustment' && x.effects.length) base.effects = (x.effects as { kind: string }[]).map((e) => e.kind);
+  if (Array.isArray(x.audioEffects) && x.audioEffects.length) base.audioEffects = (x.audioEffects as { kind: string }[]).map((e) => e.kind);
+  for (const k of ['mask', 'chromaKey', 'crop', 'animationIn', 'animationOut', 'animationLoop'] as const) if (x[k]) base[k] = x[k];
   return base;
 }
 
@@ -45,13 +54,19 @@ export function summarizeProject(
   const maxCaps = opts.maxCaptions ?? 200;
   const maxMsgs = opts.maxMessages ?? 12;
   const segs = p.captions.segments;
-  const capList = segs.slice(0, maxCaps).map((s) => ({ id: s.id, start: t2(s.start), end: t2(s.end), text: s.text }));
+  // transcrição COM ids de palavra: "[w00012 4.20-4.45] né" — a IA corta fala com remove_words (preciso)
+  const capList = segs.slice(0, maxCaps).map((s) => ({
+    // texto derivado das palavras (cortes com ripple removem palavras mas não reescrevem `text`)
+    id: s.id, start: t2(s.start), end: t2(s.end), text: s.words?.length ? s.words.map((w) => w.text).join(' ') : s.text,
+    ...(s.words?.some((w) => w.id) ? { words: s.words.map((w) => `[${w.id ?? '?'} ${w.start.toFixed(2)}-${w.end.toFixed(2)}] ${w.text}`).join(' ') } : {}),
+  }));
   const { fontFamily: _f, ...capStyle } = p.captions.style;
   return {
     project: { name: p.name, aspect: p.aspect, size: `${p.width}x${p.height}`, fps: p.fps, duration: t2(projectDuration(p)), brief: p.brief || undefined },
-    assets: Object.values(assets).map((a) => ({
+    assets: Object.values(assets).filter((a) => !a.library).map((a) => ({
       id: a.id, kind: a.kind, role: a.role, name: a.name, duration: t2(a.duration),
       ...(a.width && a.height ? { size: `${a.width}x${a.height}` } : {}),
+      ...(a.beats?.length ? { beats: a.beats.slice(0, 200).map(t2) } : {}),
     })),
     tracks: p.tracks.map((t) => ({
       id: t.id, kind: t.kind, name: t.name,
@@ -67,6 +82,9 @@ export function summarizeProject(
       ...(segs.length > maxCaps ? { omitted: segs.length - maxCaps } : {}),
     },
     style: p.style ?? null,
+    ...(p.canvas ? { canvas: p.canvas } : {}),
+    markers: (p.markers ?? []).filter((m) => m.kind !== 'beat').slice(0, 80).map((m) => ({ id: m.id, t: t2(m.t), ...(m.end !== undefined ? { end: t2(m.end) } : {}), kind: m.kind ?? 'user', ...(m.label ? { label: m.label } : {}), ...(m.resolved ? { resolved: true } : {}) })),
+    ...((p.markers ?? []).some((m) => m.kind === 'beat') ? { beatMarkers: (p.markers ?? []).filter((m) => m.kind === 'beat').length } : {}),
     chat: messages
       .filter((m) => m.role !== 'system' && m.text)
       .slice(-maxMsgs)

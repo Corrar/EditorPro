@@ -3,17 +3,20 @@
    transcrição (Whisper local) -> pedido de edição (Claude) -> aplicação
    AO VIVO (store.applyLive). Sem chave: MODO DEMO (local, sem custo).
    ===================================================================== */
-import type { CaptionSegment, Clip, Id, MediaAsset, Project, StyleProfile } from '../types';
+import type { CaptionSegment, ChatContext, Clip, Id, MediaAsset, Project, StyleProfile } from '../types';
 import { clipEnd, projectDuration, type EditOp } from '../ops';
 import { makeAudioClip, makeImageClip, makeVideoClip } from '../defaults';
 import { useEditor } from '../store';
-import { AIClientError, analyzeReference, getStatus, requestEdit, type AIStatus, type EditFrame } from './client';
-import { sampleReference, silencesFor } from './analysis';
+import { AIClientError, analyzeReference, getStatus, requestEdit, translateSegments, type AIStatus, type EditFrame } from './client';
+import { beatsOf, sampleReference, silencesFor } from './analysis';
 import { chatIntent, demoCaptions, demoNeeds, planFirstEdit, speechRanges, type Range } from './demo';
 import { deviceProfile, framesFromThumbnails, sampleVideo } from './frames';
 import { captionsMediaToTimeline } from './timemap';
 import { sanitizeOps } from './validate';
 import { chooseWhisper, transcribeMedia } from './whisper';
+import { beatSyncOps, fillerOps, reframeOps } from './features';
+import { trackSubject } from './reframe';
+import { distributeWords } from './sanitize';
 
 export interface AskOption { id: string; label: string }
 
@@ -30,6 +33,8 @@ export interface PipelineOptions {
   skippable?: (label: string | null) => AbortSignal | undefined;
   /** usar o Whisper no navegador (padrão true) */
   whisper?: boolean;
+  /** para onde o usuário apontou (clipe, trecho, ponto, legenda) */
+  context?: ChatContext;
 }
 
 export interface PipelineResult {
@@ -229,6 +234,16 @@ export async function runFirstEdit(opts: PipelineOptions & { brief: string }): P
       } else if (segs) opts.onLog?.('Não encontrei fala para legendar');
     }
 
+    // batidas da música (p/ cortes na batida), se houver música
+    if (Object.values(store().assets).some((a) => a.role === 'music')) {
+      const music = Object.values(store().assets).filter((a) => a.role === 'music' && !a.beats?.length && a.url);
+      for (const a of music) {
+        opts.onStatus?.(`Ouvindo as batidas de "${a.name}"…`);
+        const beats = await beatsOf(a);
+        if (beats.length) { store().updateAsset(a.id, { beats }); opts.onLog?.(`Música analisada: ${beats.length} batidas`); }
+      }
+    }
+
     if (status.configured) {
       opts.onStatus?.('Planejando a edição…');
       const frames = await sourceFrames(sources, true, 10);
@@ -249,10 +264,32 @@ export async function runFirstEdit(opts: PipelineOptions & { brief: string }): P
     opts.onLog?.(nSil ? `Áudio analisado: ${nSil} pausa${nSil > 1 ? 's' : ''} encontrada${nSil > 1 ? 's' : ''}` : 'Áudio analisado');
     opts.onStatus?.('Planejando a edição…');
     const plan = planFirstEdit({ project: store().project, assets: store().assets, brief, silencesByAsset: silences, style });
-    const { ops } = sanitizeOps(plan.ops, store().project, store().assets);
+    const first = sanitizeOps(plan.ops, store().project, store().assets);
+    let ops = first.ops;
+    let reply = plan.reply;
+    // estilo CapCut: vícios de linguagem (pelas palavras) e cortes na batida, quando fizer sentido
+    const b = norm(brief);
+    const fast = /dinamic|rapid|tiktok|reels|shorts|viral/.test(b) || style?.pacing === 'fast' || style?.pacing === 'very-fast';
+    let sim = first.project;
+    if ((fast || /vicio|muleta|limp/.test(b)) && !/sem cort/.test(b)) {
+      const f = fillerOps(sim);
+      if (f.ops.length) {
+        const r = sanitizeOps(f.ops, sim, store().assets);
+        ops = [...ops, ...r.ops]; sim = r.project;
+        reply = reply.replace('Pronto! Editei no modo demonstração: ', `Pronto! Editei no modo demonstração: cortei ${f.count} vício${f.count > 1 ? 's' : ''} de linguagem, `);
+      }
+    }
+    if (/batida|beat|ritmo da musica|no ritmo/.test(b)) {
+      const bs = beatSyncOps(sim, store().assets, fast ? 0.6 : 1);
+      if (bs.ops.length) {
+        const r = sanitizeOps(bs.ops, sim, store().assets);
+        ops = [...ops, ...r.ops]; sim = r.project;
+        reply = reply.replace('Pronto! Editei no modo demonstração: ', `Pronto! Editei no modo demonstração: ${bs.cuts} cortes na batida, `);
+      }
+    }
     opts.onStatus?.('Editando…');
     const appliedIds = ops.length ? await apply(ops) : [];
-    return { reply: plan.reply, ops, appliedIds, provider: 'demo' as const, warnings };
+    return { reply, ops, appliedIds, provider: 'demo' as const, warnings };
   });
 }
 
@@ -299,7 +336,7 @@ async function demoChat(text: string, apply: NonNullable<PipelineOptions['apply'
     const used = onTimeline(store().project);
     silences = await silencesFor(sourceAssets(store().assets).filter((a) => a.kind !== 'image' && used.has(a.id)));
   }
-  const r = chatIntent(text, { project: store().project, assets: store().assets, silencesByAsset: silences });
+  const r = chatIntent(text, { project: store().project, assets: store().assets, silencesByAsset: silences, target: opts.context });
   if (r.undo) {
     store().undo();
     return { reply: r.reply, ops: [], appliedIds: [], provider: 'demo', undo: true, warnings: [] };
@@ -314,14 +351,14 @@ async function claudeChat(text: string, apply: NonNullable<PipelineOptions['appl
   try {
     const s = store();
     const frames = await sourceFrames(sourceAssets(s.assets), false, 6);
-    const res = await requestEdit({ project: s.project, assets: s.assets, messages: s.messages, userText: text, mode: 'chat', frames });
+    const res = await requestEdit({ project: s.project, assets: s.assets, messages: s.messages, userText: text, mode: 'chat', frames, context: opts.context });
     const { ops } = sanitizeOps(res.ops, store().project, store().assets);
     if (ops.length) opts.onStatus?.('Editando…');
     const appliedIds = ops.length ? await apply(ops) : [];
     return { reply: res.reply, ops, appliedIds, provider: 'anthropic', warnings: [] };
   } catch (e) {
     // IA indisponível: tenta o intérprete local antes de desistir
-    const local = chatIntent(text, { project: store().project, assets: store().assets });
+    const local = chatIntent(text, { project: store().project, assets: store().assets, target: opts.context });
     if (local.ops.length) {
       const { ops } = sanitizeOps(local.ops, store().project, store().assets);
       const appliedIds = ops.length ? await apply(ops) : [];
@@ -340,7 +377,176 @@ export async function chatEdit(text: string, opts: PipelineOptions = {}): Promis
       const pre = prelimOps(store().project, store().assets, '');
       if (pre.length) await apply(pre, { delayMs: 260 });
     }
+    const local = await localFeature(text, apply, opts, status);
+    if (local) return local;
     return status.configured ? claudeChat(text, apply, opts) : demoChat(text, apply, opts);
+  });
+}
+
+/* ---------- recursos com execução local (iguais nos dois modos) ---------- */
+
+const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const RE = {
+  reframe: /reenquadr|re-enquadr|reframe|segu(e|ir) o rosto|acompanha(r)? (o )?(rosto|assunto)|centraliza(r)? (o )?(rosto|assunto)/,
+  translate: /(tradu[zc]|traduc)/,
+  fillers: /vicio|muleta|\bne\b.*\btipo\b|\btipo\b.*\bne\b|hesitac/,
+  beats: /batida|\bbeat|ritmo da musica/,
+  needsWords: /vicio|muleta|destaque|melhores (partes|momentos|trechos)|capitulo|gancho/,
+};
+const LANGS: [RegExp, string, string][] = [
+  [/ingles|english/, 'en-US', 'inglês'], [/espanhol|spanish/, 'es-ES', 'espanhol'], [/frances/, 'fr-FR', 'francês'],
+  [/italiano/, 'it-IT', 'italiano'], [/alemao/, 'de-DE', 'alemão'], [/portugues/, 'pt-BR', 'português'],
+];
+
+/** garante legendas com palavras (Whisper) antes de recursos que dependem da fala */
+async function ensureWords(opts: PipelineOptions, apply: NonNullable<PipelineOptions['apply']>, warnings: string[]): Promise<boolean> {
+  if (store().project.captions.segments.some((s) => s.words?.some((w) => w.id))) return true;
+  const used = sourceAssets(store().assets).filter((a) => a.kind !== 'image' && onTimeline(store().project).has(a.id));
+  const lang = store().project.captions.language || 'pt-BR';
+  const segs = await whisperCaptions(used, lang, opts, warnings);
+  if (!segs?.length) return false;
+  const { ops } = sanitizeOps([{ op: 'set_captions', segments: segs, language: lang, explain: `Transcrevendo: ${segs.length} legendas` }], store().project, store().assets);
+  await apply(ops, { delayMs: 250 });
+  opts.onLog?.(`Fala transcrita: ${segs.length} legendas`);
+  return true;
+}
+
+/** batidas: usa asset.beats ou detecta no navegador e guarda no asset */
+async function ensureBeats(opts: PipelineOptions): Promise<number> {
+  let n = 0;
+  for (const t of store().project.tracks) for (const c of t.clips) {
+    if (c.type !== 'audio') continue;
+    const a = store().assets[c.assetId];
+    if (!a) continue;
+    if (!a.beats?.length) {
+      opts.onStatus?.(`Ouvindo as batidas de "${a.name}"…`);
+      const beats = await beatsOf(a);
+      if (beats.length) store().updateAsset(a.id, { beats });
+    }
+    n += store().assets[a.id]?.beats?.length ?? 0;
+  }
+  return n;
+}
+
+async function localFeature(text: string, apply: NonNullable<PipelineOptions['apply']>, opts: PipelineOptions, status: AIStatus): Promise<PipelineResult | null> {
+  const t = norm(text);
+  const provider = status.provider;
+  const warnings: string[] = [];
+  const done = async (ops: EditOp[], reply: string): Promise<PipelineResult> => {
+    const clean = sanitizeOps(ops, store().project, store().assets).ops;
+    const appliedIds = clean.length ? await apply(clean) : [];
+    return { reply, ops: clean, appliedIds, provider, warnings };
+  };
+
+  // auto-reframe (rosto/assunto) — no navegador
+  if (RE.reframe.test(t)) {
+    const only = opts.context?.clipIds;
+    const outAspect = store().project.width / store().project.height;
+    const vids = sourceAssets(store().assets).filter((a) => a.kind === 'video' && onTimeline(store().project).has(a.id) && !!a.width && !!a.height && a.width / a.height > outAspect + 0.01);
+    if (!vids.length) return { reply: `O material já cabe no formato ${store().project.aspect} — não há o que reenquadrar.`, ops: [], appliedIds: [], provider, warnings };
+    const subjects: Record<Id, { t: number; x: number }[]> = {};
+    let method = 'center';
+    for (const a of vids) {
+      opts.onStatus?.(`Procurando o rosto/assunto em "${a.name}"…`);
+      const tr = await trackSubject(a, (f) => opts.onStatus?.(`Procurando o rosto/assunto em "${a.name}"… ${Math.round(f * 100)}%`, f));
+      subjects[a.id] = tr.points;
+      if (tr.method === 'faces') method = 'faces';
+      else if (method !== 'faces') method = tr.method;
+    }
+    const ops = reframeOps(store().project, store().assets, subjects, only);
+    if (!ops.length) return { reply: `O material já cabe no formato ${store().project.aspect} — não há o que reenquadrar.`, ops: [], appliedIds: [], provider, warnings };
+    return done(ops, method === 'faces' ? `Reenquadrei para ${store().project.aspect} seguindo o rosto.` : `Reenquadrei para ${store().project.aspect} seguindo a parte com mais detalhe da imagem (não achei rostos).`);
+  }
+
+  // traduzir legendas (Claude)
+  if (RE.translate.test(t) && /legenda/.test(t)) {
+    const lang = LANGS.find(([re]) => re.test(t));
+    if (!status.configured) return null; // demo responde que precisa da chave
+    if (!store().project.captions.segments.length) {
+      if (!(await ensureWords(opts, apply, warnings))) return { reply: 'Não há legendas para traduzir — gere as legendas primeiro.', ops: [], appliedIds: [], provider, warnings };
+    }
+    const [, code, name] = lang ?? [null, 'en-US', 'inglês'];
+    opts.onStatus?.(`Traduzindo as legendas para ${name}…`);
+    const p = store().project;
+    const map = await translateSegments(p.captions.segments.map((s) => ({ id: s.id, text: s.words?.length ? s.words.map((w) => w.text).join(' ') : s.text })), code, p.captions.language);
+    const segments = p.captions.segments.map((s) => {
+      const tx = map.get(s.id) ?? s.text;
+      return { id: s.id, start: s.start, end: s.end, text: tx, words: distributeWords(tx, s.start, s.end) };
+    });
+    return done([{ op: 'set_captions', segments, language: code, explain: `Legendas em ${name}` }], `Traduzi ${segments.length} legendas para ${name}. Os tempos de cada frase foram mantidos.`);
+  }
+
+  // cortar vícios (ids das palavras do Whisper) — exato e grátis
+  if (RE.fillers.test(t)) {
+    if (!(await ensureWords(opts, apply, warnings))) return { reply: 'Para cortar vícios eu preciso transcrever a fala primeiro (ligue o CC e tente de novo).', ops: [], appliedIds: [], provider, warnings };
+    const { ops, count } = fillerOps(store().project);
+    if (!ops.length) return { reply: 'Não encontrei vícios de linguagem (né, tipo, éé, hum…) na fala.', ops: [], appliedIds: [], provider, warnings };
+    return done(ops, `Cortei ${count} vício${count > 1 ? 's' : ''} de linguagem pelas palavras da transcrição.`);
+  }
+
+  // batidas: detecta antes (Claude e demo usam asset.beats)
+  if (RE.beats.test(t)) {
+    const n = await ensureBeats(opts);
+    if (!n) return { reply: 'Não achei batidas: coloque uma música na trilha de áudio primeiro.', ops: [], appliedIds: [], provider, warnings };
+    if (/sincroniz|na batida|no ritmo|corta(r)? n/.test(t) && !/marca/.test(t)) {
+      const { ops, cuts } = beatSyncOps(store().project, store().assets, /(rapid|frenet|toda batida)/.test(t) ? 0.45 : 0.8);
+      if (!ops.length) return { reply: 'As batidas não caem dentro do vídeo.', ops: [], appliedIds: [], provider, warnings };
+      return done(ops, `Sincronizei ${cuts} cortes com a batida da música, com zoom alternado e flash nas batidas fortes.`);
+    }
+    return null; // "marca as batidas" etc. seguem p/ o demo/Claude com asset.beats preenchido
+  }
+
+  // recursos que dependem das palavras: transcreve antes, depois segue normalmente
+  if (RE.needsWords.test(t)) await ensureWords(opts, apply, warnings);
+  return null;
+}
+
+/* ---------- comentários de revisão ---------- */
+
+export async function applyComments(opts: PipelineOptions = {}): Promise<PipelineResult> {
+  const apply = opts.apply ?? defaultApply;
+  const status = await getStatus();
+  const pending = (store().project.markers ?? []).filter((m) => m.kind === 'comment' && !m.resolved);
+  if (!pending.length) return { reply: 'Não há comentários pendentes. Adicione comentários na timeline (marcadores de comentário) e toque em "Aplicar comentários".', ops: [], appliedIds: [], provider: status.provider, warnings: [] };
+  const f = (n: number) => n.toFixed(1);
+  const list = pending.map((m, i) => `${i + 1}. [${m.id}] em ${f(m.t)}${m.end !== undefined ? `–${f(m.end)}` : ''} s: "${m.label ?? ''}"`).join('\n');
+
+  return withSingleUndo(async () => {
+    let ops: EditOp[] = [];
+    const replies = new Map<string, string>();
+    let reply = '';
+    if (status.configured) {
+      opts.onStatus?.(`Lendo ${pending.length} comentário${pending.length > 1 ? 's' : ''}…`);
+      const s = store();
+      const res = await requestEdit({ project: s.project, assets: s.assets, messages: s.messages, mode: 'comments', frames: await sourceFrames(sourceAssets(s.assets), false, 6), userText: `Aplique estes comentários de revisão:\n${list}` });
+      ops = sanitizeOps(res.ops, store().project, store().assets).ops;
+      for (const c of res.comments ?? []) replies.set(c.markerId, c.reply);
+      reply = res.reply;
+    } else {
+      // demo: cada comentário vira um pedido de chat no trecho/ponto dele
+      let p = store().project;
+      for (const m of pending) {
+        const target: ChatContext = { label: m.label ?? 'comentário', markerId: m.id, range: { start: m.t, end: m.end ?? Math.min(projectDuration(p), m.t + 2) } };
+        const r = chatIntent(m.label ?? '', { project: p, assets: store().assets, target });
+        const clean = sanitizeOps(r.ops, p, store().assets);
+        ops.push(...clean.ops);
+        p = clean.project;
+        replies.set(m.id, clean.ops.length ? r.reply : 'Não entendi este no modo demonstração.');
+      }
+      reply = 'Apliquei os comentários no modo demonstração.';
+    }
+    // marca como resolvidos os que tiveram resposta/ops (o Claude normalmente já manda update_marker)
+    const resolvedByAI = new Set(ops.filter((o) => o.op === 'update_marker' && o.patch.resolved).map((o) => (o as Extract<EditOp, { op: 'update_marker' }>).markerId));
+    for (const m of pending) {
+      if (resolvedByAI.has(m.id) || !(replies.has(m.id) || status.configured)) continue;
+      if (!status.configured && replies.get(m.id)?.startsWith('Não entendi')) continue;
+      ops.push({ op: 'update_marker', markerId: m.id, patch: { resolved: true }, explain: `Comentário em ${f(m.t)} s resolvido` });
+    }
+    const clean = sanitizeOps(ops, store().project, store().assets).ops;
+    opts.onStatus?.('Editando…');
+    const appliedIds = clean.length ? await apply(clean) : [];
+    const lines = pending.map((m) => `• ${f(m.t)} s — "${m.label ?? ''}": ${replies.get(m.id) ?? 'feito.'}`);
+    return { reply: `${reply}\n${lines.join('\n')}`, ops: clean, appliedIds, provider: status.provider, warnings: [] };
   });
 }
 
