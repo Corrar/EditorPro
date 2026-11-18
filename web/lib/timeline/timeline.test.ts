@@ -206,3 +206,122 @@ describe('selos do clipe', () => {
     expect(clipBadges(makeAdjustmentClip(0, 3, { colorPreset: 'warm', filters: [{ kind: 'contrast', value: 0.2 }] })).effects).toBe(2);
   });
 });
+
+describe('edição avançada', () => {
+  const run = (p: Project, ops: import('../ops').EditOp[]) => {
+    const r = applyOps(p, ops);
+    expect(r.errors).toEqual([]);
+    return r.project;
+  };
+  it('packOps fecha buracos da trilha principal', async () => {
+    const { packOps, mainTrackId } = await import('./edit');
+    const p = mock();
+    expect(mainTrackId(p)).toBe('track_video_1');
+    const q = run(p, packOps(track(p, 'track_video_1')));
+    expect(findClip(q, 'v2')!.clip.start).toBe(5);
+  });
+  it('magneticOrder reordena pelo centro e packOps aplica a ordem', async () => {
+    const { magneticOrder, packOps, magneticInsertTime } = await import('./edit');
+    const p = mock(); // v1 [0,5], v2 [8,12]
+    const tr = track(p, 'track_video_1');
+    const order = magneticOrder(tr, 'v2', 0, 4);
+    expect(order).toEqual(['v2', 'v1']);
+    expect(magneticInsertTime(tr, order, 'v2')).toBe(0);
+    const q = run(p, packOps(tr, order));
+    expect(findClip(q, 'v2')!.clip.start).toBe(0);
+    expect(findClip(q, 'v1')!.clip.start).toBe(4);
+  });
+  it('insertOps divide quem cruza e empurra o resto', async () => {
+    const { insertOps } = await import('./edit');
+    const p = mock();
+    const q = run(p, insertOps(track(p, 'track_video_1'), 2, 3));
+    const tr = track(q, 'track_video_1');
+    expect(tr.clips.map((c) => [c.start, c.duration])).toEqual([[0, 2], [5, 3], [11, 4]]);
+    expect((tr.clips[1] as VideoClip).in).toBe(4); // in 2 + 2s
+  });
+  it('overwriteOps apara, divide e remove', async () => {
+    const { overwriteOps } = await import('./edit');
+    const p = mock();
+    const q = run(p, overwriteOps(track(p, 'track_video_1'), 4, 9));
+    expect(track(q, 'track_video_1').clips.map((c) => [c.start, c.duration])).toEqual([[0, 4], [9, 3]]);
+    const r = run(p, overwriteOps(track(p, 'track_video_1'), 1, 2));
+    expect(track(r, 'track_video_1').clips.map((c) => [c.start, +c.duration.toFixed(3)])).toEqual([[0, 1], [2, 3], [8, 4]]);
+    const s2 = run(p, overwriteOps(track(p, 'track_video_1'), 7, 13));
+    expect(track(s2, 'track_video_1').clips.map((c) => c.id)).toEqual(['v1']);
+  });
+  it('copiar/colar mantém deslocamento relativo e evita sobreposição', async () => {
+    const { copyItems, pasteOps } = await import('./edit');
+    const p = mock();
+    const items = copyItems(p, ['t1', 'm1']);
+    const { ops, newIds } = pasteOps(p, items, 20);
+    const q = run(p, ops);
+    expect(findClip(q, newIds[0])!.clip.start).toBe(20); // m1 começava em 0 (base)
+    expect(findClip(q, newIds[1])!.clip.start).toBe(21); // t1 em +1
+    expect(findClip(q, newIds[1])!.track.id).toBe('track_text_1');
+    const again = pasteOps(q, items, 0); // ocupado => trilhas novas
+    const r = run(q, again.ops);
+    expect(findClip(r, again.newIds[1])!.track.id).not.toBe('track_text_1');
+  });
+  it('duplicateOps usa duplicate_clip e cópias não colidem', async () => {
+    const p = mock();
+    const { ops, newIds } = duplicateOps(p, ['v1', 'v2']);
+    expect(ops[0].op).toBe('duplicate_clip');
+    const q = run(p, ops);
+    const a = findClip(q, newIds[0])!.clip;
+    const b = findClip(q, newIds[1])!.clip;
+    expect(a.start + a.duration <= b.start || b.start + b.duration <= a.start).toBe(true);
+  });
+  it('separar áudio, velocidade e congelar quadro', async () => {
+    const { detachAudioOps, speedOps, freezeFrameOps } = await import('./edit');
+    const p = mock();
+    const q = run(p, detachAudioOps(p, 'v1'));
+    expect((findClip(q, 'v1')!.clip as VideoClip).muted).toBe(true);
+    const audio = q.tracks.flatMap((t) => t.clips).find((c) => c.type === 'audio' && c.start === 0 && c.duration === 5);
+    expect(audio && (audio as { in: number }).in).toBe(2);
+    const s2 = run(p, speedOps(p, 'v1', 2, 20));
+    expect(findClip(s2, 'v1')!.clip.duration).toBe(2.5);
+    const s3 = run(p, speedOps(p, 'v2', 0.5, 20)); // in 10, 4s -> limitado pela mídia (10s restantes) => 8s
+    expect(findClip(s3, 'v2')!.clip.duration).toBe(8);
+    const fr = freezeFrameOps(p, 'v1', 2, { id: 'img1' }, 1.5);
+    const s4 = run(p, fr.ops);
+    expect(findClip(s4, fr.imageId!)!.clip.start).toBe(2);
+    expect(findClip(s4, 'v2')!.clip.start).toBe(9.5);
+  });
+});
+
+describe('keyframes', () => {
+  it('interpola, alterna e move', async () => {
+    const { transformAt, keyframeToggleOps, moveKeyframeOps, keyframesOf } = await import('./keyframes');
+    const p = mock();
+    const v = findClip(p, 'v1')!.clip;
+    const withKf = { ...v, keyframes: [{ t: 0, transform: { scale: 1 } }, { t: 2, transform: { scale: 2 } }] } as typeof v;
+    expect(transformAt(withKf, 1).scale).toBeCloseTo(1.5);
+    expect(transformAt(withKf, 5).scale).toBe(2);
+    expect(transformAt(withKf, 1).x).toBe(0);
+    let q = applyOps(p, keyframeToggleOps(p, 'v1', 1)).project;
+    expect(keyframesOf(findClip(q, 'v1')!.clip).map((k) => k.t)).toEqual([1]);
+    q = applyOps(q, keyframeToggleOps(q, 'v1', 3)).project;
+    q = applyOps(q, moveKeyframeOps(q, 'v1', 0, 4)).project;
+    expect(keyframesOf(findClip(q, 'v1')!.clip).map((k) => k.t)).toEqual([3, 4]);
+    q = applyOps(q, keyframeToggleOps(q, 'v1', 3.01)).project; // a menos de 1 quadro => remove
+    expect(keyframesOf(findClip(q, 'v1')!.clip).map((k) => k.t)).toEqual([4]);
+    expect(keyframeToggleOps(p, 'm1', 1)).toEqual([]); // áudio não tem keyframe
+  });
+});
+
+describe('batidas e marcadores', () => {
+  it('beatTimes mapeia batidas da mídia para a timeline (in/speed) e markerSnapPoints junta marcadores', async () => {
+    const { beatTimes, markerSnapPoints } = await import('./edit');
+    const p = applyOps(mock(), [{ op: 'add_marker', marker: { id: 'mk1', t: 3, end: 4, kind: 'comment' } }]).project;
+    // m1: áudio de 0..12 com in 0; v1: in 2 dur 5 (vid sem beats)
+    const assets = { m1: { ...aud, beats: [0.5, 1, 30] }, a1: { ...vid, beats: [1, 3, 9] } };
+    const bt = beatTimes(p, assets);
+    expect(bt).toContain(0.5); // música
+    expect(bt).toContain(1); // v1: beat 3 da mídia (in 2) => t=1
+    expect(bt).not.toContain(30); // fora do trecho usado
+    const pts = markerSnapPoints(p, assets, []);
+    expect(pts).toContain(3);
+    expect(pts).toContain(4);
+    expect(markerSnapPoints(p, {}, ['mk1'])).toEqual([]);
+  });
+});

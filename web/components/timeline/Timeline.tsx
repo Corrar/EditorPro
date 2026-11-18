@@ -14,14 +14,18 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import type { Clip, Id, Project, Seconds, TrackKind } from '@/lib/types';
 import { useEditor } from '@/lib/store';
-import { clipEnd, findClip, projectDuration, trackKindFor, type EditOp } from '@/lib/ops';
+import { applyOps, clipEnd, findClip, projectDuration, trackKindFor, type EditOp } from '@/lib/ops';
 import { makeAudioClip, makeImageClip, makeVideoClip } from '@/lib/defaults';
 import { emit } from '@/lib/events';
 import { uid } from '@/lib/util';
 import { collectSnapPoints, snapSpan, snapThreshold, snapTime } from '@/lib/timeline/snap';
 import {
-  MIN_CLIP, deleteOps, duplicateOps, fitZoom, kindForMedia, nearestFreeStart, overlaps, placeClip, splitOps, toFrame, trimBounds,
+  MIN_CLIP, fitZoom, insertOps, kindForMedia, magneticInsertTime, magneticOrder, mainTrackId, overlaps, overwriteOps, packOps,
+  placeClip, toFrame, trimBounds,
 } from '@/lib/timeline/edit';
+import {
+  addMarker, commit as commitOps, copyClips, cutClips, duplicateClips, pasteClips, removeClips, splitAtPlayhead, toggleKeyframe,
+} from '@/lib/timeline/actions';
 import { type RowInfo, dimsFor, rowAtY, rowLayout, rowsHeight, useDims, useTimelineUi } from '@/lib/timeline/ui';
 import { Toolbar, ZMAX, ZMIN } from './Toolbar';
 import { Ruler } from './Ruler';
@@ -259,37 +263,9 @@ export default function Timeline() {
 
   const toast = (text: string, kind: 'info' | 'ok' | 'error' = 'info') => emit('ep:toast', { text, kind });
 
-  const split = useCallback((ids?: Id[]) => {
-    const st = useEditor.getState();
-    const ops = splitOps(st.project, ids ?? st.selection, st.playhead);
-    if (!ops.length) return toast('Posicione o cursor sobre um clipe para dividir');
-    st.dispatch(ops);
-  }, []);
-
-  const remove = useCallback((ids: Id[] | undefined, ripple: boolean) => {
-    const st = useEditor.getState();
-    const targets = ids ?? st.selection;
-    if (!targets.length) {
-      const cap = useTimelineUi.getState().captionSel;
-      if (cap && st.project.captions.enabled) {
-        st.dispatch({ op: 'set_captions', segments: st.project.captions.segments.filter((s) => s.id !== cap) });
-        setUi({ captionSel: null });
-      }
-      return;
-    }
-    const ops = deleteOps(st.project, targets, ripple);
-    if (!ops.length) return toast('Clipe travado — destrave a trilha para excluir');
-    st.dispatch(ops);
-    st.select([]);
-  }, [setUi]);
-
-  const duplicate = useCallback((ids?: Id[]) => {
-    const st = useEditor.getState();
-    const { ops, newIds } = duplicateOps(st.project, ids ?? st.selection);
-    if (!ops.length) return;
-    st.dispatch(ops);
-    st.select(newIds);
-  }, []);
+  const split = useCallback((ids?: Id[]) => splitAtPlayhead(ids), []);
+  const remove = useCallback((ids: Id[] | undefined, ripple: boolean) => removeClips(ids, ripple), []);
+  const duplicate = useCallback((ids?: Id[]) => duplicateClips(ids), []);
 
   const toolbarActions = useMemo(
     () => ({
@@ -309,7 +285,23 @@ export default function Timeline() {
     remove: (ripple) => remove(undefined, ripple),
     zoomBy: (f) => zoomTo(useEditor.getState().zoom * f),
     duplicate: () => duplicate(),
+    copy: () => copyClips(),
+    cut: () => cutClips(),
+    paste: () => pasteClips(),
+    marker: () => openNewMarker('user'),
+    comment: () => openNewMarker('comment'),
+    keyframe: () => toggleKeyframe(),
   });
+
+  /** cria marcador/comentário no playhead e abre o popover para editar o texto */
+  const openNewMarker = (kind: 'user' | 'comment') => {
+    const id = addMarker(kind);
+    const el = scrollRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const x = r.left + hw() + useEditor.getState().playhead * zoomRef.current - el.scrollLeft;
+    setUi({ markerPop: { id, x: Math.max(r.left + 8, Math.min(x, r.right - 8)), y: r.top + dimsRef.current.rulerH + 4, isNew: true } });
+  };
 
   /* ---------------- coordenadas ---------------- */
 
@@ -373,10 +365,13 @@ export default function Timeline() {
         else trackId = o.trackId;
         if (!newTrack) {
           const tr = p.tracks.find((tt) => tt.id === trackId)!;
-          if (overlaps(tr, o.start + delta, o.duration, [g.primary])) {
-            const free = nearestFreeStart(tr, o.duration, o.start + delta, [g.primary]);
-            delta = free - o.start;
-            if (point != null && Math.abs(free - point) > 1e-6 && Math.abs(free + o.duration - point) > 1e-6) point = undefined;
+          if (ui.magnetic && trackId === mainTrackId(p)) {
+            // trilha magnética: mostra onde o clipe entra na sequência
+            const order = magneticOrder(tr, g.primary, o.start + delta, o.duration);
+            point = magneticInsertTime(tr, order, g.primary);
+          } else if (overlaps(tr, o.start + delta, o.duration, [g.primary])) {
+            // inserir/sobrescrever: a guia marca o ponto de edição
+            point = o.start + delta;
           }
         }
       } else {
@@ -513,19 +508,36 @@ export default function Timeline() {
         newId = uid(`track_${kind}`);
         ops.push({ op: 'add_track', track: { id: newId, kind, name: trackLabel(kind, st.project) } });
       }
-      for (const id of g.ids) {
+      if (g.ids.length === 1 && !drag.newTrack) {
+        const id = g.primary;
         const o = g.origin.get(id)!;
         const start = Math.max(0, o.start + drag.delta);
-        const trackId = id === g.primary ? newId ?? drag.trackId : undefined;
-        if (Math.abs(start - o.start) < 1e-6 && (!trackId || trackId === o.trackId)) continue;
-        ops.push({ op: 'move_clip', clipId: id, start, ...(trackId && trackId !== o.trackId ? { trackId } : {}) });
+        const target = drag.trackId ?? o.trackId;
+        const move: EditOp = { op: 'move_clip', clipId: id, start, ...(target !== o.trackId ? { trackId: target } : {}) };
+        const tr = st.project.tracks.find((t) => t.id === target)!;
+        if (ui.magnetic && target === mainTrackId(st.project)) {
+          const mid = applyOps(st.project, [move]).project;
+          const mainAfter = mid.tracks.find((t) => t.id === target)!;
+          ops.push(move, ...packOps(mainAfter, magneticOrder(mainAfter, id, start, o.duration)));
+        } else if (overlaps(tr, start, o.duration, [id])) {
+          const pre = ui.dropMode === 'insert' ? insertOps(tr, start, o.duration, [id]) : overwriteOps(tr, start, start + o.duration, [id]);
+          ops.push(...pre, move);
+        } else if (Math.abs(start - o.start) > 1e-6 || target !== o.trackId) ops.push(move);
+      } else {
+        for (const id of g.ids) {
+          const o = g.origin.get(id)!;
+          const start = Math.max(0, o.start + drag.delta);
+          const trackId = id === g.primary ? newId ?? drag.trackId : undefined;
+          if (Math.abs(start - o.start) < 1e-6 && (!trackId || trackId === o.trackId)) continue;
+          ops.push({ op: 'move_clip', clipId: id, start, ...(trackId && trackId !== o.trackId ? { trackId } : {}) });
+        }
       }
-      if (ops.length) st.dispatch(ops);
+      if (ops.length) commitOps(ops);
     } else if (g.kind === 'trim') {
       if (!g.moved || !drag || (drag.mode !== 'trim-start' && drag.mode !== 'trim-end')) return;
       const c = g.clip;
-      if (drag.mode === 'trim-start' && Math.abs(drag.start - c.start) > 1e-6) st.dispatch({ op: 'trim_clip', clipId: c.id, start: drag.start });
-      if (drag.mode === 'trim-end' && Math.abs(drag.end - clipEnd(c)) > 1e-6) st.dispatch({ op: 'trim_clip', clipId: c.id, end: drag.end });
+      if (drag.mode === 'trim-start' && Math.abs(drag.start - c.start) > 1e-6) commitOps([{ op: 'trim_clip', clipId: c.id, start: drag.start }]);
+      if (drag.mode === 'trim-end' && Math.abs(drag.end - clipEnd(c)) > 1e-6) commitOps([{ op: 'trim_clip', clipId: c.id, end: drag.end }]);
     } else if (g.kind === 'cap') {
       if (!g.moved || !drag || !drag.mode.startsWith('cap')) return;
       const d = drag as { start: number; end: number };
@@ -810,10 +822,14 @@ export default function Timeline() {
     const kind = kindForMedia(asset.kind);
     const dur = asset.kind === 'image' ? 3 : asset.duration > 0 ? asset.duration : 5;
     const row = rowAtY(rowsRef.current, y);
+    const ui = useTimelineUi.getState();
+    const hostable = row?.track && row.track.kind === kind && !row.track.locked ? row.track : undefined;
     const pl =
       row?.kind === 'new'
         ? { trackId: uid(`track_${kind}`), start: at, newTrack: true }
-        : placeClip(st.project, kind, dur, at, row?.track?.id);
+        : hostable
+          ? { trackId: hostable.id, start: at, newTrack: false }
+          : placeClip(st.project, kind, dur, at, row?.track?.id);
     const clip =
       asset.kind === 'video'
         ? makeVideoClip(asset, pl.start, { duration: dur })
@@ -822,8 +838,15 @@ export default function Timeline() {
           : makeImageClip(asset, pl.start, dur);
     const ops: EditOp[] = [];
     if (pl.newTrack) ops.push({ op: 'add_track', track: { id: pl.trackId, kind, name: trackLabel(kind, st.project) } });
-    ops.push({ op: 'add_clip', trackId: pl.trackId, clip, explain: `Adicionando ${asset.name}` });
-    st.dispatch(ops);
+    const add: EditOp = { op: 'add_clip', trackId: pl.trackId, clip, explain: `Adicionando ${asset.name}` };
+    if (hostable && ui.magnetic && hostable.id === mainTrackId(st.project)) {
+      const mid = applyOps(st.project, [add]).project;
+      const mainAfter = mid.tracks.find((t) => t.id === hostable.id)!;
+      ops.push(add, ...packOps(mainAfter, magneticOrder(mainAfter, clip.id, at, dur)));
+    } else if (hostable && overlaps(hostable, at, dur)) {
+      ops.push(...(ui.dropMode === 'insert' ? insertOps(hostable, at, dur) : overwriteOps(hostable, at, at + dur)), add);
+    } else ops.push(add);
+    commitOps(ops);
     st.select([clip.id]);
   };
 

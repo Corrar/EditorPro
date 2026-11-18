@@ -9,6 +9,12 @@ export interface ShortcutActions {
   remove: (ripple: boolean) => void;
   zoomBy: (factor: number) => void;
   duplicate: () => void;
+  copy: () => void;
+  cut: () => void;
+  paste: () => void;
+  marker: () => void;
+  comment: () => void;
+  keyframe: () => void;
 }
 
 export function isTypingTarget(el: EventTarget | null): boolean {
@@ -43,6 +49,13 @@ export function useShortcuts(actions: ShortcutActions) {
         st.redo();
       } else if (mod && (k === 'd' || k === 'D')) {
         a.duplicate();
+      } else if (mod && (k === 'c' || k === 'C') && !e.shiftKey) {
+        if (window.getSelection()?.toString()) handled = false; // deixa copiar texto selecionado
+        else a.copy();
+      } else if (mod && (k === 'x' || k === 'X')) {
+        a.cut();
+      } else if (mod && (k === 'v' || k === 'V')) {
+        a.paste();
       } else if (mod && (k === 'a' || k === 'A')) {
         st.select(st.project.tracks.flatMap((t) => (t.locked ? [] : t.clips.map((c) => c.id))));
       } else if (mod) {
@@ -51,6 +64,12 @@ export function useShortcuts(actions: ShortcutActions) {
         st.setPlaying(!st.playing);
       } else if (k === 's' || k === 'S') {
         a.split();
+      } else if (k === 'm' || k === 'M') {
+        a.marker();
+      } else if (k === 'c' || k === 'C') {
+        a.comment();
+      } else if (k === 'k' || k === 'K') {
+        a.keyframe();
       } else if (k === 'Delete' || k === 'Backspace') {
         a.remove(e.shiftKey);
       } else if (k === 'ArrowLeft' || k === 'ArrowRight') {

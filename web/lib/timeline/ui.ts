@@ -7,6 +7,7 @@
    ===================================================================== */
 import { create } from 'zustand';
 import type { Id, Project, Seconds, Track, TrackKind } from '../types';
+import type { ClipboardItem } from './edit';
 
 export type DragPreview =
   | {
@@ -42,6 +43,22 @@ export interface TimelineUi {
   /** touch = aberto por toque longo (ignora o "soltar" do dedo logo depois) */
   menu: { x: number; y: number; clipId: Id; touch?: boolean } | null;
   captionSel: Id | null;
+  /** trilha principal magnética (fecha buracos na 1ª trilha de vídeo) */
+  magnetic: boolean;
+  /** ao soltar sobre outro clipe: inserir (empurra) ou sobrescrever (substitui) */
+  dropMode: 'insert' | 'overwrite';
+  /** área de transferência local (copiar/colar) */
+  clipboard: ClipboardItem[];
+  /** trecho selecionado na régua (Shift+arrastar) */
+  range: { start: Seconds; end: Seconds } | null;
+  /** popover de marcador/comentário aberto */
+  markerPop: { id: Id; x: number; y: number; isNew?: boolean } | null;
+  /** popover do trecho selecionado */
+  rangePop: { x: number; y: number } | null;
+  /** popover de "+ trilha" / velocidade */
+  addTrackOpen: boolean;
+  speedPop: { x: number; y: number } | null;
+  showMinimap: boolean;
   dims: Dims;
   /** menu "⋯" da toolbar compacta / popover de trilha compacta */
   overflowOpen: boolean;
@@ -144,6 +161,15 @@ export const useTimelineUi = create<TimelineUi>((set) => ({
   marquee: null,
   menu: null,
   captionSel: null,
+  magnetic: true,
+  dropMode: 'insert',
+  clipboard: [],
+  range: null,
+  markerPop: null,
+  rangePop: null,
+  addTrackOpen: false,
+  speedPop: null,
+  showMinimap: true,
   dims: dimsFor(1200, 400, false),
   overflowOpen: false,
   trackPop: null,

@@ -4,7 +4,7 @@
    solta, régua). Tudo testável sem DOM. Gera EditOp[] para o store.
    ===================================================================== */
 import type { Clip, Id, MediaAsset, MediaKind, Project, Seconds, Track, TrackKind } from '../types';
-import { clipEnd, findClip, trackKindFor, type EditOp } from '../ops';
+import { applyOp as applyOpFn, clipEnd, findClip, trackKindFor, type EditOp } from '../ops';
 import { uid } from '../util';
 
 export const MIN_CLIP: Seconds = 0.1;
@@ -142,18 +142,20 @@ export function deleteOps(p: Project, ids: Id[], ripple = false): EditOp[] {
   return found.map((f) => ({ op: 'remove_clip', clipId: f.clip.id, ...(ripple ? { ripple: true } : {}) }));
 }
 
-/** duplica logo após o original (no espaço livre mais próximo da mesma trilha) */
+/** duplica logo após o original (no espaço livre mais próximo da mesma trilha) — op duplicate_clip */
 export function duplicateOps(p: Project, ids: Id[]): { ops: EditOp[]; newIds: Id[] } {
   const ops: EditOp[] = [];
   const newIds: Id[] = [];
+  let proj = p; // aplica em sequência p/ cópias não colidirem entre si
   for (const id of ids) {
-    const f = findClip(p, id);
+    const f = findClip(proj, id);
     if (!f || f.track.locked) continue;
-    const copy = { ...structuredCloneSafe(f.clip), id: uid('clip') } as Clip;
-    const start = nearestFreeStart(f.track, copy.duration, clipEnd(f.clip));
-    copy.start = start;
-    ops.push({ op: 'add_clip', trackId: f.track.id, clip: copy });
-    newIds.push(copy.id);
+    const newId = uid('clip');
+    const start = nearestFreeStart(f.track, f.clip.duration, clipEnd(f.clip));
+    const op: EditOp = { op: 'duplicate_clip', clipId: id, newId, start };
+    ops.push(op);
+    newIds.push(newId);
+    proj = applyLocal(proj, op);
   }
   return { ops, newIds };
 }
@@ -252,4 +254,233 @@ export function waveformSlice(peaks: number[], assetDuration: Seconds, srcIn: Se
     out[i] = m;
   }
   return out;
+}
+
+/* =====================================================================
+   Edição avançada (paridade CapCut): trilha principal magnética,
+   inserir/sobrescrever, colar, separar áudio, velocidade, congelar quadro.
+   Todas devolvem EditOp[] p/ UM dispatch (1 desfazer).
+   ===================================================================== */
+
+/** trilha principal = primeira trilha de vídeo (camada de fundo) */
+export function mainTrackId(p: Project): Id | undefined {
+  return p.tracks.find((t) => t.kind === 'video')?.id;
+}
+
+/** fecha buracos: encosta os clipes da trilha a partir do zero, na ordem (ou na ordem dada) */
+export function packOps(track: Track, order?: Id[]): EditOp[] {
+  if (track.locked) return [];
+  const byId = new Map(track.clips.map((c) => [c.id, c] as const));
+  const seq = (order ?? [...track.clips].sort((a, b) => a.start - b.start).map((c) => c.id))
+    .map((id) => byId.get(id))
+    .filter((c): c is Clip => !!c);
+  const ops: EditOp[] = [];
+  let t = 0;
+  for (const c of seq) {
+    if (Math.abs(c.start - t) > EPS) ops.push({ op: 'move_clip', clipId: c.id, start: t });
+    t += c.duration;
+  }
+  return ops;
+}
+
+/** ordem da trilha magnética depois de soltar `clipId` com início em `desired` (pelo centro) */
+export function magneticOrder(track: Track, clipId: Id, desired: Seconds, duration: Seconds): Id[] {
+  const rest = [...track.clips].filter((c) => c.id !== clipId).sort((a, b) => a.start - b.start);
+  const center = desired + duration / 2;
+  let i = rest.findIndex((c) => c.start + c.duration / 2 > center);
+  if (i < 0) i = rest.length;
+  const ids = rest.map((c) => c.id);
+  ids.splice(i, 0, clipId);
+  return ids;
+}
+
+/** onde fica a borda de inserção na trilha magnética (p/ desenhar a guia) */
+export function magneticInsertTime(track: Track, order: Id[], clipId: Id): Seconds {
+  let t = 0;
+  for (const id of order) {
+    if (id === clipId) return t;
+    t += track.clips.find((c) => c.id === id)?.duration ?? 0;
+  }
+  return t;
+}
+
+/** INSERIR: abre espaço de `duration` em `at` (divide quem cruza `at` e empurra o resto) */
+export function insertOps(track: Track, at: Seconds, duration: Seconds, exclude: Iterable<Id> = []): EditOp[] {
+  if (track.locked || duration <= EPS) return [];
+  const ex = new Set(exclude);
+  const ops: EditOp[] = [];
+  for (const c of track.clips) {
+    if (ex.has(c.id)) continue;
+    if (c.start >= at - EPS) ops.push({ op: 'move_clip', clipId: c.id, start: c.start + duration });
+    else if (clipEnd(c) > at + EPS) {
+      const rid = uid('clip');
+      ops.push({ op: 'split_clip', clipId: c.id, at, newId: rid });
+      ops.push({ op: 'move_clip', clipId: rid, start: at + duration });
+    }
+  }
+  return ops;
+}
+
+/** SOBRESCREVER: limpa [start,end) da trilha (apara, divide ou remove o que estiver lá) */
+export function overwriteOps(track: Track, start: Seconds, end: Seconds, exclude: Iterable<Id> = []): EditOp[] {
+  if (track.locked || end - start <= EPS) return [];
+  const ex = new Set(exclude);
+  const ops: EditOp[] = [];
+  for (const c of track.clips) {
+    if (ex.has(c.id)) continue;
+    const ce = clipEnd(c);
+    if (ce <= start + EPS || c.start >= end - EPS) continue;
+    const coversStart = c.start < start - EPS;
+    const coversEnd = ce > end + EPS;
+    if (coversStart && coversEnd) {
+      const mid = uid('clip');
+      const right = uid('clip');
+      ops.push({ op: 'split_clip', clipId: c.id, at: start, newId: mid });
+      ops.push({ op: 'split_clip', clipId: mid, at: end, newId: right });
+      ops.push({ op: 'remove_clip', clipId: mid });
+    } else if (coversStart) ops.push({ op: 'trim_clip', clipId: c.id, end: start });
+    else if (coversEnd) ops.push({ op: 'trim_clip', clipId: c.id, start: end });
+    else ops.push({ op: 'remove_clip', clipId: c.id });
+  }
+  return ops;
+}
+
+/* ---------- área de transferência (copiar/colar) ---------- */
+
+export interface ClipboardItem {
+  clip: Clip;
+  trackId: Id;
+  kind: TrackKind;
+}
+
+export function copyItems(p: Project, ids: Id[]): ClipboardItem[] {
+  return ids
+    .map((id) => findClip(p, id))
+    .filter((f): f is NonNullable<typeof f> => !!f)
+    .map((f) => ({ clip: structuredCloneSafe(f.clip), trackId: f.track.id, kind: f.track.kind }))
+    .sort((a, b) => a.clip.start - b.clip.start);
+}
+
+/** cola no tempo `t` mantendo os deslocamentos relativos; usa a trilha de origem se livre, senão outra/nova */
+export function pasteOps(p: Project, items: ClipboardItem[], t: Seconds): { ops: EditOp[]; newIds: Id[] } {
+  if (!items.length) return { ops: [], newIds: [] };
+  const base = Math.min(...items.map((i) => i.clip.start));
+  let proj = p;
+  const ops: EditOp[] = [];
+  const newIds: Id[] = [];
+  const created = new Map<Id, Id>(); // trilha de origem -> trilha nova (cola em grupo na mesma trilha nova)
+  for (const it of items) {
+    const start = Math.max(0, t + (it.clip.start - base));
+    const clip = { ...structuredCloneSafe(it.clip), id: uid('clip'), start } as Clip;
+    const pref = created.get(it.trackId) ?? it.trackId;
+    const pl = placeClip(proj, it.kind, clip.duration, start, pref);
+    if (pl.newTrack) created.set(it.trackId, pl.trackId);
+    const op: EditOp = { op: 'add_clip', trackId: pl.trackId, clip };
+    ops.push(op);
+    newIds.push(clip.id);
+    proj = applyLocal(proj, op);
+  }
+  return { ops, newIds };
+}
+
+/* ---------- ações de clipe ---------- */
+
+/** separa o áudio: AudioClip do mesmo asset alinhado + vídeo mudo (um dispatch) */
+export function detachAudioOps(p: Project, clipId: Id): EditOp[] {
+  const f = findClip(p, clipId);
+  if (!f || f.clip.type !== 'video' || f.track.locked) return [];
+  const v = f.clip;
+  const audio: Clip = {
+    id: uid('clip'),
+    type: 'audio',
+    assetId: v.assetId,
+    start: v.start,
+    duration: v.duration,
+    in: v.in,
+    speed: v.speed,
+    volume: v.volume,
+    ...(v.fadeIn ? { fadeIn: v.fadeIn } : {}),
+    ...(v.fadeOut ? { fadeOut: v.fadeOut } : {}),
+    ...(v.reverse ? { reverse: true } : {}),
+    label: v.label,
+  };
+  const pl = placeClip(p, 'audio', v.duration, v.start);
+  return [
+    { op: 'add_clip', trackId: pl.trackId, clip: audio, explain: 'Separando o áudio do vídeo' },
+    { op: 'update_clip', clipId: v.id, patch: { muted: true } },
+  ];
+}
+
+/** muda a velocidade mantendo o trecho da mídia (duração = duração*velAntiga/velNova), limitado à mídia */
+export function speedOps(p: Project, clipId: Id, speed: number, assetDuration?: Seconds): EditOp[] {
+  const f = findClip(p, clipId);
+  if (!f || f.track.locked || (f.clip.type !== 'video' && f.clip.type !== 'audio') || speed <= 0) return [];
+  const c = f.clip;
+  const old = c.speed > 0 ? c.speed : 1;
+  let src = c.duration * old; // trecho da mídia usado
+  if (assetDuration && assetDuration > 0) src = Math.min(src, Math.max(0, assetDuration - c.in));
+  const duration = Math.max(MIN_CLIP, src / speed);
+  return [{ op: 'update_clip', clipId, patch: { speed, duration, speedCurve: undefined, speedPreset: undefined } }];
+}
+
+/** congelar quadro: divide no tempo `t` e insere um ImageClip (quadro congelado) de `hold` s, empurrando o resto */
+export function freezeFrameOps(p: Project, clipId: Id, t: Seconds, imageAsset: { id: Id }, hold: Seconds = 2): { ops: EditOp[]; imageId?: Id } {
+  const f = findClip(p, clipId);
+  if (!f || f.clip.type !== 'video' || f.track.locked) return { ops: [] };
+  if (t <= f.clip.start + EPS || t >= clipEnd(f.clip) - EPS) return { ops: [] };
+  const image: Clip = {
+    id: uid('clip'),
+    type: 'image',
+    assetId: imageAsset.id,
+    start: t,
+    duration: hold,
+    transform: { ...f.clip.transform },
+    filters: [...f.clip.filters],
+    label: 'Quadro congelado',
+  };
+  return {
+    ops: [...insertOps(f.track, t, hold), { op: 'add_clip', trackId: f.track.id, clip: image, explain: 'Congelando o quadro' }],
+    imageId: image.id,
+  };
+}
+
+/** aplica uma op localmente (p/ compor ops dependentes) — import tardio evita ciclo */
+function applyLocal(p: Project, op: EditOp): Project {
+  try {
+    return applyOpFn(p, op);
+  } catch {
+    return p;
+  }
+}
+
+/* ---------- batidas e marcadores (snapping e régua) ---------- */
+
+/** batidas (asset.beats, em segundos da mídia) mapeadas para a timeline, só dentro dos clipes */
+export function beatTimes(p: Project, assets: Record<Id, MediaAsset>): Seconds[] {
+  const out: Seconds[] = [];
+  for (const tr of p.tracks) {
+    if (tr.hidden && tr.kind !== 'audio') continue;
+    for (const c of tr.clips) {
+      if (c.type !== 'audio' && c.type !== 'video') continue;
+      const beats = assets[c.assetId]?.beats;
+      if (!beats?.length) continue;
+      const sp = c.speed > 0 ? c.speed : 1;
+      const from = c.in;
+      const to = c.in + c.duration * sp;
+      for (const b of beats) if (b >= from - EPS && b <= to + EPS) out.push(c.start + (b - from) / sp);
+    }
+  }
+  return out.sort((a, b) => a - b);
+}
+
+/** pontos extras de snapping: marcadores (início/fim) + batidas */
+export function markerSnapPoints(p: Project, assets: Record<Id, MediaAsset>, exclude: Iterable<Id> = []): Seconds[] {
+  const ex = new Set(exclude);
+  const pts: Seconds[] = [];
+  for (const m of p.markers ?? []) {
+    if (ex.has(m.id)) continue;
+    pts.push(m.t);
+    if (m.end != null) pts.push(m.end);
+  }
+  return pts.concat(beatTimes(p, assets));
 }
