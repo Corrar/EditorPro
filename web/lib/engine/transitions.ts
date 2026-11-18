@@ -1,6 +1,7 @@
 /* parâmetros visuais de cada transição (puro). progress 0..1; role 'out' = clipe que sai, 'in' = que entra */
 import type { TransitionKind } from '../types';
 import { ease } from './easing';
+import { isShaderTransition, SHADER_TRANSITION_LABELS } from './shaderTransitions';
 
 export interface TransitionVisual {
   opacity: number;
@@ -42,6 +43,11 @@ export function transitionVisual(kind: TransitionKind, progress: number, role: '
   const e = ease('easeInOut', p);
   const bell = Math.sin(p * Math.PI); // 0 → 1 → 0
   const v: TransitionVisual = { ...NEUTRAL_TRANSITION };
+  // transições em shader: o compositor WebGL faz a mistura; aqui fica o fallback (dissolver)
+  if (isShaderTransition(kind)) {
+    if (role === 'in') v.opacity = e;
+    return v;
+  }
   switch (kind) {
     case 'fade':
       // fade via preto: sai até metade, entra na segunda metade
@@ -134,6 +140,7 @@ export const TRANSITION_LABELS: Record<TransitionKind, string> = {
   'dip-white': 'Mergulho branco', blur: 'Desfoque', spin: 'Giro', 'wipe-left': 'Cortina ←', 'wipe-right': 'Cortina →',
   'wipe-up': 'Cortina ↑', 'circle-open': 'Círculo', pixelate: 'Pixelar', shake: 'Tremor', 'rgb-split': 'RGB split',
   'film-burn': 'Filme queimado',
+  ...SHADER_TRANSITION_LABELS,
 };
 
 export const ALL_TRANSITIONS = Object.keys(TRANSITION_LABELS) as TransitionKind[];

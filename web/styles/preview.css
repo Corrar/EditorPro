@@ -167,3 +167,13 @@
 }
 .ep-ex-pair { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
 @media (max-width: 420px) { .ep-ex-pair { grid-template-columns:1fr; } .ep-ex-q { flex-wrap:wrap; } .ep-ex-qbtn { flex:1 1 40%; } }
+
+/* "apontar para qualquer coisa" */
+.ep-pv-canvas.pointing { cursor:crosshair; }
+@keyframes ep-pv-pin { 0%{transform:translate(-50%,-50%) scale(.4);opacity:0} 15%{transform:translate(-50%,-50%) scale(1.15);opacity:1} 30%{transform:translate(-50%,-50%) scale(1)} 85%{opacity:1} 100%{opacity:0} }
+@keyframes ep-pv-ring { from{box-shadow:0 0 0 0 rgba(217,100,30,.7)} to{box-shadow:0 0 0 18px rgba(217,100,30,0)} }
+.ep-pv-pin { position:absolute; width:22px; height:22px; pointer-events:none; animation:ep-pv-pin 3.2s ease both; transform:translate(-50%,-50%); }
+.ep-pv-pin i { position:absolute; inset:0; border-radius:50%; background:var(--green); border:3px solid #fff; animation:ep-pv-ring 1s ease-out 3; }
+.ep-pv-pin span { position:absolute; left:50%; top:calc(100% + 6px); transform:translateX(-50%); font:600 10.5px var(--font-mono), monospace; color:#fff; background:rgba(0,0,0,.6); padding:2px 7px; border-radius:999px; white-space:nowrap; }
+.ep-pv-pointhint { position:absolute; left:50%; bottom:12px; transform:translateX(-50%); max-width:calc(100% - 24px); text-align:center; font-size:11.5px; font-weight:600; color:#fff;
+  background:rgba(36,26,21,.85); border:1px solid rgba(255,255,255,.14); padding:7px 12px; border-radius:999px; pointer-events:none; animation:rise .2s ease both; }

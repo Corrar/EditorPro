@@ -12,7 +12,7 @@ import { emit, on } from '@/lib/events';
 import { formatTime } from '@/lib/util';
 import { LiveMediaPool } from './livePool';
 import ExportDialog from './ExportDialog';
-import { IcExport, IcFilm, IcFull, IcPause, IcPlay, IcRewind, IcSafe, IcSpark, IcUpload } from './icons';
+import { IcExport, IcFilm, IcFull, IcPause, IcPlay, IcRewind, IcSafe, IcSpark, IcTarget, IcUpload } from './icons';
 
 /** lado menor máximo do canvas interno do preview (o export usa a resolução cheia) */
 const PREVIEW_MAX_SHORT = 720;
@@ -65,6 +65,11 @@ export default function Preview() {
   const [fullscreen, setFullscreen] = useState(false);
   /** "tela cheia" por CSS (iPhone não tem Fullscreen API para elementos que não são <video>) */
   const [cssFull, setCssFull] = useState(false);
+  /* "apontar para qualquer coisa": marca um ponto do quadro como contexto do chat */
+  const [pointMode, setPointMode] = useState(false);
+  const chatPoint = useEditor((s) => s.chatContext?.point);
+  const [markerAt, setMarkerAt] = useState(0);
+  const pressRef = useRef<{ x: number; y: number; timer: number; fired: boolean } | null>(null);
 
   if (!poolRef.current && typeof window !== 'undefined') poolRef.current = new LiveMediaPool();
   /** tamanho-base do canvas interno e fator de qualidade dinâmico (cai se a reprodução não aguentar) */
@@ -272,6 +277,50 @@ export default function Preview() {
   }, [cssFull]);
 
   const togglePlay = () => { unlock(); setPlaying(!useEditor.getState().playing); };
+
+  const pointAt = (clientX: number, clientY: number) => {
+    const cv = canvasRef.current;
+    if (!cv) return;
+    const r = cv.getBoundingClientRect();
+    const x = Math.min(1, Math.max(0, (clientX - r.left) / r.width));
+    const y = Math.min(1, Math.max(0, (clientY - r.top) / r.height));
+    const st = useEditor.getState();
+    if (st.playing) st.setPlaying(false);
+    const t = st.playhead;
+    st.setChatContext({ point: { x, y, t }, label: `Ponto no vídeo · ${formatTime(t)}` });
+    setMarkerAt(Date.now());
+    setPointMode(false);
+  };
+  const onCanvasDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (pointMode || e.altKey) { e.preventDefault(); pointAt(e.clientX, e.clientY); pressRef.current = { x: 0, y: 0, timer: 0, fired: true }; return; }
+    // toque longo (≥ 550 ms parado) também aponta
+    const timer = window.setTimeout(() => {
+      if (pressRef.current && !pressRef.current.fired) { pressRef.current.fired = true; pointAt(pressRef.current.x, pressRef.current.y); }
+    }, 550);
+    pressRef.current = { x: e.clientX, y: e.clientY, timer, fired: false };
+  };
+  const onCanvasMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const p = pressRef.current;
+    if (p && !p.fired && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 10) { clearTimeout(p.timer); pressRef.current = null; }
+  };
+  const onCanvasClick = () => {
+    const p = pressRef.current;
+    pressRef.current = null;
+    if (p) clearTimeout(p.timer);
+    if (p?.fired) return; // foi um "apontar", não alterna play
+    togglePlay();
+  };
+  useEffect(() => {
+    if (!markerAt) return;
+    const id = window.setTimeout(() => setMarkerAt(0), 3200);
+    return () => clearTimeout(id);
+  }, [markerAt]);
+  useEffect(() => {
+    if (!pointMode) return;
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') setPointMode(false); };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [pointMode]);
   const toStart = () => { setPlayhead(0); if (playing) clockRef.current = { t0: 0, wall0: performance.now() }; };
   const toggleFull = async () => {
     const el = frameRef.current?.parentElement as FsEl | null | undefined;
@@ -301,7 +350,18 @@ export default function Preview() {
     <div className={`ep-pv${fullscreen ? ' is-full' : ''}${cssFull ? ' is-cssfull' : ''}`}>
       <div className="ep-pv-box" ref={boxRef}>
         <div className="ep-pv-frame" ref={frameRef} style={{ width: fit.w, height: fit.h }} data-aspect={aspect}>
-          <canvas ref={canvasRef} className="ep-pv-canvas" onClick={empty ? undefined : togglePlay} aria-label="Pré-visualização do vídeo" />
+          <canvas
+            ref={canvasRef} className={`ep-pv-canvas${pointMode ? ' pointing' : ''}`} aria-label="Pré-visualização do vídeo"
+            onClick={empty ? undefined : onCanvasClick} onPointerDown={empty ? undefined : onCanvasDown} onPointerMove={onCanvasMove}
+            onPointerCancel={() => { if (pressRef.current) clearTimeout(pressRef.current.timer); pressRef.current = null; }}
+            onContextMenu={(e) => { if (pressRef.current?.fired) e.preventDefault(); }}
+          />
+          {chatPoint && markerAt > 0 && (
+            <div className="ep-pv-pin" style={{ left: `${chatPoint.x * 100}%`, top: `${chatPoint.y * 100}%` }} aria-hidden="true">
+              <i /><span>{formatTime(chatPoint.t)}</span>
+            </div>
+          )}
+          {pointMode && <div className="ep-pv-pointhint" role="status">Toque no ponto do vídeo para perguntar à IA · Esc cancela</div>}
           {safe && !empty && (
             <div className={`ep-pv-safe${isVertical ? ' vertical' : ''}`} aria-hidden="true">
               {isVertical ? (
@@ -360,6 +420,10 @@ export default function Preview() {
           </button>
           <div className="ep-pv-time mono"><span ref={timeRef}>{fmt(0)}</span><i>/</i><span className="tot">{fmt(duration)}</span></div>
           <span style={{ flex: 1 }} />
+          <button className={`ep-pv-chip${pointMode ? ' on' : ''}`} onClick={() => setPointMode(!pointMode)} disabled={empty}
+            title="Apontar um ponto do vídeo para o chat (ou Alt+clique / toque longo no vídeo)">
+            <IcTarget size={14} /> <span className="lbl">Apontar</span>
+          </button>
           <button className={`ep-pv-chip${safe ? ' on' : ''}`} onClick={() => setSafe(!safe)} title="Guias de área segura (TikTok/Reels)" disabled={empty}>
             <IcSafe size={14} /> <span className="lbl">Área segura</span>
           </button>
