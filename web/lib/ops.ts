@@ -127,6 +127,14 @@ export function trimClipValue(c: Clip, start: Seconds, end: Seconds): Clip | nul
   return out;
 }
 
+/** id determinístico p/ o pedaço direito de um clipe cortado por ripple_delete */
+export function rippleRightId(track: Track, clipId: Id, end: Seconds): Id {
+  const base = `${clipId}_r${Math.round(end * 1000).toString(36)}`;
+  let id = base;
+  for (let n = 2; track.clips.some((x) => x.id === id); n++) id = `${base}${n}`;
+  return id;
+}
+
 function rippleTrack(track: Track, start: Seconds, end: Seconds): Track {
   if (track.locked) return track;
   const gap = end - start;
@@ -141,7 +149,9 @@ function rippleTrack(track: Track, start: Seconds, end: Seconds): Track {
       const rightRaw = trimClipValue(c, end, cEnd);
       if (left) clips.push(left);
       if (rightRaw) {
-        const right = { ...rightRaw, id: left ? uid('clip') : c.id, start: start } as Clip;
+        // id determinístico (mesma op no mesmo projeto => mesmo id): a IA/simulações podem
+        // referenciar o pedaço direito em ops seguintes e o replay ao vivo bate com a simulação
+        const right = { ...rightRaw, id: left ? rippleRightId(track, c.id, end) : c.id, start: start } as Clip;
         if ('transitionIn' in right) delete (right as { transitionIn?: unknown }).transitionIn;
         clips.push(right);
       }

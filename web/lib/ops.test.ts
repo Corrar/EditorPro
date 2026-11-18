@@ -77,6 +77,14 @@ describe('ops', () => {
     expect(project.width).toBe(1920);
   });
 
+  it('ripple_delete dá id determinístico ao pedaço direito (replay bate com simulação)', () => {
+    const { p } = withClip();
+    const a = applyOp(p, { op: 'ripple_delete', start: 4, end: 10 });
+    const b = applyOp(p, { op: 'ripple_delete', start: 4, end: 10 });
+    expect(a.tracks[0].clips.map((c) => c.id)).toEqual(b.tracks[0].clips.map((c) => c.id));
+    expect(new Set(a.tracks[0].clips.map((c) => c.id)).size).toBe(2);
+  });
+
   it('é imutável', () => {
     const { p } = withClip();
     const snapshot = JSON.stringify(p);
