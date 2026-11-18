@@ -11,7 +11,7 @@ import { renderFrame } from '../engine';
 import { visualLayers, sourceTime } from '../engine/timing';
 import { mixProjectAudio, MIX_RATE } from './audioMix';
 import { OfflineMediaPool } from './mediaPool';
-import { exportSize, videoBitrate, type ExportOptions } from './options';
+import { exportSize, hasWebCodecs, videoBitrate, type ExportOptions } from './options';
 
 const abortErr = () => new DOMException('Exportação cancelada', 'AbortError');
 
@@ -54,9 +54,6 @@ async function pickAudio(list: AudioCodecChoice[]) {
   return null;
 }
 
-export function hasWebCodecs(): boolean {
-  return typeof window !== 'undefined' && typeof VideoEncoder !== 'undefined' && typeof VideoFrame !== 'undefined';
-}
 
 /** lista do que será desenhado no tempo t e o tempo de origem de cada vídeo */
 function framePlan(p: Project, t: number) {

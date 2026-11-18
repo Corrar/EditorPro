@@ -184,6 +184,14 @@ export function drawLayer(ctx: Ctx, layer: LayerItem, t: Seconds, el: MediaEleme
   const src = el as CanvasImageSource;
 
   const paint = (target: Ctx, alpha: number) => {
+    // em slide/chicote cada clipe fica preso ao seu quadro deslocado (mídia mais larga não "vaza")
+    const shifted = tv.dx !== 0 || tv.dy !== 0;
+    if (shifted) {
+      target.save();
+      target.beginPath();
+      target.rect(tv.dx * W, tv.dy * H, W, H);
+      target.clip();
+    }
     target.filter = f.css;
     if (tv.motionBlur > 0.05) {
       const n = 7;
@@ -198,6 +206,7 @@ export function drawLayer(ctx: Ctx, layer: LayerItem, t: Seconds, el: MediaEleme
     }
     target.filter = 'none';
     target.globalAlpha = 1;
+    if (shifted) target.restore();
   };
 
   if (!needsScratch) {
@@ -243,6 +252,8 @@ interface BlockParams {
   stroke: boolean;
   shadow: 'none' | 'soft' | 'hard';
   weight: number;
+  /** escala máxima que uma palavra pode ganhar (reserva espaço p/ não encostar nas vizinhas) */
+  reserve?: number;
 }
 
 function fontString(style: TextStyle, px: number, weight: number) {
@@ -268,7 +279,11 @@ function drawBlock(ctx: Ctx, P: BlockParams, H: number) {
   ctx.font = fontString(P.style, P.px, P.weight);
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'left';
-  const lines = layoutWords(P.words, (s) => ctx.measureText(s).width, P.maxWidth, P.breaks);
+  const strokeW = P.stroke && P.style.strokeWidth && P.style.strokeColor ? (P.style.strokeWidth * H) / 1920 * 2 : 0;
+  const reserve = Math.max(1, P.reserve ?? 1);
+  const gap = strokeW * 0.6 + P.px * 0.04;
+  const measure = (s: string) => (s === ' ' ? ctx.measureText(' ').width + gap : ctx.measureText(s).width * reserve);
+  const lines = layoutWords(P.words, measure, P.maxWidth, P.breaks);
   const lh = P.px * 1.2;
   const blockH = lines.length * lh;
   const blockW = Math.max(...lines.map((l) => l.width));
@@ -277,7 +292,6 @@ function drawBlock(ctx: Ctx, P: BlockParams, H: number) {
   if (P.anim.scale !== 1) ctx.scale(P.anim.scale, P.anim.scale);
   ctx.lineJoin = 'round';
   ctx.miterLimit = 2;
-  const strokeW = P.stroke && P.style.strokeWidth && P.style.strokeColor ? (P.style.strokeWidth * H) / 1920 * 2 : 0;
 
   let charsLeft = P.anim.visibleChars;
   const lineX = (lw: number) => {
@@ -315,7 +329,7 @@ function drawBlock(ctx: Ctx, P: BlockParams, H: number) {
       const wx = x0 + w.x + w.width / 2;
       ctx.translate(wx, y);
       if (paint.scale !== 1) ctx.scale(paint.scale, paint.scale);
-      const tx = -w.width / 2;
+      const tx = -ctx.measureText(w.text).width / 2;
       if (P.shadow !== 'none') {
         ctx.shadowColor = P.shadow === 'hard' ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.45)';
         ctx.shadowBlur = P.px * (P.shadow === 'hard' ? 0.08 : 0.18);
@@ -415,6 +429,7 @@ export function drawCaptions(ctx: Ctx, p: Project, t: Seconds, W: number, H: num
     box: look.box ? style.background || 'rgba(0,0,0,0.72)' : style.background || undefined,
     glow: look.glow ? hl : undefined,
     stroke: look.stroke,
+    reserve: look.activeScale,
     shadow: look.shadow === 'none' ? 'none' : style.shadow === false ? 'none' : look.shadow,
     weight,
   }, H);

@@ -26,3 +26,7 @@ export function videoBitrate(w: number, h: number, fps: number): number {
 export const QUALITY_LABELS: Record<ExportOptions['quality'], string> = {
   draft: 'Rascunho 540p', hd: 'HD 720p', full: 'Full (resolução do projeto)',
 };
+
+export function hasWebCodecs(): boolean {
+  return typeof window !== 'undefined' && typeof VideoEncoder !== 'undefined' && typeof VideoFrame !== 'undefined';
+}

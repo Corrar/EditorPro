@@ -1,0 +1,161 @@
+'use client';
+/* diálogo de exportação: MP4/WebM + qualidade, progresso, cancelar, baixar; SRT/VTT e FCPXML */
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEditor } from '@/lib/store';
+import { emit } from '@/lib/events';
+import { projectDuration } from '@/lib/ops';
+import {
+  captionCues, downloadBlob, exportSize, exportVideo, hasWebCodecs, safeFileName, toFCPXML, toSRT, toVTT,
+  type ExportOptions,
+} from '@/lib/export';
+import { formatTime } from '@/lib/util';
+import { IcCaption, IcClose, IcDownload, IcExport, IcProject } from './icons';
+
+type Phase = 'idle' | 'running' | 'done' | 'error';
+
+const QUALITIES: { id: ExportOptions['quality']; label: string; hint: string }[] = [
+  { id: 'draft', label: 'Rascunho', hint: '540p' },
+  { id: 'hd', label: 'HD', hint: '720p' },
+  { id: 'full', label: 'Full', hint: 'original' },
+];
+
+function fmtSize(bytes: number) {
+  if (bytes > 1e6) return `${(bytes / 1e6).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1e3))} KB`;
+}
+
+export default function ExportDialog({ onClose }: { onClose: () => void }) {
+  const project = useEditor((s) => s.project);
+  const assets = useEditor((s) => s.assets);
+  const [format, setFormat] = useState<ExportOptions['format']>('mp4');
+  const [quality, setQuality] = useState<ExportOptions['quality']>('hd');
+  const [phase, setPhase] = useState<Phase>('idle');
+  const [progress, setProgress] = useState(0);
+  const [stage, setStage] = useState('');
+  const [error, setError] = useState('');
+  const [result, setResult] = useState<{ url: string; name: string; size: number; type: string; secs: number } | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const startedRef = useRef(0);
+
+  const duration = projectDuration(project);
+  const size = exportSize(project, quality);
+  const cues = useMemo(() => captionCues(project).length, [project]);
+  const webcodecs = typeof window !== 'undefined' && hasWebCodecs();
+
+  useEffect(() => () => { abortRef.current?.abort(); }, []);
+  useEffect(() => () => { if (result) URL.revokeObjectURL(result.url); }, [result]);
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape' && phase !== 'running') { e.stopPropagation(); onClose(); } };
+    window.addEventListener('keydown', h, true);
+    return () => window.removeEventListener('keydown', h, true);
+  }, [phase, onClose]);
+
+  const start = async () => {
+    const ac = new AbortController();
+    abortRef.current = ac;
+    setPhase('running');
+    setProgress(0);
+    setError('');
+    setResult(null);
+    startedRef.current = performance.now();
+    try {
+      const blob = await exportVideo(project, assets, {
+        format, quality, signal: ac.signal,
+        onProgress: (f, s) => { setProgress(f); setStage(s); },
+      });
+      const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
+      const url = URL.createObjectURL(blob);
+      setResult({ url, name: safeFileName(project.name, ext), size: blob.size, type: ext, secs: (performance.now() - startedRef.current) / 1000 });
+      setPhase('done');
+      emit('ep:toast', { text: 'Vídeo exportado! Clique em Baixar.', kind: 'ok' });
+    } catch (e) {
+      if ((e as Error)?.name === 'AbortError') { setPhase('idle'); setStage(''); setProgress(0); return; }
+      console.error('[export]', e);
+      setError(e instanceof Error ? e.message : String(e));
+      setPhase('error');
+    } finally {
+      abortRef.current = null;
+    }
+  };
+
+  const cancel = () => abortRef.current?.abort();
+  const close = () => { if (phase === 'running') return; onClose(); };
+
+  return (
+    <div className="ep-modal-bg" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
+      <div className="ep-modal ep-ex" role="dialog" aria-modal="true" aria-labelledby="ep-ex-title">
+        <div className="ep-modal-top">
+          <div>
+            <div className="ep-title" id="ep-ex-title">Exportar vídeo</div>
+            <div className="ep-cardsub">{project.name} · {formatTime(duration, { decimals: true })} · {project.fps} fps</div>
+          </div>
+          <button className="ep-iconbtn sm" onClick={close} aria-label="Fechar" disabled={phase === 'running'}><IcClose size={16} /></button>
+        </div>
+
+        <div className="ep-ex-sect">
+          <span className="ep-label">Formato</span>
+          <div className="ep-seg">
+            <button className={format === 'mp4' ? 'on' : ''} onClick={() => setFormat('mp4')} disabled={phase === 'running'}>MP4</button>
+            <button className={format === 'webm' ? 'on' : ''} onClick={() => setFormat('webm')} disabled={phase === 'running'}>WebM</button>
+          </div>
+        </div>
+        <div className="ep-ex-sect">
+          <span className="ep-label">Qualidade</span>
+          <div className="ep-ex-q">
+            {QUALITIES.map((q) => (
+              <button key={q.id} className={`ep-ex-qbtn${quality === q.id ? ' on' : ''}`} onClick={() => setQuality(q.id)} disabled={phase === 'running'}>
+                <b>{q.label}</b><span>{q.hint}</span>
+              </button>
+            ))}
+          </div>
+          <div className="ep-ex-info mono">{size.width}×{size.height} · {format === 'mp4' ? 'H.264 · MP4' : 'VP9 · WebM'}</div>
+        </div>
+        {!webcodecs && (
+          <div className="ep-ex-warn">Seu navegador não tem WebCodecs: o vídeo será gravado em tempo real no modo compatível (WebM). Para MP4 rápido, use Chrome ou Edge.</div>
+        )}
+
+        {phase === 'running' && (
+          <div className="ep-ex-prog" aria-live="polite">
+            <div className="bar"><div className="fill" style={{ width: `${(progress * 100).toFixed(1)}%` }} /></div>
+            <div className="row"><span>{stage || 'Preparando…'}</span><b className="mono">{Math.round(progress * 100)}%</b></div>
+          </div>
+        )}
+        {phase === 'error' && <div className="ep-ex-err">Não deu para exportar: {error}</div>}
+        {phase === 'done' && result && (
+          <div className="ep-ex-done">
+            <div className="ok">✓</div>
+            <div className="meta">
+              <b>{result.name}</b>
+              <span>{fmtSize(result.size)} · {result.type.toUpperCase()} · pronto em {result.secs.toFixed(1)} s
+                {format === 'mp4' && result.type !== 'mp4' ? ' · (MP4 indisponível neste navegador, salvo em WebM)' : ''}</span>
+            </div>
+            <a className="ep-btn primary ep-ex-dl" href={result.url} download={result.name}><IcDownload size={15} /> Baixar</a>
+          </div>
+        )}
+
+        <div className="ep-ex-actions">
+          {phase === 'running' ? (
+            <button className="ep-btn danger" onClick={cancel}>Cancelar</button>
+          ) : (
+            <button className="ep-btn primary" onClick={start} disabled={duration <= 0}>
+              <IcExport size={15} /> {phase === 'done' ? 'Exportar de novo' : 'Exportar vídeo'}
+            </button>
+          )}
+        </div>
+
+        <div className="ep-ex-sep"><span>Levar para outro editor</span></div>
+        <div className="ep-ex-links">
+          <button className="ep-ex-link" disabled={!cues} onClick={() => downloadBlob(toSRT(project), safeFileName(project.name, 'srt'), 'application/x-subrip;charset=utf-8')}>
+            <IcCaption size={18} /><span><b>Baixar legendas (.srt)</b><i>{cues ? `${cues} blocos · YouTube, CapCut, Premiere` : 'Sem legendas no projeto'}</i></span>
+          </button>
+          <button className="ep-ex-link" disabled={!cues} onClick={() => downloadBlob(toVTT(project), safeFileName(project.name, 'vtt'), 'text/vtt;charset=utf-8')}>
+            <IcCaption size={18} /><span><b>Legendas web (.vtt)</b><i>Para players HTML5</i></span>
+          </button>
+          <button className="ep-ex-link" disabled={duration <= 0} onClick={() => downloadBlob(toFCPXML(project, assets), safeFileName(project.name, 'fcpxml'), 'application/xml;charset=utf-8')}>
+            <IcProject size={18} /><span><b>Projeto para DaVinci/Final Cut (.fcpxml)</b><i>Cortes, textos e legendas; reconecte os arquivos de mídia ao abrir</i></span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

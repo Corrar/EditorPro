@@ -4,9 +4,16 @@
    - toSRT/toVTT: legendas
    - toFCPXML: projeto para DaVinci Resolve / Final Cut
    ===================================================================== */
+import type { MediaAsset, Project } from '../types';
+import type { ExportOptions } from './options';
 export type { ExportOptions } from './options';
-export { exportSize, videoBitrate, QUALITY_LABELS } from './options';
-export { exportVideo, hasWebCodecs } from './video';
+export { exportSize, videoBitrate, QUALITY_LABELS, hasWebCodecs } from './options';
+
+/** renderiza o vídeo final no navegador (encoder/muxers carregados sob demanda) */
+export async function exportVideo(p: Project, assets: Record<string, MediaAsset>, opts: ExportOptions): Promise<Blob> {
+  const mod = await import('./video');
+  return mod.exportVideo(p, assets, opts);
+}
 export { toSRT, toVTT, captionCues } from './subtitles';
 export { toFCPXML, rational, timebase } from './fcpxml';
 export { mixProjectAudio } from './audioMix';
