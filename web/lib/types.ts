@@ -125,6 +125,8 @@ export interface ImageClip extends BaseClip {
   transform: Transform;
   keyframes?: Keyframe[]; // ex.: Ken Burns
   filters: Filter[];
+  /** (aditivo, sessão shell) predefinição de cor também em imagens */
+  colorPreset?: ColorPreset;
   transitionIn?: Transition;
 }
 

@@ -1,1 +1,223 @@
-/* estilos do módulo shell (dono: sessão shell) — prefixo .ep-sh- ou .ep-shell- */
+/* =====================================================================
+   Shell (dono: sessão "shell") — app, rail, topo, divisor, tela inicial.
+   ===================================================================== */
+
+/* ---------- boot ---------- */
+.ep-boot { height:100vh; display:grid; place-items:center; align-content:center; gap:18px; background:var(--canvasBg); }
+.ep-spin { width:22px; height:22px; border-radius:50%; border:2.5px solid var(--tintGBl); border-top-color:var(--green); animation:spin .8s linear infinite; display:inline-block; }
+.ep-spin.sm { width:14px; height:14px; border-width:2px; border-color:rgba(255,255,255,.35); border-top-color:#fff; vertical-align:-2px; }
+
+/* ---------- logo ---------- */
+.ep-logo b em { font-style:normal; color:var(--ink); }
+.ep-logobtn { border:0; background:none; cursor:pointer; padding:0; font:inherit; }
+.ep-logobtn:hover .mark { transform:rotate(-12deg) scale(1.05); }
+.ep-logo .mark { transition:transform .25s cubic-bezier(.2,.7,.2,1); box-shadow:0 6px 16px rgba(217,100,30,.32); }
+
+/* ---------- grid do editor ---------- */
+.ep-app { position:relative; grid-template-columns:72px 300px minmax(0,1fr) minmax(300px,370px); transition:grid-template-columns .22s cubic-bezier(.2,.7,.2,1); }
+.ep-app.side-closed { grid-template-columns:72px 0 minmax(0,1fr) minmax(300px,370px); }
+.ep-app.side-closed .ep-side { visibility:hidden; border-right:0; }
+.ep-app.resizing { cursor:row-resize; user-select:none; transition:none; }
+.ep-app.resizing * { pointer-events:none; }
+.ep-app.resizing .ep-tl-resizer { pointer-events:auto; }
+
+/* ---------- rail ---------- */
+.ep-rail { gap:6px; padding:10px 0 12px; overflow-y:auto; scrollbar-width:none; z-index:6; }
+.ep-raillogo { height:46px; display:grid; place-items:center; margin-bottom:8px; flex:none; }
+.ep-railbtn { width:60px; flex:none; display:flex; flex-direction:column; align-items:center; gap:4px; padding:9px 2px 7px; border-radius:14px; border:1px solid transparent; background:none; color:var(--sub); font:inherit; font-size:10.5px; font-weight:600; cursor:pointer; transition:.15s; }
+.ep-railbtn span { line-height:1.1; white-space:nowrap; }
+.ep-railbtn:hover { background:var(--navHover); color:var(--ink); }
+.ep-railbtn.cur:not(.active) { color:var(--green); }
+.ep-railbtn.active { background:linear-gradient(160deg,rgba(217,100,30,.18) 0%,var(--green) 100%); border-color:rgba(255,255,255,.16); color:#fff; box-shadow:0 6px 18px rgba(217,100,30,.26), inset 0 1px 0 rgba(255,255,255,.18); }
+.ep-root.dark .ep-railbtn { color:var(--muted); }
+.ep-root.dark .ep-railbtn:hover { color:var(--ink); }
+.ep-root.dark .ep-railbtn.cur:not(.active) { color:var(--green); }
+.ep-root.dark .ep-railbtn.active { background:linear-gradient(160deg,rgba(58,42,33,.9) 0%,var(--green) 100%); color:#fff; }
+.ep-railbtn.mob { display:none; }
+.ep-railbtn:focus-visible, .ep-iconbtn:focus-visible, .ep-btn:focus-visible { outline:2px solid var(--green); outline-offset:2px; }
+
+/* ---------- topo ---------- */
+.ep-topbar { gap:10px; padding:0 14px; z-index:5; min-width:0; }
+.ep-topbar .ep-logo b { font-size:17px; }
+.ep-homebtn { display:none; }
+.ep-tsep { width:1px; height:22px; background:var(--line); flex:none; }
+.ep-tspace { flex:1; min-width:4px; }
+.ep-projname { font:inherit; font-size:14px; font-weight:600; color:var(--ink); background:none; border:1px solid transparent; border-radius:10px; padding:6px 9px; outline:none; min-width:0; max-width:34vw; text-overflow:ellipsis; transition:.15s; }
+.ep-projname:hover { background:var(--chip); }
+.ep-projname:focus { background:var(--card); border-color:var(--green); }
+.ep-save { display:inline-flex; align-items:center; gap:6px; font-size:11.5px; color:var(--muted); white-space:nowrap; }
+.ep-save i { width:7px; height:7px; border-radius:50%; background:var(--faint); }
+.ep-save.s-saved i { background:#3BA55C; }
+.ep-save.s-saving i { background:var(--green); animation:epPulse 1s ease-in-out infinite; }
+.ep-save.s-error, .ep-save.s-unavailable { color:var(--red); }
+.ep-save.s-error i, .ep-save.s-unavailable i { background:var(--red); }
+.ep-livebadge { display:inline-flex; align-items:center; gap:7px; font-size:11.5px; font-weight:700; color:var(--tintGInk); background:var(--tintG); border:1px solid var(--tintGBl); border-radius:999px; padding:4px 10px; white-space:nowrap; }
+.ep-livebadge i { width:7px; height:7px; border-radius:50%; background:var(--green); animation:epPulse 1s ease-in-out infinite; }
+@keyframes epPulse { 0%,100%{opacity:1; transform:scale(1)} 50%{opacity:.35; transform:scale(.8)} }
+.ep-aspects button { display:inline-flex; align-items:center; gap:6px; padding:6px 11px; }
+.ep-aglyph { display:inline-block; border:1.6px solid currentColor; border-radius:2.5px; opacity:.85; }
+.ep-aspect-sel { display:none; width:auto; padding:7px 10px; border-radius:999px; font-weight:600; }
+.ep-undo { display:flex; gap:6px; }
+.ep-iconbtn:disabled { opacity:.4; cursor:default; }
+.ep-iconbtn:disabled:hover { background:var(--card); color:var(--sub); }
+.ep-exportbtn { display:inline-flex; align-items:center; gap:7px; padding:10px 18px; white-space:nowrap; }
+
+/* ---------- painel lateral ---------- */
+.ep-side { position:relative; scrollbar-width:thin; scrollbar-color:var(--line) transparent; }
+.ep-sideclose { display:none; position:absolute; top:12px; right:12px; z-index:3; width:30px; height:30px; border-radius:9px; border:1px solid var(--line); background:var(--card); color:var(--sub); place-items:center; cursor:pointer; }
+.ep-panelhead { position:sticky; top:0; z-index:2; display:flex; align-items:center; gap:10px; padding:16px 16px 12px; background:linear-gradient(var(--card) 70%, transparent); }
+.ep-root.dark .ep-panelhead { background:linear-gradient(#211813 70%, transparent); }
+.ep-panelhead h3 { font-size:16px; font-weight:700; letter-spacing:-.015em; margin-right:auto; }
+.ep-side { background:var(--card); }
+.ep-root.dark .ep-side { background:#211813; }
+
+/* ---------- divisor da timeline ---------- */
+.ep-tl-resizer { grid-column:2 / 4; grid-row:3; align-self:start; height:10px; margin-top:-5px; z-index:7; cursor:row-resize; display:grid; place-items:center; outline:none; touch-action:none; }
+.ep-tl-resizer i { width:44px; height:4px; border-radius:999px; background:var(--dash); opacity:0; transition:.15s; }
+.ep-tl-resizer:hover i, .ep-tl-resizer:focus-visible i, .ep-app.resizing .ep-tl-resizer i { opacity:1; background:var(--green); }
+.ep-app.resizing .ep-timeline { border-top-color:var(--green); }
+
+/* ---------- toasts ---------- */
+.ep-toast.k-error { border-color:rgba(201,79,61,.35); }
+.ep-toast .ep-toastundo { color:var(--muted); font-weight:500; }
+
+/* =====================================================================
+   Tela inicial
+   ===================================================================== */
+.ep-home { height:100vh; overflow-y:auto; background:var(--canvasBg); scrollbar-width:thin; scrollbar-color:var(--line) transparent; }
+.ep-hometop { position:sticky; top:0; z-index:5; display:flex; align-items:center; gap:10px; padding:14px 28px; background:var(--cardBg); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); border-bottom:1px solid var(--line); }
+.ep-homemain { max-width:1040px; margin:0 auto; padding:44px 24px 80px; }
+.ep-hero { text-align:center; animation:rise .45s cubic-bezier(.2,.7,.2,1) both; }
+.ep-kicker { display:inline-flex; align-items:center; gap:7px; font-size:12px; font-weight:600; color:var(--tintGInk); background:var(--tintG); border:1px solid var(--tintGBl); padding:6px 13px; border-radius:999px; }
+.ep-hero h1 { font-size:clamp(30px,5vw,52px); line-height:1.06; font-weight:800; letter-spacing:-.035em; margin:18px auto 14px; max-width:820px; }
+.ep-hero h1 span { color:var(--green); }
+.ep-hero p { font-size:15.5px; color:var(--sub); line-height:1.6; max-width:640px; margin:0 auto; }
+
+.ep-wizard { margin-top:34px; background:var(--card); border:1px solid var(--line); border-radius:24px; padding:26px 26px 22px; box-shadow:var(--cardShadow); animation:rise .5s .06s cubic-bezier(.2,.7,.2,1) both; display:flex; flex-direction:column; gap:22px; }
+.ep-wstep { display:flex; gap:16px; }
+.ep-wnum { flex:none; width:30px; height:30px; border-radius:50%; background:var(--tintG); color:var(--tintGInk); border:1px solid var(--tintGBl); display:grid; place-items:center; font-weight:700; font-size:13px; margin-top:2px; }
+.ep-wbody { flex:1; min-width:0; }
+.ep-wlabel { display:block; font-size:15px; font-weight:700; letter-spacing:-.01em; margin:4px 0 10px; }
+.ep-brief { min-height:108px; font-size:14.5px; }
+.ep-examples { display:flex; flex-wrap:wrap; gap:7px; margin-top:10px; }
+.ep-exchip { border:1px dashed var(--tintGBl); background:none; color:var(--sub); border-radius:999px; padding:7px 13px; font:inherit; font-size:12px; cursor:pointer; text-align:left; transition:.15s; }
+.ep-exchip:hover { background:var(--tintG); color:var(--tintGInk); border-style:solid; }
+
+.ep-dzrow { display:grid; grid-template-columns:1.25fr 1fr; gap:14px; }
+.ep-dz { border:1.5px dashed var(--dash); border-radius:18px; background:var(--box); transition:.15s; min-width:0; }
+.ep-dz.over { border-color:var(--green); background:var(--tintG); transform:scale(1.01); }
+.ep-dz.has { border-style:solid; border-color:var(--line); }
+.ep-dz-hit { width:100%; border:0; background:none; font:inherit; color:var(--sub); cursor:pointer; padding:22px 16px; display:flex; flex-direction:column; align-items:center; gap:6px; text-align:center; border-radius:18px; }
+.ep-dz-hit .ic { width:46px; height:46px; border-radius:50%; background:var(--tintG); color:var(--tintGInk); display:grid; place-items:center; margin-bottom:4px; transition:.2s; }
+.ep-dz-hit:hover .ic { background:var(--green); color:#fff; transform:translateY(-2px); }
+.ep-dz-hit b { font-size:14px; color:var(--ink); display:inline-flex; align-items:center; gap:8px; }
+.ep-dz-hit b em { font-style:normal; font-size:10.5px; font-weight:600; color:var(--muted); background:var(--badge); border-radius:999px; padding:2px 8px; }
+.ep-dz-hit > span:last-child { font-size:12px; color:var(--muted); }
+.ep-fchips { display:flex; flex-wrap:wrap; gap:6px; padding:0 12px 12px; }
+.ep-fchip { display:inline-flex; align-items:center; gap:6px; max-width:100%; background:var(--card); border:1px solid var(--line); border-radius:999px; padding:4px 5px 4px 10px; font-size:11.5px; color:var(--sub); animation:rise .2s ease both; }
+.ep-fchip svg { flex:none; color:var(--green); }
+.ep-fchip .n { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:170px; color:var(--ink); font-weight:500; }
+.ep-fchip .s { color:var(--faint); white-space:nowrap; }
+.ep-fchip button { width:20px; height:20px; flex:none; border-radius:50%; border:0; background:var(--chip); color:var(--muted); display:grid; place-items:center; cursor:pointer; }
+.ep-fchip button:hover { background:var(--redTint); color:var(--red); }
+
+.ep-fmts { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+.ep-fmt { border:1.5px solid var(--line); background:var(--box); border-radius:16px; padding:14px 10px 12px; display:flex; flex-direction:column; align-items:center; gap:3px; font:inherit; color:var(--sub); cursor:pointer; transition:.15s; }
+.ep-fmt:hover { border-color:var(--tintGBl); background:var(--card); }
+.ep-fmt-box { height:44px; display:grid; place-items:center; margin-bottom:6px; }
+.ep-fmt-box i { display:block; border:2px solid currentColor; border-radius:5px; transition:.15s; }
+.ep-fmt b { font-size:14px; color:var(--ink); }
+.ep-fmt span { font-size:11px; color:var(--muted); text-align:center; }
+.ep-fmt.on { border-color:var(--green); background:var(--tintG); color:var(--green); box-shadow:0 6px 18px rgba(217,100,30,.16); }
+.ep-fmt.on .ep-fmt-box i { background:rgba(217,100,30,.14); }
+.ep-fmt.on b { color:var(--tintGInk); }
+
+.ep-wactions { display:flex; justify-content:flex-end; gap:10px; border-top:1px solid var(--line); padding-top:18px; flex-wrap:wrap; }
+.ep-go { display:inline-flex; align-items:center; gap:8px; font-size:14px; padding:13px 26px; }
+.ep-btn.sec:disabled:hover { background:var(--card); }
+
+.ep-projs { margin-top:46px; }
+.ep-projs h2 { font-size:18px; font-weight:700; letter-spacing:-.015em; margin-bottom:14px; }
+.ep-projgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:14px; }
+.ep-projempty { display:flex; align-items:center; gap:10px; color:var(--muted); font-size:13px; border:1.5px dashed var(--dash); border-radius:16px; padding:18px 20px; }
+.ep-proj { position:relative; background:var(--card); border:1px solid var(--line); border-radius:16px; overflow:hidden; cursor:pointer; transition:transform .18s, box-shadow .18s, border-color .18s; animation:rise .35s cubic-bezier(.2,.7,.2,1) both; outline:none; }
+.ep-proj:hover, .ep-proj:focus-visible { transform:translateY(-3px); box-shadow:0 14px 34px rgba(28,31,34,.12); border-color:var(--tintGBl); }
+.ep-proj-cover { height:120px; background:#120d0a; display:grid; place-items:center; color:var(--muted); position:relative; overflow:hidden; }
+.ep-proj-cover img { width:100%; height:100%; object-fit:cover; }
+.ep-proj-dur { position:absolute; right:8px; bottom:8px; font-size:10.5px; color:#fff; background:rgba(0,0,0,.6); border-radius:6px; padding:2px 6px; }
+.ep-proj-meta { padding:11px 13px 13px; display:flex; flex-direction:column; gap:3px; }
+.ep-proj-meta b { font-size:13.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding-right:24px; }
+.ep-proj-meta span { font-size:11.5px; color:var(--muted); }
+.ep-proj-del { position:absolute; right:8px; bottom:42px; width:30px; height:30px; border-radius:50%; border:1px solid var(--line); background:var(--card); color:var(--muted); display:grid; place-items:center; cursor:pointer; opacity:0; transition:.15s; }
+.ep-proj:hover .ep-proj-del, .ep-proj-del:focus-visible { opacity:1; }
+.ep-proj-del:hover { color:var(--red); background:var(--redTint); }
+.ep-proj-confirm { position:absolute; inset:0; background:var(--cardBg); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); display:flex; flex-direction:column; justify-content:center; gap:10px; padding:14px; font-size:12.5px; cursor:default; animation:toastIn .15s ease both; }
+.ep-proj-confirm div { display:flex; gap:6px; justify-content:flex-end; }
+
+/* ---------- botões utilitários compartilhados pelos meus painéis ---------- */
+.ep-mini { display:inline-flex; align-items:center; gap:5px; border:1px solid var(--line2); background:var(--card); color:var(--sub); border-radius:999px; padding:5px 11px; font:inherit; font-size:11.5px; font-weight:600; cursor:pointer; transition:.15s; white-space:nowrap; }
+.ep-mini:hover { background:var(--chip); color:var(--ink); }
+.ep-mini.danger { color:var(--red); border-color:transparent; background:var(--redTint); }
+.ep-mini.danger:hover { filter:brightness(.97); }
+.ep-btn-sm { display:inline-flex; align-items:center; gap:6px; padding:8px 14px; }
+.ep-wide { width:100%; display:inline-flex; align-items:center; justify-content:center; gap:8px; }
+
+/* =====================================================================
+   Responsivo
+   ===================================================================== */
+@media (max-width: 1280px) {
+  .ep-aspects { display:none; }
+  .ep-aspect-sel { display:block; }
+}
+@media (max-width: 1100px) {
+  .ep-app, .ep-app.side-closed { grid-template-columns:64px minmax(0,1fr) minmax(280px,330px); }
+  .ep-railbtn { width:54px; }
+  .ep-side { display:block; position:absolute; z-index:20; left:64px; top:56px; bottom:var(--tl-h,300px); width:320px; max-width:calc(100vw - 80px); border-right:1px solid var(--line); box-shadow:18px 0 40px rgba(0,0,0,.22); animation:epDrawer .2s cubic-bezier(.2,.7,.2,1) both; }
+  .ep-app.side-closed .ep-side { display:none; }
+  .ep-sideclose { display:grid; }
+  .ep-panelhead { padding-right:52px; }
+  .ep-tl-resizer { grid-column:2 / 3; }
+  .ep-save { display:none; }
+}
+@keyframes epDrawer { from { transform:translateX(-14px); opacity:0 } to { transform:none; opacity:1 } }
+
+@media (max-width: 860px) {
+  .ep-topbar .ep-logo b, .ep-tsep { display:none; }
+  .ep-exportbtn span { display:none; }
+  .ep-exportbtn { padding:10px 12px; }
+  .ep-dzrow { grid-template-columns:1fr; }
+  .ep-fmts { grid-template-columns:repeat(2,1fr); }
+}
+
+@media (max-width: 720px) {
+  .ep-app, .ep-app.side-closed { grid-template-columns:minmax(0,1fr); grid-template-rows:52px minmax(0,1fr) minmax(0,46vh) 62px; }
+  .ep-topbar { grid-column:1; grid-row:1; padding:0 10px; gap:6px; }
+  .ep-topbar .ep-logo { display:none; }
+  .ep-homebtn { display:grid; }
+  .ep-projname { max-width:none; flex:1 1 auto; width:auto !important; }
+  .ep-livebadge { display:none; }
+  .ep-undo .ep-iconbtn, .ep-topbar .ep-iconbtn { width:34px; height:34px; }
+  .ep-stage { grid-column:1; grid-row:2; }
+  .ep-rail { grid-column:1; grid-row:4; flex-direction:row; align-items:center; gap:2px; padding:0 6px; border-right:0; border-top:1px solid var(--line); overflow-x:auto; overflow-y:hidden; }
+  .ep-raillogo { display:none; }
+  .ep-railbtn, .ep-railbtn.mob { display:flex; width:auto; min-width:62px; padding:7px 6px; }
+  .ep-railbtn.cur:not(.active) { color:var(--sub); }
+  .ep-side, .ep-app.side-closed .ep-side, .ep-chat, .ep-timeline { grid-column:1; grid-row:3; display:none; position:static; width:auto; max-width:none; box-shadow:none; animation:none; border:0; border-top:1px solid var(--line); visibility:visible; }
+  .ep-app[data-pane='timeline'] .ep-timeline,
+  .ep-app[data-pane='chat'] .ep-chat,
+  .ep-app[data-pane='side'] .ep-side { display:flex; flex-direction:column; }
+  .ep-app[data-pane='side'] .ep-side { display:block; }
+  .ep-sideclose, .ep-tl-resizer { display:none !important; }
+  .ep-panelhead { padding-right:16px; }
+  .ep-toasts { left:12px; right:12px; bottom:76px; }
+  .ep-toast { max-width:none; }
+
+  .ep-hometop { padding:12px 16px; }
+  .ep-homemain { padding:28px 14px 60px; }
+  .ep-wizard { padding:18px 14px 16px; border-radius:20px; }
+  .ep-wstep { gap:10px; }
+  .ep-wnum { width:26px; height:26px; font-size:12px; }
+  .ep-wactions { flex-direction:column-reverse; }
+  .ep-wactions .ep-btn { width:100%; justify-content:center; }
+  .ep-hometop .ep-pillbtn { max-width:45vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+}
