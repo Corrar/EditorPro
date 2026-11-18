@@ -51,3 +51,8 @@
 .ep-mdrop:hover .ic { background:var(--green); color:#fff; transform:translateY(-2px); }
 .ep-mtip { font-size:11px; color:var(--faint); padding:14px 16px 0; line-height:1.45; }
 .ep-mover { position:absolute; inset:8px; border:2px dashed var(--green); border-radius:18px; background:rgba(217,100,30,.12); backdrop-filter:blur(2px); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; color:var(--tintGInk); font-size:14px; z-index:5; pointer-events:none; animation:toastIn .15s ease both; }
+/* toque: ações sempre visíveis (sem depender de hover) */
+@media (hover: none) {
+  .ep-asset-actions { opacity:1; transform:none; }
+  .ep-asset-actions button { width:32px; height:32px; }
+}

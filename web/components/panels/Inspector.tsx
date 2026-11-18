@@ -8,18 +8,26 @@ import { useState } from 'react';
 import { useSelectedClip } from './hooks';
 import TextTab from './TextTab';
 import CaptionsTab from './CaptionsTab';
-import EffectsTab from './EffectsTab';
 import TransitionsTab from './TransitionsTab';
 import AudioTab from './AudioTab';
+import EditTab from './EditTab';
+import StickersTab from './StickersTab';
+import CanvasTab from './CanvasTab';
+import { AdjustTool, EffectsTool, FiltersTool } from './LookTabs';
 
-export type InspectorTool = 'text' | 'captions' | 'effects' | 'transitions' | 'audio';
+export type InspectorTool = 'edit' | 'text' | 'stickers' | 'captions' | 'effects' | 'filters' | 'adjust' | 'transitions' | 'audio' | 'canvas';
 
 export const INSPECTOR_TABS: { id: InspectorTool; label: string }[] = [
-  { id: 'text', label: 'Texto' },
-  { id: 'captions', label: 'Legendas' },
-  { id: 'effects', label: 'Efeitos' },
-  { id: 'transitions', label: 'Transições' },
+  { id: 'edit', label: 'Editar' },
   { id: 'audio', label: 'Áudio' },
+  { id: 'text', label: 'Texto' },
+  { id: 'stickers', label: 'Stickers' },
+  { id: 'effects', label: 'Efeitos' },
+  { id: 'filters', label: 'Filtros' },
+  { id: 'transitions', label: 'Transições' },
+  { id: 'captions', label: 'Legendas' },
+  { id: 'adjust', label: 'Ajustes' },
+  { id: 'canvas', label: 'Formatos' },
 ];
 
 const TYPE_LABEL = { video: 'Vídeo', image: 'Imagem', audio: 'Áudio', text: 'Texto', sticker: 'Sticker', shape: 'Forma', adjustment: 'Ajuste' } as const;
@@ -45,7 +53,7 @@ export default function Inspector({ tool, title }: { tool?: InspectorTool; title
     <div className="ep-insp">
       <div className="ep-panelhead">
         <h3>{label}</h3>
-        {active !== 'captions' && <SelectionChip />}
+        {active !== 'captions' && active !== 'canvas' && <SelectionChip />}
       </div>
       {!tool && (
         <div className="ep-insp-tabs">
@@ -57,7 +65,12 @@ export default function Inspector({ tool, title }: { tool?: InspectorTool; title
       <div className="ep-insp-body" key={active}>
         {active === 'text' && <TextTab />}
         {active === 'captions' && <CaptionsTab />}
-        {active === 'effects' && <EffectsTab />}
+        {active === 'edit' && <EditTab />}
+        {active === 'stickers' && <StickersTab />}
+        {active === 'effects' && <EffectsTool />}
+        {active === 'filters' && <FiltersTool />}
+        {active === 'adjust' && <AdjustTool />}
+        {active === 'canvas' && <CanvasTab />}
         {active === 'transitions' && <TransitionsTab />}
         {active === 'audio' && <AudioTab />}
       </div>

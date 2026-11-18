@@ -37,34 +37,62 @@ export const TEXT_TEMPLATES: TextTemplate[] = [
   {
     id: 'title', label: 'Título', desc: 'Grande, no centro',
     make: (t) => makeTextClip('SEU TÍTULO AQUI', t, 3, {
-      label: 'título', position: { x: 0.5, y: 0.42 }, animation: 'pop',
+      label: 'título', templateId: 'title', position: { x: 0.5, y: 0.42 }, animation: 'pop', animationOut: 'fade',
       style: { ...DEFAULT_TEXT_STYLE, fontFamily: 'Anton', fontSize: 132, fontWeight: 400, uppercase: true, strokeWidth: 0, shadow: true },
+    }),
+  },
+  {
+    id: 'subtitle', label: 'Subtítulo', desc: 'Linha de apoio',
+    make: (t) => makeTextClip('um subtítulo que explica', t, 3, {
+      label: 'subtítulo', templateId: 'subtitle', position: { x: 0.5, y: 0.52 }, animation: 'fade',
+      style: { ...DEFAULT_TEXT_STYLE, fontSize: 54, fontWeight: 500, strokeWidth: 0, shadow: true, letterSpacing: 2 },
     }),
   },
   {
     id: 'hook', label: 'Gancho', desc: 'Frase de impacto no topo',
     make: (t) => makeTextClip('Você precisa ver isso 👀', t, 2.5, {
-      label: 'gancho', position: { x: 0.5, y: 0.2 }, animation: 'bounce',
-      style: { ...DEFAULT_TEXT_STYLE, fontSize: 88, fontWeight: 900, background: '#D9641E', strokeWidth: 0, shadow: false },
+      label: 'gancho', templateId: 'hook', position: { x: 0.5, y: 0.2 }, animation: 'bounce',
+      style: { ...DEFAULT_TEXT_STYLE, fontSize: 88, fontWeight: 900, background: '#D9641E', backgroundRadius: 18, strokeWidth: 0, shadow: false },
     }),
   },
   {
-    id: 'cta', label: 'CTA', desc: 'Chamada para ação no fim',
+    id: 'lower-third', label: 'Lower third', desc: 'Nome + função, canto inferior',
+    make: (t) => makeTextClip('Bruno Silva\nFundador', t, 4, {
+      label: 'nome na tela', templateId: 'lower-third', position: { x: 0.32, y: 0.86 }, animation: 'slide-right', animationOut: 'fade',
+      style: { ...DEFAULT_TEXT_STYLE, fontSize: 52, fontWeight: 700, align: 'left', background: 'rgba(0,0,0,0.6)', backgroundRadius: 12, strokeWidth: 0, shadow: false, lineHeight: 1.25 },
+    }),
+  },
+  {
+    id: 'cta', label: 'CTA “Siga”', desc: 'Chamada para ação no fim',
     make: (t) => makeTextClip('Siga para mais dicas →', t, 3, {
-      label: 'CTA', position: { x: 0.5, y: 0.8 }, animation: 'slide-up',
-      style: { ...DEFAULT_TEXT_STYLE, fontSize: 72, fontWeight: 800, color: '#1C1F22', background: '#FFFFFF', strokeWidth: 0, shadow: true },
+      label: 'CTA', templateId: 'cta', position: { x: 0.5, y: 0.8 }, animation: 'slide-up', animationLoop: 'wave',
+      style: { ...DEFAULT_TEXT_STYLE, fontSize: 72, fontWeight: 800, color: '#1C1F22', background: '#FFFFFF', backgroundRadius: 40, strokeWidth: 0, shadow: true },
     }),
   },
   {
-    id: 'lower-third', label: 'Nome na tela', desc: 'Nome + função, canto inferior',
-    make: (t) => makeTextClip('Bruno Silva · Fundador', t, 4, {
-      label: 'nome na tela', position: { x: 0.32, y: 0.86 }, animation: 'fade',
-      style: { ...DEFAULT_TEXT_STYLE, fontSize: 52, fontWeight: 700, align: 'left', background: 'rgba(0,0,0,0.6)', strokeWidth: 0, shadow: false },
+    id: 'counter', label: 'Contador', desc: 'Número grande (top 3, passo 1)',
+    make: (t) => makeTextClip('#1', t, 2, {
+      label: 'contador', templateId: 'counter', position: { x: 0.2, y: 0.18 }, animation: 'zoom',
+      style: { ...DEFAULT_TEXT_STYLE, fontFamily: 'Anton', fontSize: 180, fontWeight: 400, gradient: { from: '#FFD23F', to: '#D9641E', angle: 90 }, strokeWidth: 0 },
     }),
   },
   {
-    id: 'subtitle', label: 'Texto simples', desc: 'Branco com contorno',
-    make: (t) => makeTextClip('Digite seu texto', t, 2.5, { label: 'texto', position: { x: 0.5, y: 0.5 }, animation: 'fade' }),
+    id: 'quote', label: 'Citação', desc: 'Frase entre aspas, itálico',
+    make: (t) => makeTextClip('“A simplicidade é o último grau de sofisticação.”', t, 4, {
+      label: 'citação', templateId: 'quote', position: { x: 0.5, y: 0.5 }, animation: 'typewriter',
+      style: { ...DEFAULT_TEXT_STYLE, fontFamily: 'Georgia', fontSize: 64, fontWeight: 500, italic: true, strokeWidth: 0, shadow: true, lineHeight: 1.3 },
+    }),
+  },
+  {
+    id: 'price', label: 'Preço', desc: 'Oferta em destaque',
+    make: (t) => makeTextClip('R$ 49,90', t, 3, {
+      label: 'preço', templateId: 'price', position: { x: 0.5, y: 0.62 }, animation: 'pop', animationLoop: 'flicker',
+      style: { ...DEFAULT_TEXT_STYLE, fontFamily: 'Montserrat', fontSize: 120, fontWeight: 900, color: '#1C1F22', background: '#FFD23F', backgroundRadius: 24, strokeWidth: 0 },
+    }),
+  },
+  {
+    id: 'plain', label: 'Texto simples', desc: 'Branco com contorno',
+    make: (t) => makeTextClip('Digite seu texto', t, 2.5, { label: 'texto', templateId: 'plain', position: { x: 0.5, y: 0.5 }, animation: 'fade' }),
   },
 ];
 
@@ -149,6 +177,19 @@ export const TRANSITIONS: { kind: TransitionKind; label: string }[] = [
   { kind: 'whip', label: 'Chicote' },
   { kind: 'flash', label: 'Flash' },
   { kind: 'glitch', label: 'Glitch' },
+  { kind: 'slide-down', label: 'Deslizar ↓' },
+  { kind: 'dip-black', label: 'Mergulho preto' },
+  { kind: 'dip-white', label: 'Mergulho branco' },
+  { kind: 'blur', label: 'Desfoque' },
+  { kind: 'spin', label: 'Giro' },
+  { kind: 'wipe-left', label: 'Cortina ←' },
+  { kind: 'wipe-right', label: 'Cortina →' },
+  { kind: 'wipe-up', label: 'Cortina ↑' },
+  { kind: 'circle-open', label: 'Círculo' },
+  { kind: 'pixelate', label: 'Pixelar' },
+  { kind: 'shake', label: 'Tremor' },
+  { kind: 'rgb-split', label: 'RGB split' },
+  { kind: 'film-burn', label: 'Filme queimado' },
 ];
 
 /* ---------- velocidade / keyframes ---------- */

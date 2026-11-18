@@ -1,32 +1,30 @@
 'use client';
-import { useEditor } from '@/lib/store';
-import type { AudioClip, VideoClip } from '@/lib/types';
+/* Áudio: importar música, gravar narração, biblioteca, volume/voz/batidas do clipe */
+import { useEffect, useRef, useState } from 'react';
+import { emit } from '@/lib/events';
+import { ingestFiles } from '@/lib/media/ingest';
 import { placeAssetOp } from '@/lib/media/place';
-import { formatTime } from '@/lib/util';
-import { IconAudio, IconMusic, IconPlus } from '@/components/shell/icons';
-import { EmptyHint, Section, Slider, Toggle } from './controls';
-import { pct, secs, useClipPatch, useSelectedClip } from './hooks';
+import { startRecording, type Recorder } from '@/lib/media/tools';
+import { useEditor } from '@/lib/store';
+import { formatTime, uid } from '@/lib/util';
+import { IconMic, IconMusic, IconPlus, IconUpload } from '@/components/shell/icons';
+import { VolumeSection } from './ClipSections';
+import { Section } from './controls';
+import { isSound } from './clipkit';
+import { useSelectedClip } from './hooks';
 
 function MusicLibrary() {
-  const assets = useEditor((s) => s.assets);
+  const music = useEditor((s) => Object.values(s.assets).filter((a) => a.kind === 'audio'));
   const dispatch = useEditor((s) => s.dispatch);
   const select = useEditor((s) => s.select);
-  const music = Object.values(assets).filter((a) => a.kind === 'audio');
-  if (!music.length) return <p className="ep-pnote">Importe uma música na aba Mídia (MP3, WAV, M4A…) para usá-la aqui.</p>;
+  if (!music.length) return <p className="ep-pnote">Nenhum áudio ainda. Importe uma música ou grave uma narração.</p>;
   return (
     <div className="ep-musiclist">
       {music.map((a) => (
-        <button
-          key={a.id} type="button" className="ep-music"
-          onClick={() => {
-            const op = placeAssetOp(useEditor.getState().project, a, { at: 0 });
-            dispatch(op);
-            if (op.op === 'add_clip') select([op.clip.id]);
-          }}
-        >
+        <button key={a.id} type="button" className="ep-music" onClick={() => { const op = placeAssetOp(useEditor.getState().project, a, { at: 0 }); dispatch(op); if (op.op === 'add_clip') select([op.clip.id]); }}>
           <span className="ic"><IconMusic size={16} /></span>
           <span className="n">{a.name}</span>
-          <span className="d mono">{formatTime(a.duration)}</span>
+          <span className="d mono">{formatTime(a.duration)}{a.beats?.length ? ` · ${a.beats.length}♪` : ''}</span>
           <IconPlus size={16} />
         </button>
       ))}
@@ -34,42 +32,86 @@ function MusicLibrary() {
   );
 }
 
-export default function AudioTab() {
-  const found = useSelectedClip();
-  const dispatch = useEditor((s) => s.dispatch);
-  const clip = found && (found.clip.type === 'audio' || found.clip.type === 'video') ? (found.clip as AudioClip | VideoClip) : null;
-  const patch = useClipPatch(clip?.id);
+function Narration() {
+  const [state, setState] = useState<'idle' | 'count' | 'rec' | 'saving'>('idle');
+  const [count, setCount] = useState(3);
+  const [elapsed, setElapsed] = useState(0);
+  const rec = useRef<Recorder | null>(null);
+  const startAt = useRef(0);
+  const t0 = useRef(0);
+  const timers = useRef<ReturnType<typeof setInterval>[]>([]);
+  const clear = () => { timers.current.forEach(clearInterval); timers.current = []; };
+  useEffect(() => () => { clear(); rec.current?.cancel(); }, []);
+
+  const begin = async () => {
+    try {
+      rec.current = null;
+      setState('count'); setCount(3);
+      let n = 3;
+      await new Promise<void>((res) => {
+        const id = setInterval(() => { n -= 1; setCount(n); if (n <= 0) { clearInterval(id); res(); } }, 800);
+        timers.current.push(id);
+      });
+      startAt.current = Math.round(useEditor.getState().playhead * 100) / 100;
+      rec.current = await startRecording();
+      t0.current = performance.now();
+      setState('rec'); setElapsed(0);
+      timers.current.push(setInterval(() => setElapsed((performance.now() - t0.current) / 1000), 200));
+    } catch (e) {
+      clear(); setState('idle');
+      emit('ep:toast', { text: e instanceof Error && e.name === 'NotAllowedError' ? 'Permita o uso do microfone para gravar' : e instanceof Error ? e.message : 'Não consegui gravar', kind: 'error' });
+    }
+  };
+  const stop = async () => {
+    if (!rec.current) return;
+    clear(); setState('saving');
+    try {
+      const a = await rec.current.stop();
+      const st = useEditor.getState();
+      const trackId = st.project.tracks.find((t) => t.kind === 'audio' && t.name.startsWith('Narração'))?.id ?? uid('track_audio');
+      if (!st.project.tracks.some((t) => t.id === trackId)) st.dispatch({ op: 'add_track', track: { id: trackId, kind: 'audio', name: 'Narração' } }, { history: false });
+      const id = uid('clip');
+      st.dispatch({ op: 'add_clip', trackId, clip: { id, type: 'audio', assetId: a.id, start: startAt.current, duration: a.duration || elapsed, in: 0, speed: 1, volume: 1, label: a.name } });
+      st.select([id]);
+      emit('ep:toast', { text: 'Narração adicionada na timeline', kind: 'ok' });
+    } catch (e) {
+      emit('ep:toast', { text: e instanceof Error ? e.message : 'Falha ao salvar a narração', kind: 'error' });
+    } finally { rec.current = null; setState('idle'); }
+  };
+  const cancel = () => { clear(); rec.current?.cancel(); rec.current = null; setState('idle'); };
 
   return (
-    <>
-      {!clip || !found ? (
-        <EmptyHint icon={<IconAudio />} title="Selecione um clipe com som" text="Clique em um vídeo ou música na timeline para ajustar volume, fades e ducking." />
-      ) : (
-        <>
-          <Section title={clip.type === 'audio' ? 'Música / áudio' : 'Som do vídeo'}>
-            <Slider label="Volume" value={clip.type === 'video' && clip.muted ? 0 : clip.volume} min={0} max={2} onChange={(v, h) => patch(clip.type === 'video' ? { volume: v, muted: false } : { volume: v }, h)} format={pct} reset={1} />
-            <Slider label="Fade de entrada" value={clip.fadeIn ?? 0} min={0} max={Math.min(5, clip.duration / 2)} step={0.05} onChange={(v, h) => patch({ fadeIn: v }, h)} format={secs} reset={0} />
-            <Slider label="Fade de saída" value={clip.fadeOut ?? 0} min={0} max={Math.min(5, clip.duration / 2)} step={0.05} onChange={(v, h) => patch({ fadeOut: v }, h)} format={secs} reset={0} />
-            {clip.type === 'video' ? (
-              <Toggle label="Mudo" checked={!!clip.muted} onChange={(v) => patch({ muted: v })} />
-            ) : (
-              <>
-                <Toggle
-                  label="Abaixar quando houver fala" hint="Ducking automático sob a voz"
-                  checked={!!clip.duckUnderVoice} onChange={(v) => patch({ duckUnderVoice: v })}
-                />
-                <Toggle
-                  label="Silenciar trilha" hint={found.track.name}
-                  checked={!!found.track.muted} onChange={(v) => dispatch({ op: 'update_track', trackId: found.track.id, patch: { muted: v } })}
-                />
-              </>
-            )}
-          </Section>
-        </>
+    <Section title="Gravar narração">
+      {state === 'idle' && <button type="button" className="ep-recbtn" onClick={begin}><IconMic size={20} /> Gravar a partir do playhead</button>}
+      {state === 'count' && <div className="ep-reccount" aria-live="assertive">{count}</div>}
+      {state === 'rec' && (
+        <div className="ep-recrow">
+          <span className="ep-recdot" /> <b className="mono">{formatTime(elapsed, { decimals: true })}</b>
+          <button type="button" className="ep-btn primary" onClick={stop}>Parar e inserir</button>
+          <button type="button" className="ep-mini" onClick={cancel}>Cancelar</button>
+        </div>
       )}
-      <Section title="Músicas da biblioteca">
-        <MusicLibrary />
-      </Section>
+      {state === 'saving' && <p className="ep-pnote"><span className="ep-spin xs" /> Salvando narração…</p>}
+    </Section>
+  );
+}
+
+export default function AudioTab() {
+  const clip = useSelectedClip()?.clip;
+  const input = useRef<HTMLInputElement>(null);
+  const importMusic = async (files: File[]) => {
+    const done = await ingestFiles(files, 'music');
+    if (done.length) emit('ep:toast', { text: `${done.length} áudio(s) importado(s)`, kind: 'ok' });
+  };
+  return (
+    <>
+      <div className="ep-audioacts">
+        <button type="button" className="ep-btn primary ep-wide" onClick={() => input.current?.click()}><IconUpload size={16} /> Importar música</button>
+        <input ref={input} type="file" hidden multiple accept="audio/*" onChange={(e) => { void importMusic(Array.from(e.target.files ?? [])); e.target.value = ''; }} />
+      </div>
+      <Narration />
+      {isSound(clip) && <VolumeSection clip={clip} />}
+      <Section title="Seus áudios"><MusicLibrary /></Section>
     </>
   );
 }
