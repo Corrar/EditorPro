@@ -79,6 +79,13 @@ export default function DevChat() {
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="ep-btn primary" data-testid="go" onClick={() => emit('ep:start-ai-edit', { brief })}>Editar com IA</button>
             <button className="ep-btn sec" onClick={() => emit('ep:generate-captions', {})}>Gerar legendas</button>
+            <button className="ep-btn sec" data-testid="pt-clip" onClick={() => {
+              const v = useEditor.getState().project.tracks.find((t) => t.kind === 'video')?.clips ?? [];
+              const c = v[1] ?? v[0];
+              if (c) useEditor.getState().setChatContext({ label: `Clipe ${v.indexOf(c) + 1}`, clipIds: [c.id] });
+            }}>Apontar clipe 2</button>
+            <button className="ep-btn sec" data-testid="pt-point" onClick={() => useEditor.getState().setChatContext({ label: 'Ponto em 0:03', point: { x: 0.8, y: 0.2, t: 3 } })}>Apontar ponto</button>
+            <button className="ep-btn sec" data-testid="add-comment" onClick={() => useEditor.getState().dispatch({ op: 'add_marker', marker: { id: uid('cm'), t: 1, end: 3, kind: 'comment', label: 'coloca efeito VHS aqui' } })}>+ Comentário</button>
             <button className="ep-btn sec" onClick={undo}>Desfazer</button>
           </div>
           <div className="ep-meta" data-testid="assets">{Object.values(assets).map((a) => `${a.role}:${a.name} (${a.duration.toFixed(1)}s)`).join(' · ') || 'sem mídia'}</div>
@@ -119,6 +126,8 @@ export default function DevChat() {
             {project.tracks.flatMap((t) => t.clips.map((c) => `${t.id} ${c.type} ${c.start.toFixed(2)}–${clipEnd(c).toFixed(2)} ${c.type === 'text' ? c.text : ''}`)).join('\n')}
           </pre>
           <div className="ep-meta mono" data-testid="capstyle">legenda: {project.captions.style.preset} {project.captions.style.color} {project.captions.style.fontSize}px y={project.captions.style.position.y}</div>
+          <div className="ep-meta mono" data-testid="markers">{(project.markers ?? []).map((m) => `${m.kind}@${m.t.toFixed(1)}${m.resolved ? '✓' : ''}${m.label ? `:${m.label}` : ''}`).join(' · ') || 'sem marcadores'}</div>
+          <div className="ep-meta mono" data-testid="effects">{project.tracks.flatMap((t) => t.clips).map((c) => { const x = c as unknown as Record<string, unknown>; const bits = [x.speedPreset, x.removeBackground ? 'sem-fundo' : '', Array.isArray(x.effects) ? (x.effects as { kind: string }[]).map((e) => e.kind).join('+') : '', Array.isArray(x.audioEffects) ? (x.audioEffects as { kind: string }[]).map((e) => e.kind).join('+') : '', x.emoji, (x.transitionIn as { kind?: string } | undefined)?.kind].filter(Boolean); return bits.length ? `${c.type}:${bits.join(',')}` : ''; }).filter(Boolean).join(' · ') || 'sem efeitos'}</div>
           <div className="ep-meta" data-testid="style">{project.style?.summary ?? 'sem estilo'}</div>
         </div>
         {toasts.length ? <div className="ep-meta" data-testid="toasts">{toasts.join(' | ')}</div> : null}

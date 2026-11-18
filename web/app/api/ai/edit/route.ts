@@ -26,9 +26,34 @@ interface Body {
   assets?: Record<string, MediaAsset>;
   messages?: ChatMessage[];
   userText?: string;
-  mode?: 'first' | 'chat';
+  mode?: 'first' | 'chat' | 'comments';
+  /** para onde o usuário apontou (clipe, trecho, ponto, legenda, marcador) */
+  context?: unknown;
   /** miniaturas do material: {assetId, t (s na mídia), data (base64), mediaType} */
   frames?: unknown[];
+}
+
+/** descreve o ChatContext em PT-BR para o prompt ("clipe c3 (0:04–0:09) / trecho 4.0–9.0 s / ponto (0.62, 0.30) em 7.1 s") */
+function describeContext(c: unknown, p: Project): string {
+  if (!isObj(c)) return '';
+  const parts: string[] = [];
+  const f = (n: unknown) => (typeof n === 'number' && Number.isFinite(n) ? n.toFixed(2) : '?');
+  if (Array.isArray(c.clipIds) && c.clipIds.length) {
+    const ids = c.clipIds.filter((x): x is string => typeof x === 'string').slice(0, 20);
+    parts.push(`clipe(s) ${ids.map((id) => {
+      for (const t of p.tracks) { const cl = t.clips.find((x) => x.id === id); if (cl) return `${id} (${cl.type}, ${f(cl.start)}–${f(cl.start + cl.duration)} s)`; }
+      return id;
+    }).join(', ')}`);
+  }
+  if (isObj(c.range)) parts.push(`trecho ${f(c.range.start)}–${f(c.range.end)} s`);
+  if (isObj(c.point)) parts.push(`ponto do quadro (x ${f(c.point.x)}, y ${f(c.point.y)}; 0..1 a partir do canto superior esquerdo) em ${f(c.point.t)} s`);
+  if (typeof c.segmentId === 'string') {
+    const s = p.captions.segments.find((x) => x.id === c.segmentId);
+    parts.push(`legenda ${c.segmentId}${s ? ` ("${s.text.slice(0, 80)}", ${f(s.start)}–${f(s.end)} s)` : ''}`);
+  }
+  if (typeof c.markerId === 'string') parts.push(`marcador ${c.markerId}`);
+  const label = str(c.label, 120);
+  return parts.length ? parts.join(' / ') : label ?? '';
 }
 
 function looksLikeProject(p: unknown): p is Project {
@@ -45,6 +70,7 @@ export async function POST(req: Request) {
     const assets = isObj(body.assets) ? (body.assets as Record<string, MediaAsset>) : {};
     const messages = Array.isArray(body.messages) ? body.messages : [];
     const first = body.mode === 'first';
+    const commentsMode = body.mode === 'comments';
 
     const content: UserContent = [];
     for (const f of (Array.isArray(body.frames) ? body.frames : []).filter(isObj).slice(0, MAX_FRAMES)) {
@@ -56,22 +82,28 @@ export async function POST(req: Request) {
 
     const summary = summarizeProject(project, assets, messages);
     const task = first
-      ? 'PRIMEIRA EDIÇÃO: transforme o material bruto no vídeo descrito no brief, aplicando o estilo do vídeo-exemplo (se houver). Use a transcrição (legendas com tempos de timeline) para achar silêncios, erros, repetições e frases fortes. Corte, aplique legendas no estilo certo, gancho, zooms, cor e transições.'
-      : 'AJUSTE PELO CHAT: faça exatamente o que o usuário pediu, sem refazer o resto.';
-    content.push({ type: 'text', text: `${task}\n\nPROJETO ATUAL (JSON):\n${JSON.stringify(summary)}\n\nPEDIDO DO USUÁRIO:\n${userText}` });
+      ? 'PRIMEIRA EDIÇÃO: transforme o material bruto no vídeo descrito no brief, aplicando o estilo do vídeo-exemplo (se houver). Use a transcrição (palavras com ids e tempos) para cortar silêncios, erros, repetições e vícios com remove_words/ripple_delete e para achar frases fortes. Aplique legendas no estilo certo, gancho, zooms, cor, efeitos e transições.'
+      : commentsMode
+        ? 'APLICAR COMENTÁRIOS: atenda cada comentário de revisão no tempo indicado, marque cada um com update_marker {"resolved": true} e devolva "comments" com uma resposta curta por comentário.'
+        : 'AJUSTE PELO CHAT: faça exatamente o que o usuário pediu, sem refazer o resto.';
+    const where = describeContext(body.context, project);
+    content.push({ type: 'text', text: `${task}\n\nPROJETO ATUAL (JSON):\n${JSON.stringify(summary)}${where ? `\n\nO USUÁRIO APONTOU PARA: ${where}` : ''}\n\nPEDIDO DO USUÁRIO:\n${userText}` });
 
     const raw = await generateStructured({
       system: await loadPrompt('edit-system'),
       content,
       schema: EditResponseSchema,
-      effort: first ? 'high' : 'medium',
+      effort: first || commentsMode ? 'high' : 'medium',
       maxTokens: 32000,
     });
 
     const reply = (isObj(raw) && str(raw.reply, 800)) || 'Pronto, apliquei as mudanças.';
     const { ops, dropped } = sanitizeOps(isObj(raw) ? raw.ops : raw, project, assets);
     if (dropped.length) console.warn('[ai/edit] ops descartadas:', dropped.map((d) => d.reason));
-    return ok({ reply, ops, dropped: dropped.length });
+    const comments = isObj(raw) && Array.isArray(raw.comments)
+      ? raw.comments.filter(isObj).map((c) => ({ markerId: str(c.markerId, 80) ?? '', reply: str(c.reply, 300) ?? '' })).filter((c) => c.markerId && c.reply)
+      : [];
+    return ok({ reply, ops, dropped: dropped.length, comments });
   } catch (e) {
     return fail(e);
   }

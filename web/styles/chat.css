@@ -130,3 +130,18 @@
   .ep-ch-cc { height:34px; min-width:40px; }
   .ep-ch-steps ol { max-height:200px; }
 }
+
+/* ---------- "apontar para qualquer coisa" + comentários de revisão ---------- */
+.ep-ch-ctx { display:flex; align-items:center; gap:7px; align-self:flex-start; max-width:100%; background:var(--tintG); border:1px solid var(--tintGBl); color:var(--tintGInk); border-radius:999px; padding:5px 6px 5px 11px; font-size:12px; animation:rise .2s ease both; }
+.ep-ch-ctx span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ep-ch-ctx b { font-weight:700; }
+.ep-ch-ctx button { flex:none; width:24px; height:24px; border-radius:50%; border:0; background:rgba(0,0,0,.08); color:inherit; display:grid; place-items:center; cursor:pointer; }
+.ep-ch-ctxtag { display:flex; align-items:center; gap:4px; font-size:10.5px; font-weight:700; opacity:.85; margin-bottom:3px; }
+.ep-ch-comments { align-self:stretch; display:flex; align-items:center; justify-content:center; gap:8px; border:1px dashed var(--tintGBl); background:var(--box); color:var(--tintGInk); border-radius:12px; padding:9px 12px; font:inherit; font-size:12.5px; font-weight:700; cursor:pointer; }
+.ep-ch-comments b { background:var(--green); color:#fff; border-radius:999px; min-width:20px; height:20px; padding:0 6px; display:grid; place-items:center; font-size:11px; }
+.ep-ch-comments:disabled { opacity:.5; cursor:default; }
+@media (pointer: coarse) {
+  .ep-ch-ctx { font-size:13px; padding:7px 7px 7px 12px; }
+  .ep-ch-ctx button { width:32px; height:32px; }
+  .ep-ch-comments { min-height:44px; font-size:13.5px; }
+}

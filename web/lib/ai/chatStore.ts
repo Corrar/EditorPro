@@ -5,12 +5,12 @@
    narração por mensagem, passos ao vivo (op.explain), desfazer por edição.
    ===================================================================== */
 import { create } from 'zustand';
-import type { Id, Project } from '../types';
+import type { ChatContext, Id, Project } from '../types';
 import type { EditOp } from '../ops';
 import { useEditor } from '../store';
 import { emit } from '../events';
 import { getStatus, type AIStatus } from './client';
-import { chatEdit, generateCaptions, runFirstEdit, type AskOption, type PipelineOptions, type PipelineResult } from './pipeline';
+import { applyComments, chatEdit, generateCaptions, runFirstEdit, type AskOption, type PipelineOptions, type PipelineResult } from './pipeline';
 
 export type StepState = 'pending' | 'active' | 'done' | 'skipped';
 export interface LiveStep { id: Id; text: string; state: StepState }
@@ -38,7 +38,10 @@ interface AIChatState {
   busy: boolean;
   runs: Record<Id, RunState>;
   loadStatus: () => Promise<void>;
+  /** envia um pedido; usa (e limpa) o contexto apontado no editor (store.chatContext) */
   send: (text: string) => Promise<void>;
+  /** aplica os comentários de revisão pendentes (marcadores kind 'comment') */
+  comments: () => Promise<void>;
   firstEdit: (brief: string) => Promise<void>;
   captions: (language?: string) => Promise<void>;
   /** desfaz a edição feita por uma mensagem (só se ela ainda for a última mudança) */
@@ -71,7 +74,7 @@ export const useAIChat = create<AIChatState>((set, get) => {
     });
 
   /** roda uma tarefa da IA narrando numa mensagem nova do assistente */
-  async function run(intro: string, task: (o: PipelineOptions) => Promise<PipelineResult>) {
+  async function run(intro: string, task: (o: PipelineOptions) => Promise<PipelineResult>, context?: ChatContext) {
     if (get().busy) {
       emit('ep:toast', { text: 'A IA ainda está trabalhando — aguarde terminar.', kind: 'info' });
       return;
@@ -105,6 +108,7 @@ export const useAIChat = create<AIChatState>((set, get) => {
         onStatus: (phase, progress) => patchRun(msgId, { phase, progress }),
         onLog: (line) => patchRun(msgId, (r) => ({ log: [...r.log, line] })),
         whisper: get().whisper,
+        context,
         ask: (text, options) =>
           new Promise<string>((resolve) => {
             answers.set(msgId, (id) => {
@@ -172,8 +176,16 @@ export const useAIChat = create<AIChatState>((set, get) => {
     send: async (raw) => {
       const text = raw.trim();
       if (!text || get().busy) return;
-      editor().pushMessage({ role: 'user', text, status: 'done' });
-      await run('Pensando…', (o) => chatEdit(text, o));
+      const context = editor().chatContext;
+      editor().pushMessage({ role: 'user', text, status: 'done', ...(context ? { context } : {}) });
+      if (context) editor().setChatContext(undefined);
+      await run('Pensando…', (o) => chatEdit(text, o), context);
+    },
+
+    comments: async () => {
+      if (get().busy) return;
+      editor().pushMessage({ role: 'user', text: 'Aplicar os comentários de revisão', status: 'done' });
+      await run('Lendo os comentários…', (o) => applyComments(o));
     },
 
     firstEdit: async (brief) => {

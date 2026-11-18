@@ -17,6 +17,7 @@ import {
   sanitizeAudioExtras, sanitizeCaptionStyle, sanitizeEffects, sanitizeFilters, sanitizeKeyframes, sanitizePosition,
   sanitizeStyleProfile, sanitizeTextStyle, sanitizeTransform, sanitizeTransition, sanitizeTranscript, sanitizeVisualExtras, str,
 } from './sanitize';
+import { assignWordIds } from './features';
 
 export const OP_KINDS: EditOpKind[] = [
   'set_project', 'set_aspect', 'add_track', 'update_track', 'remove_track', 'move_track', 'add_clip', 'update_clip',
@@ -76,6 +77,15 @@ function pickTrack(p: Project, kind: TrackKind, wanted?: unknown): Id {
   return existing?.id ?? `track_${kind}_${uid('t').slice(-6)}`;
 }
 
+/** animação de texto: aceita a string (TextAnimation) ou o objeto {kind} das animações de clipe */
+function textAnim(v: unknown) {
+  const direct = oneOf(v, TEXT_ANIMATIONS);
+  if (direct) return direct;
+  const kind = isObj(v) ? String(v.kind ?? '') : '';
+  const map: Record<string, (typeof TEXT_ANIMATIONS)[number]> = { 'zoom-in': 'zoom', 'zoom-out': 'zoom', flip: 'spin', swing: 'wave', shake: 'glitch' };
+  return oneOf(kind, TEXT_ANIMATIONS) ?? map[kind];
+}
+
 /** emoji: no máximo alguns caracteres gráficos */
 function emojiOf(v: unknown): string | undefined {
   const s = str(v, 16);
@@ -96,8 +106,8 @@ function buildClip(raw: Record<string, unknown>, p: Project, assets: Record<Id, 
     const text = str(raw.text, 300) ?? fail('texto vazio');
     const duration = r3(clampNum(raw.duration, 0.2, 600) ?? 2.5);
     const kf = sanitizeKeyframes(raw.keyframes, duration);
-    const out = oneOf(raw.animationOut, TEXT_ANIMATIONS);
-    const loop = oneOf(raw.animationLoop, TEXT_ANIMATIONS);
+    const out = textAnim(raw.animationOut);
+    const loop = textAnim(raw.animationLoop);
     const rot = clampNum(raw.rotation, -360, 360);
     const sc = clampNum(raw.scale, 0.1, 5);
     const tpl = str(raw.templateId, 60);
@@ -105,7 +115,7 @@ function buildClip(raw: Record<string, unknown>, p: Project, assets: Record<Id, 
       id, type, start, duration, text,
       style: { ...DEFAULT_TEXT_STYLE, ...(sanitizeTextStyle(raw.style) ?? {}) },
       position: sanitizePosition(raw.position) ?? { x: 0.5, y: 0.3 },
-      animation: oneOf(raw.animation, TEXT_ANIMATIONS) ?? 'pop',
+      animation: textAnim(raw.animation) ?? textAnim(raw.animationIn) ?? 'pop',
       ...(out ? { animationOut: out } : {}), ...(loop ? { animationLoop: loop } : {}),
       ...(rot !== undefined ? { rotation: rot } : {}), ...(sc !== undefined ? { scale: sc } : {}),
       ...(kf?.length ? { keyframes: kf } : {}), ...(tpl ? { templateId: tpl } : {}),
@@ -282,9 +292,9 @@ function buildClipPatch(raw: Record<string, unknown>, clip: Clip, assets: Record
     const text = str(raw.text, 300); if (text) out.text = text;
     const st = sanitizeTextStyle(raw.style); if (st) out.style = { ...clip.style, ...st };
     const pos = sanitizePosition(raw.position, clip.position); if (pos) out.position = pos;
-    const an = oneOf(raw.animation, TEXT_ANIMATIONS); if (an) out.animation = an;
-    const ao = oneOf(raw.animationOut, TEXT_ANIMATIONS); if (ao) out.animationOut = ao;
-    const al = oneOf(raw.animationLoop, TEXT_ANIMATIONS); if (al) out.animationLoop = al;
+    const an = textAnim(raw.animation) ?? textAnim(raw.animationIn); if (an) out.animation = an;
+    const ao = textAnim(raw.animationOut); if (ao) out.animationOut = ao;
+    const al = textAnim(raw.animationLoop); if (al) out.animationLoop = al;
     const rot = clampNum(raw.rotation, -360, 360); if (rot !== undefined) out.rotation = rot;
     const sc = clampNum(raw.scale, 0.1, 5); if (sc !== undefined) out.scale = sc;
     const kf = sanitizeKeyframes(raw.keyframes, d); if (kf) out.keyframes = kf;
@@ -295,7 +305,8 @@ function buildClipPatch(raw: Record<string, unknown>, clip: Clip, assets: Record
 
 function sanitizeSegments(raw: unknown, p: Project): CaptionSegment[] {
   const end = Math.max(projectDuration(p), 0.1);
-  return sanitizeTranscript({ segments: raw }, { duration: end });
+  // palavras ganham ids estáveis ("w00001"…) p/ cortes ancorados na fala (remove_words)
+  return assignWordIds(sanitizeTranscript({ segments: raw }, { duration: end }));
 }
 
 function sanitizeMarker(raw: Record<string, unknown>, p: Project, partial: boolean): Partial<Marker> {

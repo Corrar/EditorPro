@@ -5,9 +5,11 @@
    Sempre devolve EditOp[] com `explain` em PT-BR.
    ===================================================================== */
 import type {
-  AspectRatio, CaptionSegment, CaptionStyle, ColorPreset, Id, Keyframe, MediaAsset, Project, Seconds, StyleProfile,
-  TransitionKind, VideoClip,
+  AspectRatio, AudioClip, AudioEffectKind, CaptionSegment, CaptionStyle, ChatContext as UIChatContext, Clip, ClipAnimation, ColorPreset, Id,
+  Keyframe, MediaAsset, Project, Seconds, SpeedPreset, StyleProfile, TransitionKind, VideoClip, VisualEffectKind,
 } from '../types';
+import { DEFAULT_TRANSFORM } from '../types';
+import { beatMarkerOps, beatSyncOps, chapterOps, fillerOps, highlightOps, hookFromTranscript, hookOps, timelineBeats } from './features';
 import { applyOps, clipEnd, projectDuration, type EditOp } from '../ops';
 import { DEFAULT_TEXT_STYLE } from '../defaults';
 import { formatTime, uid } from '../util';
@@ -195,6 +197,15 @@ const PRESET_WORDS: [RegExp, ColorPreset, string][] = [
 ];
 
 const TRANSITION_WORDS: [RegExp, TransitionKind, string][] = [
+  [/\bgir[oa]r?\b|spin|rodar|rotac/, 'spin', 'de giro'],
+  [/cortina|wipe|varr/, 'wipe-left', 'cortina'],
+  [/circul|iris|bolinha/, 'circle-open', 'círculo'],
+  [/pixel/, 'pixelate', 'pixelada'],
+  [/trem(or|id)|shake|balanc/, 'shake', 'tremida'],
+  [/rgb|cromatic|aberrac/, 'rgb-split', 'RGB'],
+  [/queim|film ?burn|pelicula/, 'film-burn', 'filme queimando'],
+  [/desfoc|borr|blur/, 'blur', 'desfoque'],
+  [/\bpreto\b|escurec/, 'dip-black', 'fade no preto'],
   [/crossfade|dissolv|cruzad/, 'crossfade', 'dissolver'],
   [/fade|esmaec|suave/, 'fade', 'fade'],
   [/zoom/, 'zoom-in', 'zoom'],
@@ -342,8 +353,8 @@ export function punchKeyframes(duration: Seconds, period = 2.6, scale = 1.12): K
 }
 
 /** zoom punch-in: em clipes cortados, alterna enquadramento a cada corte; em clipe único, usa keyframes */
-export function zoomOps(p: Project, strong = false): EditOp[] {
-  const clips = videoClipsOf(p).filter((c) => !c.locked);
+export function zoomOps(p: Project, strong = false, only?: Set<Id>): EditOp[] {
+  const clips = videoClipsOf(p).filter((c) => !c.locked && (!only || only.has(c.id)));
   const z = strong ? 1.16 : 1.1;
   if (clips.length >= 3) {
     return clips.map((c, i) => ({
@@ -361,21 +372,21 @@ export function zoomOps(p: Project, strong = false): EditOp[] {
   }));
 }
 
-export function removeZoomOps(p: Project): EditOp[] {
+export function removeZoomOps(p: Project, only?: Set<Id>): EditOp[] {
   return videoClipsOf(p)
-    .filter((c) => !c.locked && (c.keyframes?.length || c.transform.scale !== 1))
+    .filter((c) => !c.locked && (!only || only.has(c.id)) && (c.keyframes?.length || c.transform.scale !== 1))
     .map((c) => ({ op: 'update_clip' as const, clipId: c.id, patch: { keyframes: [], transform: { ...c.transform, scale: 1 } }, explain: `Tirando o zoom do clipe de ${fmt(c.start)}` }));
 }
 
-export function colorOps(p: Project, preset: ColorPreset, name: string): EditOp[] {
+export function colorOps(p: Project, preset: ColorPreset, name: string, only?: Set<Id>): EditOp[] {
   return videoClipsOf(p)
-    .filter((c) => !c.locked)
+    .filter((c) => !c.locked && (!only || only.has(c.id)))
     .map((c, i) => ({ op: 'update_clip' as const, clipId: c.id, patch: { colorPreset: preset }, explain: i === 0 ? `Aplicando cores ${name}` : `Cores ${name} no clipe de ${fmt(c.start)}` }));
 }
 
-export function transitionOps(p: Project, kind: TransitionKind | null, name: string): EditOp[] {
+export function transitionOps(p: Project, kind: TransitionKind | null, name: string, only?: Set<Id>): EditOp[] {
   const clips = videoClipsOf(p).filter((c) => !c.locked);
-  return clips.slice(1).map((c) => ({
+  return clips.slice(1).filter((c) => !only || only.has(c.id)).map((c) => ({
     op: 'update_clip' as const,
     clipId: c.id,
     patch: kind ? { transitionIn: { kind, duration: kind === 'whip' || kind === 'flash' || kind === 'glitch' ? 0.25 : 0.4 } } : { transitionIn: undefined },
@@ -384,6 +395,25 @@ export function transitionOps(p: Project, kind: TransitionKind | null, name: str
 }
 
 /** muda a velocidade global: vídeo/voz aceleram; textos e legendas acompanham; música mantém */
+/** velocidade só nos clipes apontados: muda o clipe e empurra os seguintes da mesma trilha */
+export function clipSpeedOps(p: Project, only: Set<Id>, factor: number): EditOp[] {
+  const ops: EditOp[] = [];
+  for (const t of p.tracks) {
+    let shift = 0;
+    for (const c of [...t.clips].sort((a, b) => a.start - b.start)) {
+      if ((c.type === 'video' || c.type === 'audio') && only.has(c.id) && !c.locked) {
+        const sp = r3(c.speed * factor);
+        const dur = r3(c.duration / factor);
+        ops.push({ op: 'update_clip', clipId: c.id, patch: { speed: sp, duration: dur, ...(shift ? { start: r3(c.start + shift) } : {}) }, explain: `Velocidade ${sp}x no clipe de ${fmt(c.start)}` });
+        shift += dur - c.duration;
+      } else if (shift && !c.locked) {
+        ops.push({ op: 'move_clip', clipId: c.id, start: r3(c.start + shift), explain: `Empurrando o clipe de ${fmt(c.start)}` });
+      }
+    }
+  }
+  return ops;
+}
+
 export function speedOps(p: Project, assets: Record<Id, MediaAsset>, factor: number): EditOp[] {
   const ops: EditOp[] = [];
   const f = factor;
@@ -598,7 +628,52 @@ export interface ChatContext {
   assets: Record<Id, MediaAsset>;
   /** silêncios por asset (mídia), calculados sob demanda quando `demoNeeds` pede */
   silencesByAsset?: Record<Id, Range[]>;
+  /** para onde o usuário apontou (clipe, trecho, ponto, legenda) */
+  target?: UIChatContext;
 }
+
+/** intervalo citado no texto ("nos primeiros 3 s", "nos últimos 2 s", "de 4 a 9 s") */
+export function rangeFromText(t: string, total: number): Range | undefined {
+  const n = (x: string) => Number(x.replace(',', '.'));
+  let m = t.match(/(?:nos|nas|os|as)\s+primeir[oa]s\s+(\d+(?:[.,]\d+)?)\s*(?:s|seg|segundos?)\b/);
+  if (m) return { start: 0, end: Math.min(total, n(m[1])) };
+  m = t.match(/(?:nos|nas|os|as)\s+ultim[oa]s\s+(\d+(?:[.,]\d+)?)\s*(?:s|seg|segundos?)\b/);
+  if (m) return { start: Math.max(0, total - n(m[1])), end: total };
+  m = t.match(/(?:de|entre)\s+(\d+(?:[.,]\d+)?)\s*(?:s|seg)?\s*(?:a|ate|e)\s+(\d+(?:[.,]\d+)?)\s*(?:s|seg|segundos?)\b/);
+  if (m && n(m[2]) > n(m[1])) return { start: Math.min(total, n(m[1])), end: Math.min(total, n(m[2])) };
+  if (/\bno (comeco|inicio)\b/.test(t)) return { start: 0, end: Math.min(total, 3) };
+  if (/\bno (final|fim)\b/.test(t)) return { start: Math.max(0, total - 3), end: total };
+  return undefined;
+}
+
+const EFFECT_WORDS: [RegExp, VisualEffectKind, string][] = [
+  [/\bvhs\b|fita|retro tv/, 'vhs', 'VHS'], [/glitch|falha/, 'glitch', 'glitch'], [/rgb|cromatic/, 'rgb-split', 'RGB split'],
+  [/trem(or|ido|ida)|shake|terremoto/, 'shake', 'tremor'], [/zoom puls|pulsa/, 'zoom-pulse', 'pulso'], [/granul|grain/, 'film-grain', 'granulado'],
+  [/light leak|vazamento de luz|luz vazando/, 'light-leak', 'light leak'], [/pixel/, 'pixelate', 'pixelado'], [/espelh|mirror/, 'mirror', 'espelho'],
+  [/caleidosc/, 'kaleidoscope', 'caleidoscópio'], [/desfoque de movimento|motion blur|borrao/, 'blur-motion', 'desfoque de movimento'],
+  [/estrobo|strobe|pisca/, 'flash-strobe', 'estroboscópio'], [/filme antigo|old film|antigo/, 'old-film', 'filme antigo'],
+  [/brilh|glow/, 'soft-glow', 'brilho suave'], [/neon/, 'neon-edge', 'neon'], [/barras? (de )?cinema|black bars|letterbox/, 'black-bars', 'barras de cinema'],
+  [/sparkle|estrelinha|purpurina/, 'sparkle', 'brilhinhos'],
+];
+
+const AUDIO_WORDS: [RegExp, AudioEffectKind, string][] = [
+  [/robo/, 'robot', 'voz de robô'], [/esquilo|chipmunk|fininha/, 'chipmunk', 'voz de esquilo'], [/voz grave|voz grossa|monstro/, 'deep', 'voz grave'],
+  [/eco\b/, 'echo', 'eco'], [/reverb|catedral|igreja/, 'reverb', 'reverb'], [/telefone/, 'telephone', 'voz de telefone'],
+  [/megafone|alto-falante/, 'megaphone', 'megafone'], [/ruido|chiado/, 'noise-reduction', 'redução de ruído'],
+  [/realc(a|e) a voz|melhora a voz|voz mais clara|voice enhance/, 'voice-enhance', 'voz realçada'], [/normaliz/, 'normalize', 'volume normalizado'],
+  [/grave reforcado|mais grave na musica|bass/, 'bass-boost', 'grave reforçado'],
+];
+
+const SPEED_WORDS: [RegExp, SpeedPreset, string][] = [
+  [/hero|heroi/, 'hero', 'herói'], [/montagem/, 'montage', 'montagem'], [/bala|bullet/, 'bullet', 'bala'],
+  [/jump ?cut/, 'jump-cut', 'jump cut'], [/flash ?in/, 'flash-in', 'flash in'], [/flash ?out/, 'flash-out', 'flash out'],
+];
+
+const EMOJI_WORDS: [RegExp, string][] = [
+  [/fogo|chama/, '🔥'], [/coraca|amor/, '❤️'], [/risada|rindo|kkk|engracad/, '😂'], [/estrela/, '⭐'], [/joinha|like|positivo/, '👍'],
+  [/palma|aplaus/, '👏'], [/dinheiro|grana/, '💰'], [/alerta|atencao|cuidado/, '⚠️'], [/olho/, '👀'], [/foguete/, '🚀'], [/\b100\b|cem/, '💯'],
+  [/raio/, '⚡'], [/check|certo/, '✅'], [/festa|comemora/, '🎉'], [/susto|choque|chocad/, '😱'], [/pensando|duvida/, '🤔'], [/brilho/, '✨'],
+];
 
 /** o comando precisa de análise de áudio antes? */
 export function demoNeeds(text: string): { silences: boolean } {
@@ -611,10 +686,11 @@ function parseNumber(s: string): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
-const HELP = 'No modo demonstração eu entendo comandos como: "legenda maior/menor", "legenda amarela", "legenda em cima", "legendas estilo TikTok", "tira o zoom", "coloca zoom", "corta os primeiros 3 s", "corta os últimos 2 s", "cortar silêncios", "acelera 1.2x", "música mais baixa", "troca a transição para fade", "deixa preto e branco", "cores cinematográficas", "adicionar título “Seu texto”", "formato 16:9" e "deixar mais dinâmico".';
+const HELP = 'No modo demonstração eu entendo comandos como: "legenda maior/menor/amarela/em cima", "legendas estilo TikTok", "legenda karaokê", "cortar silêncios", "cortar vícios", "melhores momentos em 30 s", "tira o zoom", "corta os primeiros 3 s", "acelera 1.2x", "câmera lenta", "curva herói", "coloca efeito VHS nos primeiros 3 s", "transição de giro", "voz de robô", "remove o fundo", "adiciona emoji de fogo", "sincroniza na batida", "marca as batidas", "cria capítulos", "gancho com zoom e flash", "música mais baixa", "deixa preto e branco", "formato 16:9" e "deixar mais dinâmico".';
 
 export function chatIntent(text: string, ctx: ChatContext): DemoResult {
   const t = norm(text);
+  const only = ctx.target?.clipIds?.length ? new Set(ctx.target.clipIds) : undefined;
   const { assets } = ctx;
   let p = ctx.project;
   const ops: EditOp[] = [];
@@ -668,14 +744,14 @@ export function chatIntent(text: string, ctx: ChatContext): DemoResult {
 
   // --- zoom
   if (/zoom|punch/.test(t) && !/transi/.test(t)) {
-    if (negate.test(t)) push(removeZoomOps(p), 'tirei o zoom');
-    else push(zoomOps(p, /(forte|mais zoom|bastante)/.test(t)), 'coloquei zoom punch-in');
+    if (negate.test(t)) push(removeZoomOps(p, only), 'tirei o zoom');
+    else push(zoomOps(p, /(forte|mais zoom|bastante)/.test(t), only), 'coloquei zoom punch-in');
   }
 
   // --- cortar começo/fim
   const firstN = t.match(/(?:corta|cortar|tira|tirar|remove|remover|apaga|apagar)\s+(?:os|as)?\s*primeir[oa]s?\s*(\d+(?:[.,]\d+)?)?\s*(s|seg|segundos?)?/);
   const lastN = t.match(/(?:corta|cortar|tira|tirar|remove|remover|apaga|apagar)\s+(?:os|as)?\s*ultim[oa]s?\s*(\d+(?:[.,]\d+)?)?\s*(s|seg|segundos?)?/);
-  const total = projectDuration(p);
+  let total = projectDuration(p);
   if (firstN || /(corta|cortar|tira|tirar) (o )?(comeco|inicio)/.test(t)) {
     const n = Math.min(firstN?.[1] ? parseNumber(firstN[1]) ?? 1 : 1, Math.max(0, total - 0.5));
     if (n > 0.04) push([{ op: 'ripple_delete', start: 0, end: r3(n), explain: `Cortando os primeiros ${n} s` }], `cortei os primeiros ${n} s`);
@@ -697,15 +773,20 @@ export function chatIntent(text: string, ctx: ChatContext): DemoResult {
 
   // --- velocidade
   const sp = t.match(/(\d+(?:[.,]\d+)?)\s*x\b/);
-  if (/(acelera|mais rapido|velocidade|speed)/.test(t) || (sp && /(acelera|velocidade|deixa)/.test(t))) {
+  const speedCurve = /curva|heroi|hero\b|montagem|\bbala\b|bullet|flash ?in|flash ?out|jump ?cut/.test(t) && /(curva|velocidade|acelera|efeito|deixa|coloca|aplica)/.test(t);
+  if (speedCurve) {
+    // tratado abaixo (curvas de velocidade estilo CapCut)
+  } else if (/camera lenta|slow ?motion|camera lentinha/.test(t)) {
+    push(only ? clipSpeedOps(p, only, 0.5) : speedOps(p, assets, 0.5), only ? 'câmera lenta (0.5x) no clipe apontado' : 'deixei em câmera lenta (0.5x)');
+  } else if (/(acelera|mais rapido|velocidade|speed)/.test(t) || (sp && /(acelera|velocidade|deixa)/.test(t))) {
     let f = sp ? parseNumber(sp[1]) ?? 1.2 : 1.2;
     if (f > 3 || f < 0.25) f = 1.2;
     // "velocidade 1.5x" = absoluta em relação ao clipe principal
     const main = videoClipsOf(p)[0];
     const factor = sp && main ? f / (main.speed || 1) : f;
-    if (Math.abs(factor - 1) > 0.01) push(speedOps(p, assets, factor), `acelerei para ${f}x`);
+    if (Math.abs(factor - 1) > 0.01) push(only ? clipSpeedOps(p, only, factor) : speedOps(p, assets, factor), `acelerei para ${f}x`);
   } else if (/(desacelera|mais devagar|mais lento|camera lenta|slow)/.test(t)) {
-    push(speedOps(p, assets, 0.85), 'deixei mais devagar (0.85x)');
+    push(only ? clipSpeedOps(p, only, 0.85) : speedOps(p, assets, 0.85), 'deixei mais devagar (0.85x)');
   }
 
   // --- música
@@ -742,7 +823,7 @@ export function chatIntent(text: string, ctx: ChatContext): DemoResult {
         const names: Partial<Record<TransitionKind, string>> = { crossfade: 'dissolver', 'zoom-in': 'zoom', whip: 'chicote', fade: 'fade', 'slide-left': 'deslizar', flash: 'flash' };
         tr = { kind, name: names[kind] ?? kind };
       }
-      const ops2 = transitionOps(p, tr.kind, tr.name);
+      const ops2 = transitionOps(p, tr.kind, tr.name, only);
       if (ops2.length) push(ops2, `transições ${tr.name}`);
       else said.push('só há um clipe — transições aparecem entre cortes (experimente "cortar silêncios")');
     }
@@ -751,10 +832,13 @@ export function chatIntent(text: string, ctx: ChatContext): DemoResult {
   // --- cor (sem confundir com cor da legenda)
   const colorText = mentionsCaption ? t.replace(/(legenda|letra|texto)s?( [a-z]+){0,3}/, '') : t;
   const preset = colorPresetFrom(colorText);
-  if (preset && !/transi/.test(t)) push(colorOps(p, preset.preset, preset.name), preset.preset === 'none' ? 'voltei as cores originais' : `cores ${preset.name}`);
+  if (preset && !/transi|efeito/.test(t)) push(colorOps(p, preset.preset, preset.name, only), preset.preset === 'none' ? 'voltei as cores originais' : `cores ${preset.name}`);
 
   // --- título
-  if (/(titulo|gancho|chamada|texto na tela|texto no inicio)/.test(t) && !mentionsCaption) {
+  if (/gancho/.test(t) && p.captions.segments.length && !negate.test(t)) {
+    const hook = hookFromBrief(text) ?? hookFromTranscript(p) ?? hookFromBrief(p.brief) ?? 'Assista até o final!';
+    push(hookOps(p, hook), `gancho "${hook}" com zoom e flash`);
+  } else if (/(titulo|gancho|chamada|texto na tela|texto no inicio)/.test(t) && !mentionsCaption) {
     const hook = hookFromBrief(text) ?? hookFromBrief(p.brief) ?? 'Assista até o final!';
     const existing = p.tracks.flatMap((tr) => tr.clips).find((c) => c.type === 'text' && c.label === 'gancho');
     if (negate.test(t) && existing) push([{ op: 'remove_clip', clipId: existing.id, explain: 'Removendo o título' }], 'tirei o título');
@@ -769,6 +853,150 @@ export function chatIntent(text: string, ctx: ChatContext): DemoResult {
   const asp = t.match(/\b(9:16|16:9|1:1|4:5)\b/);
   const aspect: AspectRatio | undefined = asp ? (asp[1] as AspectRatio) : /formato .*(horizontal|youtube)|deixa horizontal/.test(t) ? '16:9' : /formato .*vertical|deixa vertical/.test(t) ? '9:16' : /quadrad/.test(t) ? '1:1' : undefined;
   if (aspect && aspect !== p.aspect) push([{ op: 'set_aspect', aspect, explain: `Mudando para ${aspect}` }], `formato ${aspect}`);
+
+  // ===== estilo CapCut =====
+  total = projectDuration(p);
+  const point = ctx.target?.point;
+  const range = rangeFromText(t, total) ?? ctx.target?.range;
+  const visual = (c: Clip) => (c.type === 'video' || c.type === 'image') && !c.locked && (!only || only.has(c.id));
+  const visuals = () => p.tracks.flatMap((tr) => tr.clips).filter(visual);
+  const fxTrack = () => p.tracks.find((tr) => tr.kind === 'effect' && !tr.locked)?.id ?? 'track_effect_1';
+  const ovTrack = () => p.tracks.find((tr) => tr.kind === 'overlay' && !tr.locked)?.id ?? 'track_overlay_1';
+
+  // --- efeitos visuais (num trecho -> camada de ajuste; senão nos clipes)
+  if (/efeito|filtro/.test(t) || EFFECT_WORDS.some(([re]) => re.test(t) && /(coloca|poe|bota|adiciona|aplica|quero|deixa|com)/.test(t))) {
+    if (negate.test(t) && /efeito/.test(t)) {
+      const adj = p.tracks.flatMap((tr) => tr.clips).filter((c) => c.type === 'adjustment' && (c.effects?.length ?? 0) > 0);
+      push([
+        ...adj.map((c) => ({ op: 'remove_clip' as const, clipId: c.id, explain: 'Removendo a camada de efeito' })),
+        ...visuals().filter((c) => ((c as VideoClip).effects?.length ?? 0) > 0).map((c) => ({ op: 'update_clip' as const, clipId: c.id, patch: { effects: [] }, explain: `Tirando os efeitos do clipe de ${fmt(c.start)}` })),
+      ], 'tirei os efeitos');
+    } else {
+      const found = EFFECT_WORDS.filter(([re]) => re.test(t)).slice(0, 3);
+      const intensity = /(forte|bastante|muito)/.test(t) ? 0.85 : /(leve|suave|pouco)/.test(t) ? 0.35 : 0.6;
+      if (found.length) {
+        const effects = found.map(([, kind]) => ({ kind, intensity }));
+        const names = found.map(([, , name]) => name).join(' + ');
+        const r = range ?? (point ? { start: Math.max(0, point.t - 1), end: Math.min(total, point.t + 1) } : undefined);
+        if (r && r.end - r.start > 0.1) {
+          push([{ op: 'add_clip', trackId: fxTrack(), clip: { id: uid('clip'), type: 'adjustment', start: r3(r.start), duration: r3(r.end - r.start), filters: [], effects }, explain: `Efeito ${names} de ${fmt(r.start)} a ${fmt(r.end)}` }], `efeito ${names} de ${fmt(r.start)} a ${fmt(r.end)}`);
+        } else {
+          push(visuals().map((c, i) => {
+            const prev = ((c as VideoClip).effects ?? []).filter((e) => !effects.some((n) => n.kind === e.kind));
+            return { op: 'update_clip' as const, clipId: c.id, patch: { effects: [...prev, ...effects].slice(0, 4) }, explain: i === 0 ? `Efeito ${names}` : `Efeito ${names} no clipe de ${fmt(c.start)}` };
+          }), `efeito ${names}`);
+        }
+      }
+    }
+  }
+
+  // --- curvas de velocidade / reverso
+  if (speedCurve) {
+    const sw = SPEED_WORDS.find(([re]) => re.test(t));
+    if (sw) push(p.tracks.flatMap((tr) => tr.clips).filter((c): c is VideoClip => c.type === 'video' && !c.locked && (!only || only.has(c.id))).map((c) => ({ op: 'update_clip' as const, clipId: c.id, patch: { speedPreset: sw[1] }, explain: `Curva de velocidade ${sw[2]} no clipe de ${fmt(c.start)}` })), `curva de velocidade ${sw[2]}`);
+  }
+  if (/ao contrario|reverso|reverse|de tras pra frente|rebobina/.test(t)) {
+    const rev = !negate.test(t);
+    push(p.tracks.flatMap((tr) => tr.clips).filter((c): c is VideoClip => c.type === 'video' && !c.locked && (!only || only.has(c.id))).map((c) => ({ op: 'update_clip' as const, clipId: c.id, patch: { reverse: rev }, explain: rev ? `Invertendo o clipe de ${fmt(c.start)}` : 'Voltando ao normal' })), rev ? 'deixei ao contrário' : 'tirei o reverso');
+  }
+
+  // --- efeitos de voz / tom
+  const aw = AUDIO_WORDS.filter(([re]) => re.test(t));
+  if (aw.length && (/voz|audio|som|ruido|chiado|eco|reverb|normaliz|grave/.test(t))) {
+    const voiceClips = p.tracks.flatMap((tr) => tr.clips).filter((c): c is VideoClip | AudioClip => (c.type === 'video' || (c.type === 'audio' && assets[c.assetId]?.role !== 'music')) && !c.locked && (!only || only.has(c.id)));
+    if (negate.test(t)) push(voiceClips.map((c) => ({ op: 'update_clip' as const, clipId: c.id, patch: { audioEffects: [], pitch: 0 }, explain: 'Voz ao natural' })), 'voz ao natural');
+    else push(voiceClips.map((c) => ({ op: 'update_clip' as const, clipId: c.id, patch: { audioEffects: [...(c.audioEffects ?? []).filter((e) => !aw.some(([, k]) => k === e.kind)), ...aw.map(([, kind]) => ({ kind, amount: 0.8 }))].slice(0, 4) }, explain: `${aw.map(([, , n]) => n).join(' + ')} no clipe de ${fmt(c.start)}` })), aw.map(([, , n]) => n).join(' + '));
+  } else if (/\btom\b|pitch/.test(t) && /(agud|grav|alto|baixo|sobe|desce)/.test(t)) {
+    const up = /(agud|alto|sobe)/.test(t);
+    push(videoClipsOf(p).filter((c) => !only || only.has(c.id)).map((c) => ({ op: 'update_clip' as const, clipId: c.id, patch: { pitch: Math.max(-12, Math.min(12, (c.pitch ?? 0) + (up ? 3 : -3))) }, explain: up ? 'Subindo o tom da voz' : 'Descendo o tom da voz' })), up ? 'tom mais agudo' : 'tom mais grave');
+  }
+
+  // --- remover fundo / chroma key / espelhar / fundo da tela
+  if (/(remove|tira|recorta|apaga)r? (o )?fundo|sem fundo|remove background/.test(t)) {
+    push(visuals().map((c) => ({ op: 'update_clip' as const, clipId: c.id, patch: { removeBackground: true }, explain: `Recortando a pessoa do fundo em ${fmt(c.start)}` })), 'removi o fundo');
+  } else if (/fundo (verde|azul)|chroma|tela verde|green ?screen/.test(t)) {
+    const colorHex = /azul/.test(t) ? '#0047FF' : '#00FF00';
+    push(visuals().map((c) => ({ op: 'update_clip' as const, clipId: c.id, patch: negate.test(t) ? { chromaKey: null } : { chromaKey: { color: colorHex, similarity: 0.4, smoothness: 0.1 } }, explain: negate.test(t) ? 'Tirando o chroma key' : `Chroma key no clipe de ${fmt(c.start)}` })), negate.test(t) ? 'tirei o chroma key' : 'chroma key ligado');
+  }
+  if (/espelh(a|ar|e)|inverte (a )?imagem|flip/.test(t) && !/efeito/.test(t)) {
+    push(visuals().map((c) => ({ op: 'update_clip' as const, clipId: c.id, patch: { flipH: !(c as VideoClip).flipH }, explain: `Espelhando o clipe de ${fmt(c.start)}` })), 'espelhei a imagem');
+  }
+  if (/fundo (desfocado|borrado)|tela de fundo/.test(t)) {
+    push([{ op: 'set_project', patch: { canvas: { type: 'blur', blur: 0.6 } }, explain: 'Fundo desfocado atrás do vídeo' }], 'fundo desfocado');
+  }
+
+  // --- emoji / sticker / forma
+  const em = EMOJI_WORDS.find(([re]) => re.test(t));
+  if (em && /(emoji|sticker|figurinha|adiciona|coloca|poe|bota)/.test(t) && !negate.test(t)) {
+    const seg = ctx.target?.segmentId ? p.captions.segments.find((s) => s.id === ctx.target!.segmentId) : undefined;
+    const at = point?.t ?? seg?.start ?? range?.start ?? Math.min(0.5, total / 4);
+    const dur = Math.max(0.8, Math.min(2.5, seg ? seg.end - seg.start : range ? range.end - range.start : 2));
+    const tf = point ? { x: r3(point.x - 0.5), y: r3(point.y - 0.5) } : { x: 0.3, y: -0.3 };
+    push([{ op: 'add_clip', trackId: ovTrack(), clip: { id: uid('clip'), type: 'sticker', emoji: em[1], start: r3(at), duration: r3(dur), transform: { ...DEFAULT_TRANSFORM, scale: 0.3, ...tf }, animationIn: { kind: 'pop', duration: 0.3 }, animationLoop: { kind: 'bounce', duration: 0.8 } }, explain: `Emoji ${em[1]} em ${fmt(at)}` }], `emoji ${em[1]}`);
+  } else if (/(seta|circulo|retangulo|estrela|balao)/.test(t) && /(adiciona|coloca|poe|desenha)/.test(t) && !/emoji/.test(t)) {
+    const shape = /seta/.test(t) ? 'arrow' : /circulo/.test(t) ? 'circle' : /estrela/.test(t) ? 'star' : /balao/.test(t) ? 'speech-bubble' : 'rounded-rect';
+    const at = point?.t ?? range?.start ?? 0;
+    const tf = point ? { x: r3(point.x - 0.5), y: r3(point.y - 0.5) } : { x: 0, y: 0 };
+    push([{ op: 'add_clip', trackId: ovTrack(), clip: { id: uid('clip'), type: 'shape', shape, fill: '#D9641E', start: r3(at), duration: 2.5, transform: { ...DEFAULT_TRANSFORM, scale: 0.25, ...tf }, animationIn: { kind: 'pop', duration: 0.3 } }, explain: `Forma (${shape}) em ${fmt(at)}` }], 'forma adicionada');
+  }
+
+  // --- animações de entrada/saída
+  const anim = t.match(/anima(c|ç)(ao|oes) de (entrada|saida)/);
+  if (anim) {
+    const kindWord: [RegExp, ClipAnimation][] = [[/zoom/, 'zoom-in'], [/desliz|slide/, 'slide-up'], [/gir/, 'spin'], [/pul|bounce/, 'bounce'], [/pop/, 'pop'], [/fade|suave/, 'fade'], [/trem/, 'shake']];
+    const kind = kindWord.find(([re]) => re.test(t))?.[1] ?? 'fade';
+    const key = anim[3] === 'entrada' ? 'animationIn' : 'animationOut';
+    push(visuals().map((c) => ({ op: 'update_clip' as const, clipId: c.id, patch: { [key]: { kind, duration: 0.4 } }, explain: `Animação de ${anim[3]} (${kind}) em ${fmt(c.start)}` })), `animação de ${anim[3]}`);
+  }
+
+  // --- vícios de linguagem (palavras do Whisper)
+  if (/vicio|\bne\b.*\btipo\b|muleta|hesita|\bhum+\b|\behh?\b|\btipo\b.*\bne\b/.test(t)) {
+    if (!p.captions.segments.some((s) => s.words?.some((w) => w.id))) said.push('preciso das legendas com as palavras primeiro — gere as legendas e peça de novo');
+    else {
+      const { ops: f, count } = fillerOps(p);
+      if (f.length) push(f, `cortei ${count} vício${count > 1 ? 's' : ''} de linguagem`);
+      else said.push('não encontrei vícios de linguagem');
+    }
+  }
+
+  // --- destaques
+  const hl = t.match(/(destaque|melhores (partes|momentos|trechos)|resumo|highlight)/);
+  if (hl) {
+    const sec = Number((t.match(/(\d+)\s*(s|seg|segundos)\b/) ?? [])[1]) || (/(\d+)\s*min/.test(t) ? Number(t.match(/(\d+)\s*min/)![1]) * 60 : 30);
+    if (!p.captions.segments.length) said.push('preciso das legendas para achar os melhores trechos — gere as legendas primeiro');
+    else {
+      const h = highlightOps(p, sec);
+      if (h.ops.length) push(h.ops, `deixei só os melhores momentos (${h.kept.toFixed(0)} s)`);
+      else said.push(`o vídeo já tem menos de ${sec} s`);
+    }
+  }
+
+  // --- batidas
+  if (/batida|ritmo da musica|\bbeat/.test(t)) {
+    const beats = timelineBeats(p, assets);
+    if (!beats.length) said.push('não achei batidas: coloque uma música (com batidas detectadas) na timeline');
+    else if (/(marca|mostra|marcador)/.test(t)) push(beatMarkerOps(p, assets), `marquei ${beats.length} batidas`);
+    else {
+      const b = beatSyncOps(p, assets, /(rapid|frenet|toda batida)/.test(t) ? 0.45 : 0.8);
+      if (b.ops.length) push(b.ops, `sincronizei ${b.cuts} cortes com a batida`);
+      else said.push('as batidas não caem dentro do vídeo');
+    }
+  }
+
+  // --- capítulos
+  if (/capitulo|chapter|secoes|partes do video/.test(t)) {
+    if (!p.captions.segments.length) said.push('preciso das legendas para dividir em capítulos');
+    else {
+      const old = (p.markers ?? []).filter((m) => m.kind === 'chapter').map((m) => ({ op: 'remove_marker' as const, markerId: m.id, explain: 'Trocando os capítulos' }));
+      const ch = chapterOps(p, Number((t.match(/(\d+)\s*capitulo/) ?? [])[1]) || undefined);
+      push([...old, ...ch], `marquei ${ch.length} capítulos`);
+    }
+  }
+
+  // --- tradução (precisa do Claude)
+  if (/tradu[zc]|traduc|em ingles|em espanhol|para o ingles|to english/.test(t) && /legenda/.test(t)) {
+    said.push('traduzir legendas precisa da IA (Claude) — configure a ANTHROPIC_API_KEY no servidor');
+  }
 
   // --- mais dinâmico (combo)
   if (/dinamic|mais energia|mais ritmo|mais rapido e|prender (a )?atencao/.test(t) && !ops.some((o) => o.op === 'ripple_delete')) {
