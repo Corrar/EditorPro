@@ -116,24 +116,6 @@ export function drawLayer(ctx: Ctx, layer: LayerItem, t: Seconds, el: MediaEleme
     tf.opacity * tv.opacity * anim.opacity * (layer.transition?.role === 'out' ? 1 : fadeOpacity(clip, t))));
   if (opacity <= 0.001 && !tv.flash && !tv.dip) return;
 
-  /* pré-processamento por pixel (GL) */
-  const crop = natural && 'crop' in clip && clip.crop && (clip.crop.w < 0.999 || clip.crop.h < 0.999 || clip.crop.x > 0.001 || clip.crop.y > 0.001) ? clip.crop : undefined;
-  const f = resolveFilters('filters' in clip ? clip.filters : undefined, clip.type === 'video' ? clip.colorPreset : undefined, H / 1080);
-  const chroma = 'chromaKey' in clip && clip.chromaKey ? clip.chromaKey : undefined;
-  const cw = crop ? sw * crop.w : sw, chh = crop ? sh * crop.h : sh;
-  if (crop || chroma || needsPixelGrade(f)) {
-    const k = Math.min(1, (Math.max(W, H) * 1.25) / Math.max(cw, chh));
-    const out = processPixels(src as TexImageSource, sw, sh, cw * k, chh * k, {
-      crop, chroma, highlights: f.highlights, shadows: f.shadows, sharpen: f.sharpen,
-    });
-    if (out) {
-      // copia p/ superfície própria (o canvas GL é compartilhado)
-      const { c, ctx: pc } = scratch(clip, out.width, out.height, 0);
-      pc.drawImage(out as CanvasImageSource, 0, 0);
-      src = c as CanvasImageSource; sw = c.width; sh = c.height;
-    }
-  }
-
   /* remover fundo */
   if ('removeBackground' in clip && clip.removeBackground && natural) {
     const key = opts.segKey ?? clip.id;
@@ -146,6 +128,31 @@ export function drawLayer(ctx: Ctx, layer: LayerItem, t: Seconds, el: MediaEleme
       rc.drawImage(m as CanvasImageSource, 0, 0, sw, sh);
       src = c as CanvasImageSource;
     }
+  }
+
+  /* pré-processamento por pixel (GL) */
+  const crop = natural && 'crop' in clip && clip.crop && (clip.crop.w < 0.999 || clip.crop.h < 0.999 || clip.crop.x > 0.001 || clip.crop.y > 0.001) ? clip.crop : undefined;
+  const f = resolveFilters('filters' in clip ? clip.filters : undefined, clip.type === 'video' ? clip.colorPreset : undefined, H / 1080);
+  const chroma = 'chromaKey' in clip && clip.chromaKey ? clip.chromaKey : undefined;
+  const cw = crop ? sw * crop.w : sw, chh = crop ? sh * crop.h : sh;
+  if (crop || chroma || needsPixelGrade(f)) {
+    // processa já no tamanho em que vai ser desenhado (PiP pequeno não precisa de 1080p)
+    const fitMode = natural ? (('fit' in clip && clip.fit) || 'cover') : 'contain';
+    const kfit = fitMode === 'fill' ? Math.max(W / cw, H / chh) : fitMode === 'contain' ? Math.min(W / cw, H / chh) : Math.max(W / cw, H / chh);
+    const drawn = kfit * Math.max(0.05, tf.scale * tv.scale * anim.scale * geo.scale);
+    const k = Math.min(1, drawn * 1.1);
+    let tsrc: TexImageSource = src as TexImageSource, tsw = sw, tsh = sh;
+    // texturas enormes: reduz antes de subir p/ a GPU (upload é o passo caro)
+    if (k < 0.6 && !crop) {
+      const { c, ctx: dc } = scratch(clip, Math.max(2, sw * k), Math.max(2, sh * k), 2);
+      dc.drawImage(src, 0, 0, c.width, c.height);
+      tsrc = c as TexImageSource; tsw = c.width; tsh = c.height;
+    }
+    const out = processPixels(tsrc, tsw, tsh, cw * k, chh * k, {
+      crop, chroma, highlights: f.highlights, shadows: f.shadows, sharpen: f.sharpen,
+    });
+    // o canvas GL é compartilhado, mas é desenhado logo abaixo antes de outro uso
+    if (out) { src = out as CanvasImageSource; sw = out.width; sh = out.height; }
   }
 
   /* geometria */

@@ -2,6 +2,31 @@
 import type { MediaAsset, Project } from '../types';
 import { projectDuration } from '../ops';
 import { audibleClips, gainEnvelope } from '../engine/audio';
+import { buildAudioChain, noiseGate, peakGain } from '../engine/audioFx';
+import { curveOf, rateEnvelope, sourceSpan } from '../engine/speed';
+
+/** recorta [from, from+dur) de um buffer (com reverso, portão de ruído e normalização opcionais) */
+function segment(ctx: BaseAudioContext, buf: AudioBuffer, from: number, dur: number, opts: { reverse?: boolean; gate?: number; normalize?: number }): AudioBuffer | null {
+  const sr = buf.sampleRate;
+  const a = Math.max(0, Math.floor(from * sr));
+  const b = Math.min(buf.length, Math.ceil((from + dur) * sr));
+  if (b - a < 2) return null;
+  const out = ctx.createBuffer(buf.numberOfChannels, b - a, sr);
+  const chans: Float32Array[] = [];
+  for (let ch = 0; ch < buf.numberOfChannels; ch++) {
+    const src = buf.getChannelData(ch).subarray(a, b);
+    const dst = out.getChannelData(ch);
+    if (opts.reverse) for (let i = 0, n = src.length; i < n; i++) dst[i] = src[n - 1 - i];
+    else dst.set(src);
+    chans.push(dst);
+  }
+  if (opts.gate) noiseGate(chans, sr, opts.gate);
+  if (opts.normalize) {
+    const g = peakGain(chans, opts.normalize);
+    if (g !== 1) for (const ch of chans) for (let i = 0; i < ch.length; i++) ch[i] *= g;
+  }
+  return out;
+}
 
 export const MIX_RATE = 48000;
 
@@ -47,18 +72,33 @@ export async function mixProjectAudio(
     done++;
     opts.onProgress?.(done / items.length);
     if (!buf) continue;
-    const speed = clip.speed > 0 ? clip.speed : 1;
-    const srcDur = clip.duration * speed;
     if (clip.in >= buf.duration) continue;
+    const span = Math.min(sourceSpan(clip), buf.duration - clip.in);
+    const fx = clip.audioEffects ?? [];
+    const amount = (k: string) => fx.find((e) => e.kind === k)?.amount;
+    const seg = segment(ctx, buf, clip.in, span, {
+      reverse: !!clip.reverse,
+      gate: amount('noise-reduction'),
+      normalize: amount('normalize'),
+    });
+    if (!seg) continue;
     const src = ctx.createBufferSource();
-    src.buffer = buf;
-    src.playbackRate.value = speed;
+    src.buffer = seg;
+    const start = Math.max(0, clip.start);
+    if (curveOf(clip)) {
+      const env = rateEnvelope(clip, 1 / 60);
+      src.playbackRate.setValueAtTime(env[0].rate, start);
+      for (const pt of env.slice(1)) src.playbackRate.linearRampToValueAtTime(pt.rate, Math.max(0, pt.t));
+    } else src.playbackRate.value = clip.speed > 0 ? clip.speed : 1;
     const gain = ctx.createGain();
     const env = gainEnvelope(p, track, clip, 1 / 60);
-    gain.gain.setValueAtTime(env[0]?.g ?? 0, Math.max(0, clip.start));
+    gain.gain.setValueAtTime(env[0]?.g ?? 0, start);
     for (const pt of env.slice(1)) gain.gain.linearRampToValueAtTime(pt.g, Math.max(0, pt.t));
-    src.connect(gain).connect(ctx.destination);
-    src.start(Math.max(0, clip.start), clip.in, Math.min(srcDur, buf.duration - clip.in));
+    const chain = buildAudioChain(ctx, fx, clip.pitch, start);
+    if (chain) { src.connect(chain.input); chain.output.connect(gain); } else src.connect(gain);
+    gain.connect(ctx.destination);
+    src.start(start, 0);
+    src.stop(start + clip.duration);
     any = true;
   }
   if (!any) return null;

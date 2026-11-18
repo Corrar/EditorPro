@@ -1,6 +1,7 @@
 /* elementos de mídia para o export: imagens carregadas uma vez; vídeos por clipe com seek preciso */
 import type { Clip, MediaAsset } from '../types';
 import type { MediaElement, MediaSources } from '../engine';
+import { ensureSegMask, getSegMask } from '../engine/segment';
 
 const SEEK_TIMEOUT = 4000;
 
@@ -27,6 +28,8 @@ export class OfflineMediaPool implements MediaSources {
   private images = new Map<string, HTMLImageElement>();
   private byClip = new Map<string, HTMLVideoElement>();
   private idle = new Map<string, HTMLVideoElement[]>();
+  /** máscaras de segmentação calculadas de forma exata antes de cada quadro */
+  readonly offline = true;
   constructor(private assets: Record<string, MediaAsset>) {}
 
   async preloadImages(): Promise<void> {
@@ -69,6 +72,11 @@ export class OfflineMediaPool implements MediaSources {
     }
     await Promise.all(
       clips.map(async ({ clip, time }) => {
+        if (clip.type === 'image') {
+          const img = this.images.get(clip.assetId);
+          if (clip.removeBackground && img?.naturalWidth && !getSegMask(clip.id)) await ensureSegMask(clip.id, img, img.naturalWidth, img.naturalHeight, 0);
+          return;
+        }
         if (clip.type !== 'video') return;
         const asset = this.assets[clip.assetId];
         if (!asset?.url) return;
@@ -86,6 +94,7 @@ export class OfflineMediaPool implements MediaSources {
           await seeked;
         }
         if (el.readyState < 2) await waitEvent(el, 'loadeddata', 1500);
+        if (clip.removeBackground && el.videoWidth) await ensureSegMask(clip.id, el, el.videoWidth, el.videoHeight, time);
       }),
     );
   }

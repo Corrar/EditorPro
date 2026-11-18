@@ -1,23 +1,33 @@
 'use client';
-/* diálogo de exportação: MP4/WebM + qualidade, progresso, cancelar, baixar; SRT/VTT e FCPXML */
+/* diálogo de exportação: MP4/WebM, 540p–4K, 24/30/60 fps, progresso, cancelar, baixar/compartilhar;
+   só áudio (WAV/M4A), quadro atual (PNG), SRT/VTT e FCPXML */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useEditor } from '@/lib/store';
 import { emit } from '@/lib/events';
 import { projectDuration } from '@/lib/ops';
 import {
-  canShareFiles, captionCues, detectExportPath, downloadBlob, exportSize, exportVideo, safeFileName, shareFile,
-  toFCPXML, toSRT, toVTT, type ExportOptions,
+  canExportM4A, canShareFiles, captionCues, detectExportPath, downloadBlob, exportAudio, exportFrame, exportSize,
+  exportVideo, safeFileName, shareFile, toFCPXML, toSRT, toVTT, type ExportOptions,
 } from '@/lib/export';
 import { formatTime } from '@/lib/util';
-import { IcCaption, IcClose, IcDownload, IcExport, IcProject } from './icons';
+import { IcAudio, IcCaption, IcClose, IcDownload, IcExport, IcImage, IcProject } from './icons';
 
 type Phase = 'idle' | 'running' | 'done' | 'error';
 
 const QUALITIES: { id: ExportOptions['quality']; label: string; hint: string }[] = [
   { id: 'draft', label: 'Rascunho', hint: '540p' },
   { id: 'hd', label: 'HD', hint: '720p' },
-  { id: 'full', label: 'Full', hint: 'original' },
+  { id: 'fhd', label: 'Full HD', hint: '1080p' },
+  { id: '4k', label: '4K', hint: '2160p' },
 ];
+const FPS = [24, 30, 60];
+
+function extOf(b: Blob): string {
+  if (b.type === 'audio/mp4') return 'm4a';
+  if (b.type.includes('wav')) return 'wav';
+  if (b.type.includes('png')) return 'png';
+  return b.type.includes('mp4') ? 'mp4' : 'webm';
+}
 
 function fmtSize(bytes: number) {
   if (bytes > 1e6) return `${(bytes / 1e6).toFixed(1)} MB`;
@@ -29,6 +39,9 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
   const assets = useEditor((s) => s.assets);
   const [format, setFormat] = useState<ExportOptions['format']>('mp4');
   const [quality, setQuality] = useState<ExportOptions['quality']>('hd');
+  const [fps, setFps] = useState<number>(() => (FPS.includes(Math.round(project.fps)) ? Math.round(project.fps) : 30));
+  const [m4a, setM4a] = useState(false);
+  const [job, setJob] = useState<'video' | 'audio'>('video');
   const [phase, setPhase] = useState<Phase>('idle');
   const [progress, setProgress] = useState(0);
   const [stage, setStage] = useState('');
@@ -55,6 +68,7 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
     setSmallDevice(coarse || small);
   }, []);
 
+  useEffect(() => { canExportM4A().then(setM4a).catch(() => {}); }, []);
   useEffect(() => () => { abortRef.current?.abort(); }, []);
   useEffect(() => () => { if (result) URL.revokeObjectURL(result.url); }, [result]);
   useEffect(() => {
@@ -63,24 +77,22 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
     return () => window.removeEventListener('keydown', h, true);
   }, [phase, onClose]);
 
-  const start = async () => {
+  const run = async (kind: 'video' | 'audio', make: (signal: AbortSignal) => Promise<Blob>) => {
     const ac = new AbortController();
     abortRef.current = ac;
     setPhase('running');
     setProgress(0);
     setError('');
     setResult(null);
+    setJob(kind);
     startedRef.current = performance.now();
     try {
-      const blob = await exportVideo(project, assets, {
-        format, quality, signal: ac.signal,
-        onProgress: (f, s) => { setProgress(f); setStage(s); },
-      });
-      const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
+      const blob = await make(ac.signal);
+      const ext = extOf(blob);
       const url = URL.createObjectURL(blob);
       setResult({ url, blob, name: safeFileName(project.name, ext), size: blob.size, type: ext, secs: (performance.now() - startedRef.current) / 1000 });
       setPhase('done');
-      emit('ep:toast', { text: 'Vídeo exportado! Clique em Baixar.', kind: 'ok' });
+      emit('ep:toast', { text: kind === 'video' ? 'Vídeo exportado! Clique em Baixar.' : 'Áudio exportado! Clique em Baixar.', kind: 'ok' });
     } catch (e) {
       if ((e as Error)?.name === 'AbortError') { setPhase('idle'); setStage(''); setProgress(0); return; }
       console.error('[export]', e);
@@ -91,6 +103,20 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
     }
   };
 
+  const onProgress = (f: number, s: string) => { setProgress(f); setStage(s); };
+  const start = () => run('video', (signal) => exportVideo(project, assets, { format, quality, fps, signal, onProgress }));
+  const startAudio = (fmt: 'wav' | 'm4a') => run('audio', (signal) => exportAudio(project, assets, { format: fmt, signal, onProgress }));
+  const [frameBusy, setFrameBusy] = useState(false);
+  const saveFrame = async () => {
+    setFrameBusy(true);
+    try {
+      const t = Math.min(useEditor.getState().playhead, Math.max(0, duration - 1 / fps));
+      const blob = await exportFrame(project, assets, t, quality === '4k' ? 'fhd' : quality);
+      downloadBlob(blob, safeFileName(`${project.name}-quadro`, 'png'));
+    } catch (e) {
+      emit('ep:toast', { text: `Não deu para salvar o quadro: ${e instanceof Error ? e.message : e}`, kind: 'error' });
+    } finally { setFrameBusy(false); }
+  };
   const cancel = () => abortRef.current?.abort();
   const close = () => { if (phase === 'running') return; onClose(); };
 
@@ -121,7 +147,15 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
               </button>
             ))}
           </div>
-          <div className="ep-ex-info mono">{size.width}×{size.height} · {format === 'mp4' ? 'H.264 · MP4' : 'VP9 · WebM'}</div>
+          <div className="ep-ex-info mono">{size.width}×{size.height} · {fps} fps · {format === 'mp4' ? 'H.264 · MP4' : 'VP9 · WebM'}</div>
+        </div>
+        <div className="ep-ex-sect">
+          <span className="ep-label">Quadros por segundo</span>
+          <div className="ep-seg">
+            {FPS.map((f) => (
+              <button key={f} className={fps === f ? 'on' : ''} onClick={() => setFps(f)} disabled={phase === 'running'}>{f}</button>
+            ))}
+          </div>
         </div>
         {path?.path === 'mediarecorder' && (
           <div className="ep-ex-warn">Modo compatível: o vídeo é gravado em tempo real ({formatTime(duration)}) e sai em {path.container?.toUpperCase()}. Mantenha esta aba aberta até terminar. Para exportar mais rápido, use Chrome ou Edge.</div>
@@ -129,8 +163,11 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
         {path?.path === 'none' && (
           <div className="ep-ex-err">Este navegador não consegue gerar vídeo. Use Chrome, Edge, Safari 16.4+ ou Firefox atualizados, ou leve o projeto para outro editor pelos botões abaixo.</div>
         )}
-        {smallDevice && quality === 'full' && (
-          <div className="ep-ex-warn">Em celular, a resolução cheia pode ficar sem memória e travar. Recomendado: HD 720p.</div>
+        {smallDevice && (quality === 'fhd' || quality === '4k') && (
+          <div className="ep-ex-warn">Em celular, 1080p/4K podem ficar sem memória e travar. Recomendado: HD 720p.</div>
+        )}
+        {!smallDevice && quality === '4k' && (
+          <div className="ep-ex-warn">4K é pesado: pode demorar bastante. Se o aparelho não aguentar, a resolução cai automaticamente.</div>
         )}
 
         {phase === 'running' && (
@@ -146,7 +183,7 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
             <div className="meta">
               <b>{result.name}</b>
               <span>{fmtSize(result.size)} · {result.type.toUpperCase()} · pronto em {result.secs.toFixed(1)} s
-                {format === 'mp4' && result.type !== 'mp4' ? ' · (MP4 indisponível neste navegador, salvo em WebM)' : ''}</span>
+                {job === 'video' && format === 'mp4' && result.type !== 'mp4' ? ' · (MP4 indisponível neste navegador, salvo em WebM)' : ''}</span>
             </div>
             <div className="ep-ex-dlrow">
               {canShareFiles() && (
@@ -167,8 +204,19 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
           )}
         </div>
 
-        <div className="ep-ex-sep"><span>Levar para outro editor</span></div>
+        <div className="ep-ex-sep"><span>Outros formatos</span></div>
         <div className="ep-ex-links">
+          <div className="ep-ex-pair">
+            <button className="ep-ex-link" disabled={duration <= 0 || phase === 'running'} onClick={() => startAudio('wav')}>
+              <IcAudio size={18} /><span><b>Só áudio (.wav)</b><i>Sem perdas</i></span>
+            </button>
+            <button className="ep-ex-link" disabled={duration <= 0 || phase === 'running' || !m4a} onClick={() => startAudio('m4a')}>
+              <IcAudio size={18} /><span><b>Só áudio (.m4a)</b><i>{m4a ? 'AAC, menor' : 'Indisponível neste navegador'}</i></span>
+            </button>
+          </div>
+          <button className="ep-ex-link" disabled={duration <= 0 || frameBusy} onClick={saveFrame}>
+            <IcImage size={18} /><span><b>{frameBusy ? 'Gerando imagem…' : 'Quadro atual (.png)'}</b><i>Capa/miniatura a partir da posição do cursor</i></span>
+          </button>
           <button className="ep-ex-link" disabled={!cues} onClick={() => downloadBlob(toSRT(project), safeFileName(project.name, 'srt'), 'application/x-subrip;charset=utf-8')}>
             <IcCaption size={18} /><span><b>Baixar legendas (.srt)</b><i>{cues ? `${cues} blocos · YouTube, CapCut, Premiere` : 'Sem legendas no projeto'}</i></span>
           </button>

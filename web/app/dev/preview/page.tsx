@@ -10,8 +10,8 @@ import { useEditor } from '@/lib/store';
 import { emit } from '@/lib/events';
 import type { EditOp } from '@/lib/ops';
 import type { CaptionPreset, MediaAsset, TransitionKind } from '@/lib/types';
-import { DEFAULT_CAPTION_STYLE, makeAudioClip, makeImageClip, makeTextClip, makeVideoClip } from '@/lib/defaults';
-import { exportVideo, toFCPXML, toSRT, toVTT, hasWebCodecs } from '@/lib/export';
+import { DEFAULT_CAPTION_STYLE, makeAdjustmentClip, makeAudioClip, makeImageClip, makeShapeClip, makeStickerClip, makeTextClip, makeVideoClip } from '@/lib/defaults';
+import { exportVideo, exportAudio, exportFrame, toFCPXML, toSRT, toVTT, hasWebCodecs } from '@/lib/export';
 import { uid } from '@/lib/util';
 
 async function probe(file: File): Promise<MediaAsset> {
@@ -84,6 +84,53 @@ function buildDemo(assets: MediaAsset[], o: DemoOpts = {}) {
   st.setPlayhead(0);
 }
 
+/** demo com os recursos estilo CapCut: curvas, reverso, chroma, máscara, PiP, sticker, forma, ajuste, fundo desfocado */
+function buildCapcutDemo(assets: MediaAsset[]) {
+  const st = useEditor.getState();
+  st.newProject({ name: 'Demo CapCut', aspect: '9:16' });
+  const by = (re: RegExp) => assets.find((a) => re.test(a.name));
+  const a = by(/^a\./) ?? assets.find((x) => x.kind === 'video')!;
+  const b = by(/^b\./) ?? a;
+  const green = by(/green/);
+  const music = assets.find((x) => x.kind === 'audio');
+  const ts = makeTextClip('', 0).style;
+  const ops: EditOp[] = [
+    { op: 'set_project', patch: { canvas: { type: 'blur', blur: 0.7 } } },
+    { op: 'add_clip', trackId: 'track_video_1', clip: makeVideoClip(a, 0, {
+      id: 'cA', duration: 2, in: 0, speedPreset: 'bullet', effects: [{ kind: 'vhs', intensity: 0.6 }],
+      animationIn: { kind: 'zoom-out', duration: 0.5 }, audioEffects: [{ kind: 'robot', amount: 0.7 }] }) },
+    { op: 'add_clip', trackId: 'track_video_1', clip: makeVideoClip(b, 2, {
+      id: 'cB', duration: 2, in: 1, fit: 'contain', transitionIn: { kind: 'circle-open', duration: 0.6 },
+      filters: [{ kind: 'shadows', value: 0.4 }, { kind: 'highlights', value: -0.3 }, { kind: 'sharpen', value: 0.5 }] }) },
+    { op: 'add_clip', trackId: 'track_video_1', clip: makeVideoClip(a, 4, {
+      id: 'cC', duration: 2, in: 3, reverse: true, flipH: true, transitionIn: { kind: 'wipe-left', duration: 0.5 },
+      mask: { shape: 'heart', x: 0.5, y: 0.45, w: 0.8, h: 0.5, rotation: 0, feather: 0.25 } }) },
+    { op: 'add_track', track: { id: 'track_pip', kind: 'video', name: 'PiP' } },
+    { op: 'add_track', track: { id: 'track_ov', kind: 'overlay', name: 'Sobreposição' } },
+    { op: 'add_track', track: { id: 'track_fx', kind: 'effect', name: 'Ajuste' } },
+  ];
+  if (green) ops.push({ op: 'add_clip', trackId: 'track_pip', clip: makeVideoClip(green, 0.5, {
+    id: 'cG', duration: 5, in: 0, chromaKey: { color: '#00ff00', similarity: 0.4, smoothness: 0.1 }, pitch: 5,
+    transform: { x: 0.18, y: -0.2, scale: 0.55, rotation: 0, opacity: 1 },
+    animationIn: { kind: 'slide-left', duration: 0.5 }, animationLoop: { kind: 'swing', duration: 2 } }) });
+  ops.push(
+    { op: 'add_clip', trackId: 'track_ov', clip: makeStickerClip(1, { emoji: '🔥' }, 4, { id: 'sF', transform: { x: -0.3, y: -0.36, scale: 0.22, rotation: 0, opacity: 1 }, animationLoop: { kind: 'bounce', duration: 0.8 } }) },
+    { op: 'add_clip', trackId: 'track_ov', clip: makeShapeClip('star', 2, 4, { id: 'shS', fill: '#FFD23F', stroke: '#D9641E', strokeWidth: 8, transform: { x: 0.3, y: 0.3, scale: 0.18, rotation: 15, opacity: 0.9 }, animationLoop: { kind: 'spin', duration: 3 } }) },
+    { op: 'add_clip', trackId: 'track_fx', clip: makeAdjustmentClip(3, 2, { id: 'adj', colorPreset: 'moody', effects: [{ kind: 'light-leak', intensity: 0.7 }] }) },
+    { op: 'add_clip', trackId: 'track_text_1', clip: makeTextClip('Estilo CapCut', 0.2, 2.6, {
+      id: 'tA', position: { x: 0.5, y: 0.14 }, animation: 'wave', animationOut: 'slide-right', animationLoop: 'wave',
+      style: { ...ts, fontSize: 110, italic: true, underline: true, letterSpacing: 6, uppercase: true,
+        gradient: { from: '#FFD23F', to: '#D9641E', angle: 90 }, strokeColor: '#1C1F22', strokeWidth: 6 } }) },
+    { op: 'add_clip', trackId: 'track_text_1', clip: makeTextClip('máscaras, chroma e ajustes', 3, 2.8, {
+      id: 'tB', position: { x: 0.5, y: 0.2 }, animation: 'blur', rotation: -4,
+      keyframes: [{ t: 0, transform: { scale: 0.9 } }, { t: 2.8, transform: { scale: 1.1 } }],
+      style: { ...ts, fontSize: 60, background: 'rgba(28,31,34,0.85)', backgroundRadius: 40, strokeWidth: 0, shadow: false } }) },
+  );
+  if (music) ops.push({ op: 'add_clip', trackId: 'track_audio_1', clip: makeAudioClip(music, 0, { id: 'mus', duration: 6, volume: 0.5, audioEffects: [{ kind: 'echo', amount: 0.5 }], duckUnderVoice: true }) });
+  st.dispatch(ops);
+  st.setPlayhead(0);
+}
+
 declare global {
   interface Window { __ep?: Record<string, unknown> }
 }
@@ -96,7 +143,7 @@ export default function DevPreviewPage() {
 
   useEffect(() => {
     window.__ep = {
-      useEditor, exportVideo, toFCPXML, toSRT, toVTT, hasWebCodecs, buildDemo, emit,
+      useEditor, exportVideo, exportAudio, exportFrame, toFCPXML, toSRT, toVTT, hasWebCodecs, buildDemo, buildCapcutDemo, emit, assetsList: () => Object.values(useEditor.getState().assets),
       blobToBase64: async (b: Blob) => {
         const buf = new Uint8Array(await b.arrayBuffer());
         let s = '';
@@ -155,6 +202,7 @@ export default function DevPreviewPage() {
           <span className="ep-badge">{project.width}×{project.height}</span>
         </div>
         <button className="ep-btn sec" onClick={() => buildDemo(assets)}>Remontar demo</button>
+        <button className="ep-btn sec" onClick={() => buildCapcutDemo(assets)}>Demo CapCut</button>
         <button className="ep-btn sec" onClick={fakeLive} disabled={live}>Simular IA editando</button>
         <button className="ep-btn sec" onClick={() => {
           const st = useEditor.getState();

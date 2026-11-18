@@ -115,3 +115,30 @@ describe('opções', () => {
     expect(safeFileName('Meu Vídeo: top!', 'mp4')).toBe('Meu-Video-top.mp4');
   });
 });
+
+import { encodeWAV } from './wav';
+import { exportFps } from './options';
+
+describe('export ampliado', () => {
+  it('1080p/4K ampliam, fps limitado', () => {
+    expect(exportSize({ width: 1080, height: 1920 }, 'fhd')).toEqual({ width: 1080, height: 1920 });
+    expect(exportSize({ width: 1080, height: 1920 }, '4k')).toEqual({ width: 2160, height: 3840 });
+    expect(exportSize({ width: 1280, height: 720 }, 'fhd')).toEqual({ width: 1920, height: 1080 });
+    expect(exportFps({ fps: 30 }, 60)).toBe(60);
+    expect(exportFps({ fps: 30 })).toBe(30);
+    expect(exportFps({ fps: 30 }, 240)).toBe(60);
+  });
+  it('WAV: cabeçalho RIFF e amostras 16-bit intercaladas', () => {
+    const l = new Float32Array([0, 1, -1]);
+    const r = new Float32Array([0.5, 0, 0]);
+    const buf = encodeWAV([l, r], 48000);
+    const v = new DataView(buf);
+    expect(buf.byteLength).toBe(44 + 3 * 2 * 2);
+    expect(String.fromCharCode(v.getUint8(0), v.getUint8(1), v.getUint8(2), v.getUint8(3))).toBe('RIFF');
+    expect(v.getUint16(22, true)).toBe(2);
+    expect(v.getUint32(24, true)).toBe(48000);
+    expect(v.getInt16(46, true)).toBe(16383); // 0.5 * 32767 truncado
+    expect(v.getInt16(48, true)).toBe(0x7fff);
+    expect(v.getInt16(52, true)).toBe(-0x8000);
+  });
+});

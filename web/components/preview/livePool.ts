@@ -10,6 +10,10 @@ import type { Clip, MediaAsset, Project, Seconds, Track } from '@/lib/types';
 import type { MediaElement, MediaSources } from '@/lib/engine';
 import { sourceTime, clipSpeed, trackLayers } from '@/lib/engine/timing';
 import { clipGainAt } from '@/lib/engine/audio';
+import { buildAudioChain, chainKey, needsAudioChain, type FxChain } from '@/lib/engine/audioFx';
+
+/** roteamento de um elemento pelo grafo WebAudio (efeitos de voz / tom) */
+interface Route { source: MediaElementAudioSourceNode; gain: GainNode; chain: FxChain | null; key: string }
 
 const DRIFT = 0.15;
 const PREROLL = 1.0;
@@ -26,6 +30,7 @@ export class LiveMediaPool implements MediaSources {
   private unlocked = false;
   private actx: AudioContext | null = null;
   private lastPlaying = false;
+  private routes = new WeakMap<AV, Route>();
   /** chamado quando um quadro novo fica disponível (seek terminou / dados carregaram) */
   onFrame: () => void = () => {};
 
@@ -128,9 +133,11 @@ export class LiveMediaPool implements MediaSources {
       if (track.kind === 'video') {
         if (!track.hidden) for (const l of trackLayers(track, t)) active.push({ clip: l.clip, track });
         for (const c of track.clips) {
-          if (c.type === 'image') { const a = assets[c.assetId]; if (a?.url) this.ensureImage(a); }
+          if (c.type === 'image' || (c.type === 'sticker' && c.assetId)) { const a = assets[c.assetId!]; if (a?.url) this.ensureImage(a); }
           if (playing && !track.hidden && c.type === 'video' && c.start > t && c.start - t <= PREROLL) preroll.push({ clip: c, track });
         }
+      } else if (track.kind === 'overlay') {
+        for (const c of track.clips) if (c.type === 'sticker' && c.assetId) { const a = assets[c.assetId]; if (a?.url) this.ensureImage(a); }
       } else if (track.kind === 'audio') {
         for (const c of track.clips) {
           if (c.type !== 'audio') continue;
@@ -139,6 +146,7 @@ export class LiveMediaPool implements MediaSources {
         }
       }
     }
+    if (p.canvas?.type === 'image' && p.canvas.assetId) { const a = assets[p.canvas.assetId]; if (a?.url) this.ensureImage(a); }
     const keep = new Set<string>();
     for (const { clip, track } of active) {
       if (clip.type !== 'video' && clip.type !== 'audio') continue;
@@ -147,11 +155,17 @@ export class LiveMediaPool implements MediaSources {
       keep.add(clip.id);
       const el = this.acquire(clip, asset);
       const target = sourceTime(clip, t);
-      const gain = clipGainAt(p, track, clip, t);
-      el.volume = Math.min(1, Math.max(0, gain));
+      // reverso: o elemento não toca para trás → busca quadro a quadro, sem som
+      const reverse = !!clip.reverse;
+      const gain = reverse ? 0 : clipGainAt(p, track, clip, t);
+      const routed = this.route(el, clip, gain);
+      if (!routed) el.volume = Math.min(1, Math.max(0, gain));
       el.muted = !this.unlocked || gain <= 0.0001;
-      const rate = Math.min(16, Math.max(0.0625, clipSpeed(clip)));
-      if (playing) {
+      const rate = Math.min(16, Math.max(0.0625, clipSpeed(clip, t)));
+      if (playing && reverse) {
+        if (!el.paused) el.pause();
+        if (!el.seeking && Math.abs(el.currentTime - target) > 0.5 / fps) el.currentTime = target;
+      } else if (playing) {
         if (el.playbackRate !== rate) el.playbackRate = rate;
         const dur = Number.isFinite(el.duration) ? el.duration : Infinity;
         if (target < dur - 0.05) {
@@ -173,6 +187,38 @@ export class LiveMediaPool implements MediaSources {
       if (Math.abs(el.currentTime - clip.in) > 0.05 && !el.seeking) el.currentTime = clip.in;
     }
     for (const [id, el] of [...this.byClip]) if (!keep.has(id)) this.release(id, el);
+  }
+
+  /**
+   * Passa o som do elemento pelo grafo de efeitos quando o clipe tem efeitos de voz/tom
+   * (exige AudioContext destravado). Uma vez roteado, o elemento fica no grafo; sem
+   * efeitos, a cadeia é só o ganho. Devolve true se o volume é controlado pelo grafo.
+   */
+  private route(el: AV, clip: Clip, gain: number): boolean {
+    const fx = clip.type === 'video' || clip.type === 'audio' ? clip.audioEffects : undefined;
+    const pitch = clip.type === 'video' || clip.type === 'audio' ? clip.pitch : undefined;
+    let r = this.routes.get(el);
+    if (!r && (!this.actx || !needsAudioChain(fx, pitch))) return false;
+    if (!r) {
+      try {
+        const source = this.actx!.createMediaElementSource(el);
+        const g = this.actx!.createGain();
+        g.connect(this.actx!.destination);
+        r = { source, gain: g, chain: null, key: '' };
+        this.routes.set(el, r);
+      } catch { return false; }
+    }
+    const key = chainKey(fx, pitch);
+    if (key !== r.key) {
+      r.source.disconnect();
+      if (r.chain) { r.chain.output.disconnect(); r.chain.stop(); }
+      r.chain = needsAudioChain(fx, pitch) ? buildAudioChain(this.actx!, fx, pitch, this.actx!.currentTime) : null;
+      if (r.chain) { r.source.connect(r.chain.input); r.chain.output.connect(r.gain); } else r.source.connect(r.gain);
+      r.key = key;
+    }
+    el.volume = 1;
+    r.gain.gain.setTargetAtTime(Math.max(0, gain), this.actx!.currentTime, 0.015);
+    return true;
   }
 
   get isUnlocked() {

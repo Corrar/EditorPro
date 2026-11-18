@@ -11,7 +11,7 @@ import { renderFrame } from '../engine';
 import { visualLayers, sourceTime } from '../engine/timing';
 import { mixProjectAudio, MIX_RATE } from './audioMix';
 import { OfflineMediaPool } from './mediaPool';
-import { exportSize, hasWebCodecs, videoBitrate, type ExportOptions } from './options';
+import { exportFps, exportSize, hasWebCodecs, QUALITY_ORDER, videoBitrate, type ExportOptions } from './options';
 
 const abortErr = () => new DOMException('Exportação cancelada', 'AbortError');
 
@@ -19,7 +19,7 @@ interface VideoCodecChoice { codec: string; mux: 'avc' | 'vp9' | 'av1' | 'vp8' }
 interface AudioCodecChoice { codec: string; mux: 'aac' | 'opus' }
 
 const MP4_VIDEO: VideoCodecChoice[] = [
-  { codec: 'avc1.640033', mux: 'avc' }, { codec: 'avc1.4d0033', mux: 'avc' }, { codec: 'avc1.42e033', mux: 'avc' },
+  { codec: 'avc1.640034', mux: 'avc' }, { codec: 'avc1.640033', mux: 'avc' }, { codec: 'avc1.4d0033', mux: 'avc' }, { codec: 'avc1.42e033', mux: 'avc' },
   { codec: 'avc1.42001f', mux: 'avc' }, { codec: 'vp09.00.41.08', mux: 'vp9' }, { codec: 'av01.0.08M.08', mux: 'av1' },
 ];
 const WEBM_VIDEO: VideoCodecChoice[] = [
@@ -58,7 +58,7 @@ async function pickAudio(list: AudioCodecChoice[]) {
 /** lista do que será desenhado no tempo t e o tempo de origem de cada vídeo */
 function framePlan(p: Project, t: number) {
   return visualLayers(p, t)
-    .filter((l) => l.clip.type === 'video')
+    .filter((l) => l.clip.type === 'video' || (l.clip.type === 'image' && l.clip.removeBackground))
     .map((l) => ({ clip: l.clip, time: sourceTime(l.clip, t) }));
 }
 
@@ -114,11 +114,18 @@ async function encodeWithWebCodecs(
   report: (f: number, s: string) => void,
 ): Promise<Blob | null> {
   const { signal } = opts;
-  const fps = p.fps || 30;
-  const { width: W, height: H } = exportSize(p, opts.quality);
+  const fps = exportFps(p, opts.fps);
   const duration = projectDuration(p);
   const format = opts.format;
-  const v = await pickVideo(format === 'mp4' ? MP4_VIDEO : WEBM_VIDEO, W, H, fps, videoBitrate(W, H, fps));
+  // tenta a qualidade pedida; se o encoder não aguentar (4K em aparelho fraco), desce um degrau
+  let W = 0, H = 0;
+  let v: Awaited<ReturnType<typeof pickVideo>> = null;
+  const ladder = QUALITY_ORDER.slice(Math.max(0, QUALITY_ORDER.indexOf(opts.quality)));
+  for (const q of ladder) {
+    ({ width: W, height: H } = exportSize(p, q));
+    v = await pickVideo(format === 'mp4' ? MP4_VIDEO : WEBM_VIDEO, W, H, fps, videoBitrate(W, H, fps));
+    if (v) { if (q !== opts.quality) report(0.08, `Resolução reduzida para ${W}×${H} (limite do aparelho)`); break; }
+  }
   if (!v) return null;
   const a = audio ? await pickAudio(format === 'mp4' ? MP4_AUDIO : WEBM_AUDIO) : null;
 
@@ -235,8 +242,8 @@ async function encodeWithMediaRecorder(
   p: Project, pool: OfflineMediaPool, audio: AudioBuffer | null, opts: ExportOptions,
   report: (f: number, s: string) => void, mime: string,
 ): Promise<Blob> {
-  const fps = p.fps || 30;
-  const { width: W, height: H } = exportSize(p, opts.quality);
+  const fps = exportFps(p, opts.fps);
+  const { width: W, height: H } = exportSize(p, opts.quality === '4k' ? 'fhd' : opts.quality);
   const duration = projectDuration(p);
   const canvas = document.createElement('canvas');
   canvas.width = W;

@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useEditor } from '@/lib/store';
 import { projectDuration } from '@/lib/ops';
-import { renderFrame } from '@/lib/engine';
+import { renderFrame, segEvents } from '@/lib/engine';
 import { emit, on } from '@/lib/events';
 import { formatTime } from '@/lib/util';
 import { LiveMediaPool } from './livePool';
@@ -67,6 +67,24 @@ export default function Preview() {
   const [cssFull, setCssFull] = useState(false);
 
   if (!poolRef.current && typeof window !== 'undefined') poolRef.current = new LiveMediaPool();
+  /** tamanho-base do canvas interno e fator de qualidade dinâmico (cai se a reprodução não aguentar) */
+  const baseRef = useRef({ w: 0, h: 0 });
+  const qualityRef = useRef(1);
+  const emaRef = useRef(0);
+  const framesRef = useRef(0);
+
+  const applySize = useCallback(() => {
+    const cv = canvasRef.current;
+    const { w: bw, h: bh } = baseRef.current;
+    if (!cv || !bw) return false;
+    const q = qualityRef.current;
+    const w = Math.max(2, Math.round((bw * q) / 2) * 2);
+    const h = Math.max(2, Math.round((bh * q) / 2) * 2);
+    if (cv.width === w && cv.height === h) return false;
+    cv.width = w;
+    cv.height = h;
+    return true;
+  }, []);
 
   /* ---------- desenho ---------- */
   const draw = useCallback((t: number) => {
@@ -76,15 +94,31 @@ export default function Preview() {
     const ctx = cv.getContext('2d', { alpha: false });
     if (!ctx) return;
     const st = useEditor.getState();
+    const t0 = performance.now();
     try {
       renderFrame(ctx, st.project, t, pool);
     } catch (e) {
       console.error('[preview] falha ao desenhar', e);
     }
+    // qualidade adaptativa só durante a reprodução: quadro caro → reduz a resolução interna
+    // (ignora os primeiros quadros: o decodificador ainda está aquecendo)
+    if (st.playing && ++framesRef.current > 10) {
+      const dt = performance.now() - t0;
+      emaRef.current = emaRef.current ? emaRef.current * 0.85 + dt * 0.15 : dt;
+      if (emaRef.current > 32 && qualityRef.current > 0.4) {
+        qualityRef.current = Math.max(0.4, qualityRef.current * 0.82);
+        emaRef.current = 22;
+        applySize();
+      } else if (emaRef.current < 16 && qualityRef.current < 1) {
+        qualityRef.current = Math.min(1, qualityRef.current * 1.08);
+        emaRef.current = 20;
+        applySize();
+      }
+    }
     const d = projectDuration(st.project);
     if (timeRef.current) timeRef.current.textContent = fmt(t);
     if (barRef.current) barRef.current.style.transform = `scaleX(${d > 0 ? Math.min(1, t / d) : 0})`;
-  }, []);
+  }, [applySize]);
 
   /** re-render quando pausado (agrupa pedidos num único rAF) */
   const requestStill = useCallback(() => {
@@ -104,6 +138,8 @@ export default function Preview() {
     const pool = poolRef.current ?? (poolRef.current = new LiveMediaPool());
     if (hostRef.current) pool.attach(hostRef.current);
     pool.onFrame = () => { if (!useEditor.getState().playing) requestStill(); };
+    // máscara de "remover fundo" ficou pronta: redesenha o quadro parado
+    segEvents.onReady = () => { if (!useEditor.getState().playing) requestStill(); };
     return () => { pool.dispose(); poolRef.current = null; };
   }, [requestStill]);
 
@@ -130,14 +166,9 @@ export default function Preview() {
     const maxShort = isWeakDevice() ? PREVIEW_MAX_SHORT_WEAK : PREVIEW_MAX_SHORT;
     const targetShort = Math.max(Math.min(PREVIEW_MIN_SHORT, short), Math.min(maxShort, cssShort, short));
     const k = targetShort / short;
-    const w = Math.round((projW * k) / 2) * 2;
-    const h = Math.round((projH * k) / 2) * 2;
-    if (cv.width !== w || cv.height !== h) {
-      cv.width = w;
-      cv.height = h;
-      requestStill();
-    }
-  }, [fit.w, fit.h, projW, projH, requestStill]);
+    baseRef.current = { w: Math.round((projW * k) / 2) * 2, h: Math.round((projH * k) / 2) * 2 };
+    if (applySize()) requestStill();
+  }, [fit.w, fit.h, projW, projH, requestStill, applySize]);
 
   /* ---------- pausado: re-renderiza ao mudar playhead/projeto/mídia ---------- */
   useEffect(() => {
@@ -163,6 +194,10 @@ export default function Preview() {
     const pool = poolRef.current;
     if (!playing || !pool) {
       pool?.pauseAll();
+      // parado: volta à qualidade cheia para o quadro estático
+      framesRef.current = 0;
+      emaRef.current = 0;
+      if (qualityRef.current < 1) { qualityRef.current = 1; if (applySize()) requestStill(); }
       return;
     }
     const st0 = useEditor.getState();
@@ -196,7 +231,7 @@ export default function Preview() {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [playing, draw, setPlaying, setPlayhead]);
+  }, [playing, draw, setPlaying, setPlayhead, applySize, requestStill]);
 
   /* ---------- eventos / tela cheia ---------- */
   useEffect(() => on('ep:open-export', () => { setPlaying(false); setExportOpen(true); }), [setPlaying]);

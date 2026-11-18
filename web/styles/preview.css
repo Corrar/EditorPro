@@ -165,3 +165,5 @@
   .ep-ex-dlrow .ep-btn { flex:1; justify-content:center; }
   .ep-ex-actions .ep-btn { width:100%; justify-content:center; }
 }
+.ep-ex-pair { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+@media (max-width: 420px) { .ep-ex-pair { grid-template-columns:1fr; } .ep-ex-q { flex-wrap:wrap; } .ep-ex-qbtn { flex:1 1 40%; } }

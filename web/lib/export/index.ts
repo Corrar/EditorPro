@@ -7,7 +7,22 @@
 import type { MediaAsset, Project } from '../types';
 import type { ExportOptions } from './options';
 export type { ExportOptions } from './options';
-export { exportSize, videoBitrate, QUALITY_LABELS, hasWebCodecs } from './options';
+export type { ExportQuality } from './options';
+export { exportSize, exportFps, videoBitrate, QUALITY_LABELS, QUALITY_ORDER, hasWebCodecs } from './options';
+export { encodeWAV } from './wav';
+export type { AudioExportOptions } from './extras';
+
+/** só o áudio do projeto: WAV (sempre) ou M4A/AAC (se o navegador codificar AAC) */
+export async function exportAudio(p: Project, assets: Record<string, MediaAsset>, opts: import('./extras').AudioExportOptions): Promise<Blob> {
+  return (await import('./extras')).exportAudio(p, assets, opts);
+}
+export async function canExportM4A(): Promise<boolean> {
+  return (await import('./extras')).canExportM4A();
+}
+/** quadro atual como imagem PNG */
+export async function exportFrame(p: Project, assets: Record<string, MediaAsset>, t: number, quality?: import('./options').ExportQuality): Promise<Blob> {
+  return (await import('./extras')).exportFrame(p, assets, t, quality);
+}
 
 /** renderiza o vídeo final no navegador (encoder/muxers carregados sob demanda) */
 export async function exportVideo(p: Project, assets: Record<string, MediaAsset>, opts: ExportOptions): Promise<Blob> {
