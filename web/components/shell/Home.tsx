@@ -8,8 +8,7 @@ import { mediaKindOf, formatBytes } from '@/lib/media/pure';
 import { deleteProject, listProjects, relativeTime, type ProjectSummary } from '@/lib/persist';
 import type { AspectRatio, MediaKind } from '@/lib/types';
 import { formatTime } from '@/lib/util';
-import { IconClose, IconFolder, IconImage, IconMoon, IconMusic, IconSpark, IconSun, IconTrash, IconUpload, IconVideo } from './icons';
-import Logo from './Logo';
+import { IconClose, IconFolder, IconImage, IconMusic, IconSpark, IconTrash, IconUpload, IconVideo } from './icons';
 
 export interface WizardInput { brief: string; material: File[]; reference: File | null; aspect: AspectRatio }
 
@@ -135,8 +134,8 @@ function ProjectsList({ onOpen, refreshKey }: { onOpen: (id: string) => void; re
   );
 }
 
-export default function Home({ dark, onTheme, onStart, onEmpty, onOpen, busy, canResume, onResume }: {
-  dark: boolean; onTheme: () => void;
+export default function Home({ onStart, onEmpty, onOpen, busy, canResume, onResume, focusWizard }: {
+  focusWizard?: boolean;
   onStart: (w: WizardInput) => void; onEmpty: (aspect: AspectRatio) => void; onOpen: (id: string) => void;
   busy: string | null; canResume?: string | null; onResume?: () => void;
 }) {
@@ -144,20 +143,22 @@ export default function Home({ dark, onTheme, onStart, onEmpty, onOpen, busy, ca
   const [material, setMaterial] = useState<File[]>([]);
   const [reference, setReference] = useState<File | null>(null);
   const [aspect, setAspect] = useState<AspectRatio>('9:16');
+  const briefRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (focusWizard) briefRef.current?.focus();
+  }, [focusWizard]);
   const can = !busy && (brief.trim().length > 0 || material.length > 0);
 
   return (
     <div className="ep-home">
-      <header className="ep-hometop">
-        <Logo />
-        <span className="ep-tspace" />
-        {canResume && onResume && <button type="button" className="ep-pillbtn" onClick={onResume}>Voltar para “{canResume}”</button>}
-        <button type="button" className="ep-iconbtn" onClick={onTheme} title={dark ? 'Tema claro' : 'Tema escuro'} aria-label="Alternar tema">
-          {dark ? <IconSun size={17} /> : <IconMoon size={17} />}
-        </button>
-      </header>
-
       <main className="ep-homemain">
+        <div className="ep-header ep-homehead">
+          <div>
+            <h1 className="ep-h1">Novo projeto</h1>
+            <div className="ep-sub">descreva · envie o material · a IA edita ao vivo</div>
+          </div>
+          {canResume && onResume && <button type="button" className="ep-pillbtn ep-resume" onClick={onResume}>Voltar para “{canResume}”</button>}
+        </div>
         <section className="ep-hero">
           <span className="ep-kicker"><IconSpark size={14} /> Editor de vídeo com IA</span>
           <h1>Descreva o vídeo. <span>A IA edita ao vivo.</span></h1>
@@ -170,7 +171,7 @@ export default function Home({ dark, onTheme, onStart, onEmpty, onOpen, busy, ca
             <div className="ep-wbody">
               <label className="ep-wlabel" htmlFor="ep-brief">Descreva como você quer o vídeo</label>
               <textarea
-                id="ep-brief" className="ep-textarea ep-brief" value={brief} onChange={(e) => setBrief(e.target.value)}
+                ref={briefRef} id="ep-brief" className="ep-textarea ep-brief" value={brief} onChange={(e) => setBrief(e.target.value)}
                 placeholder="Ex.: Reels de 30 segundos sobre minha loja, ritmo rápido, legendas amarelas e música animada…"
               />
               <div className="ep-examples">
