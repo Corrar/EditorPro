@@ -58,3 +58,4 @@ export const ISparkle = (p: P) => (
 );
 export const IPlus = (p: P) => <Svg {...p}><path d="M12 5v14M5 12h14" /></Svg>;
 export const IGauge = (p: P) => <Svg {...p}><path d="m12 14 4-4" /><path d="M3.3 19a10 10 0 1 1 17.4 0" /></Svg>;
+export const IMore = (p: P) => <Svg {...p}><circle cx="5" cy="12" r="1.6" fill="currentColor" /><circle cx="12" cy="12" r="1.6" fill="currentColor" /><circle cx="19" cy="12" r="1.6" fill="currentColor" /></Svg>;

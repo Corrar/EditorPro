@@ -96,11 +96,14 @@ export default function TimelineHarness() {
   const [dark, setDark] = useState(false);
   const [ready, setReady] = useState(false);
   const [toast, setToast] = useState('');
+  const [tlH, setTlH] = useState<string>('400px');
   const assets = useEditor((s) => s.assets);
 
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
     setDark(q.get('theme') === 'dark');
+    if (q.get('h')) setTlH(`${q.get('h')}px`);
+    else if (window.innerWidth < 700) setTlH('55vh');
     const { project, assets } = buildMock();
     const st = useEditor.getState();
     if (q.get('empty') !== '1') st.loadProject(project);
@@ -135,10 +138,10 @@ export default function TimelineHarness() {
 
   return (
     <div className={`ep-root${dark ? ' dark' : ''}`} style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--canvasBg)' }}>
-      <header style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderBottom: '1px solid var(--line)' }}>
+      <header style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--line)' }}>
         <div className="ep-logo"><div className="mark"><span /><i /></div><b>Timeline · harness</b></div>
         <span style={{ flex: 1 }} />
-        <div style={{ display: 'flex', gap: 6 }} data-testid="media">
+        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', maxWidth: '100%' }} data-testid="media">
           {Object.values(assets).map((a) => (
             <span
               key={a.id}
@@ -158,10 +161,10 @@ export default function TimelineHarness() {
         <button className="ep-pillbtn" onClick={() => useEditor.getState().applyLive(AI_OPS, { delayMs: 1400 })}>Simular IA</button>
         <button className="ep-pillbtn" onClick={() => setDark(!dark)}>{dark ? 'Tema claro' : 'Tema escuro'}</button>
       </header>
-      <div style={{ flex: 1, display: 'grid', placeItems: 'center', color: 'var(--muted)', fontSize: 12.5 }}>
+      <div style={{ flex: 1, minHeight: 0, display: 'grid', placeItems: 'center', color: 'var(--muted)', fontSize: 12.5, textAlign: 'center', padding: 8 }}>
         Área do preview (mock) — use Espaço para reproduzir
       </div>
-      <section className="ep-timeline" style={{ height: 400, flex: 'none' }}>{ready && <Timeline />}</section>
+      <section className="ep-timeline" style={{ height: tlH, flex: 'none' }}>{ready && <Timeline />}</section>
       {toast && <div className="ep-toasts"><div className="ep-toast"><span className="dot" style={{ background: 'var(--green)' }} />{toast}</div></div>}
     </div>
   );

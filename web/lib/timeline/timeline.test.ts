@@ -173,3 +173,23 @@ describe('régua e mídia', () => {
     expect(s[3]).toBeCloseTo(0.39);
   });
 });
+
+describe('responsivo', () => {
+  it('dimsFor alterna compacto/baixo/toque', async () => {
+    const { dimsFor, rowLayout } = await import('./ui');
+    const desk = dimsFor(1200, 400, false);
+    expect(desk.compact).toBe(false);
+    expect(desk.headerW).toBe(184);
+    const phone = dimsFor(390, 300, true);
+    expect(phone.compact).toBe(true);
+    expect(phone.headerW).toBeLessThan(64);
+    expect(phone.rowH.video).toBeLessThan(desk.rowH.video);
+    const low = dimsFor(1200, 150, false);
+    expect(low.short).toBe(true);
+    expect(low.rulerH).toBeLessThan(desk.rulerH);
+    expect(dimsFor(0, 0, false).compact).toBe(false); // ainda não medido
+    const rows = rowLayout(mock(), false, phone.rowH);
+    expect(rows[0].kind).toBe('captions');
+    expect(rows.find((r) => r.kind === 'video')!.height).toBe(phone.rowH.video);
+  });
+});

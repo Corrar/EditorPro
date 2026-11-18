@@ -22,16 +22,18 @@ import { collectSnapPoints, snapSpan, snapThreshold, snapTime } from '@/lib/time
 import {
   MIN_CLIP, deleteOps, duplicateOps, fitZoom, kindForMedia, nearestFreeStart, overlaps, placeClip, splitOps, toFrame, trimBounds,
 } from '@/lib/timeline/edit';
-import { HEADER_W, RULER_H, type RowInfo, rowAtY, rowLayout, rowsHeight, useTimelineUi } from '@/lib/timeline/ui';
+import { type RowInfo, dimsFor, rowAtY, rowLayout, rowsHeight, useDims, useTimelineUi } from '@/lib/timeline/ui';
 import { Toolbar, ZMAX, ZMIN } from './Toolbar';
 import { Ruler } from './Ruler';
-import { DragLayer, Guides, PlayheadLine, Rows } from './Rows';
-import { ClipMenu, LiveBanner } from './Overlays';
+import { DragLayer, Guides, PlayheadLine, Rows, TouchHandles } from './Rows';
+import { ClipMenu, LiveBanner, TrackPop } from './Overlays';
 import { useShortcuts } from './useShortcuts';
 
 const ASSET_MIME = 'application/x-ep-asset';
 const DRAG_THRESHOLD = 4;
 const EDGE = 40;
+const TOUCH_SLOP = 8;
+const LONG_PRESS_MS = 450;
 
 type Gesture =
   | {
@@ -51,7 +53,9 @@ type Gesture =
   | { kind: 'trim'; edge: 'start' | 'end'; x0: number; moved: boolean; clip: Clip; points: Seconds[]; min: Seconds; max: Seconds }
   | { kind: 'cap'; mode: 'cap-move' | 'cap-start' | 'cap-end'; x0: number; moved: boolean; id: Id; start: Seconds; end: Seconds; points: Seconds[]; min: Seconds; max: Seconds }
   | { kind: 'marquee'; x0: number; y0: number; moved: boolean; additive: boolean; base: Id[] }
-  | { kind: 'scrub' };
+  | { kind: 'scrub' }
+  /** toque: decide no soltar (tocar = selecionar / mover playhead); se o dedo andar, o navegador rola */
+  | { kind: 'tap'; x0: number; y0: number; moved: boolean; clipId?: Id; capId?: Id };
 
 function trackLabel(kind: TrackKind, p: Project): string {
   const n = p.tracks.filter((t) => t.kind === kind).length + 1;
@@ -64,23 +68,65 @@ export default function Timeline() {
   const showNew = useTimelineUi((s) => s.drag?.mode === 'move' || !!s.dropHint);
   const viewW = useTimelineUi((s) => s.viewW);
   const setUi = useTimelineUi((s) => s.set);
+  const dims = useDims();
+  const dimsRef = useRef(dims);
+  dimsRef.current = dims;
+  const hw = () => dimsRef.current.headerW;
+  const cancelLongPress = () => {
+    if (longPress.current) {
+      clearTimeout(longPress.current.timer);
+      longPress.current = null;
+    }
+  };
 
+  const rootRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const longPress = useRef<{ timer: number; x: number; y: number } | null>(null);
   const tracksRef = useRef<HTMLDivElement>(null);
   const gesture = useRef<Gesture | null>(null);
   const lastPointer = useRef<{ x: number; y: number; shift: boolean } | null>(null);
   const anchor = useRef<{ t: Seconds; px: number } | null>(null);
   const edgeRaf = useRef(0);
 
-  const rows = useMemo(() => rowLayout(project, showNew), [project, showNew]);
+  const rows = useMemo(() => rowLayout(project, showNew, dims.rowH), [project, showNew, dims.rowH]);
   const rowsRef = useRef<RowInfo[]>(rows);
   rowsRef.current = rows;
   const zoomRef = useRef(zoom);
   zoomRef.current = zoom;
 
   const duration = projectDuration(project);
-  const laneW = Math.max((duration + Math.max(10, duration * 0.25)) * zoom, viewW - HEADER_W);
+  const laneW = Math.max((duration + Math.max(10, duration * 0.25)) * zoom, viewW - hw());
   const rowsH = rowsHeight(rows);
+
+  // desfazer/refazer/IA podem remover clipes selecionados: poda a seleção
+  useEffect(() => {
+    const st = useEditor.getState();
+    if (!st.selection.length) return;
+    const alive = st.selection.filter((id) => findClip(project, id));
+    if (alive.length !== st.selection.length) st.select(alive);
+  }, [project]);
+
+  /* ---------------- medir o próprio contêiner (responsivo) ---------------- */
+
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const mq = typeof window.matchMedia === 'function' ? window.matchMedia('(pointer: coarse)') : null;
+    const measure = () => {
+      const r = el.getBoundingClientRect();
+      const next = dimsFor(r.width, r.height, !!mq?.matches);
+      const cur = useTimelineUi.getState().dims;
+      if (next.compact !== cur.compact || next.short !== cur.short || next.coarse !== cur.coarse) setUi({ dims: next });
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    mq?.addEventListener?.('change', measure);
+    return () => {
+      ro.disconnect();
+      mq?.removeEventListener?.('change', measure);
+    };
+  }, [setUi]);
 
   /* ---------------- rolagem / tamanho visível ---------------- */
 
@@ -116,15 +162,15 @@ export default function Timeline() {
     let t: Seconds;
     if (clientX != null) {
       px = clientX - rect.left;
-      t = (px + el.scrollLeft - HEADER_W) / cur;
+      t = (px + el.scrollLeft - hw()) / cur;
     } else {
-      const phx = HEADER_W + st.playhead * cur - el.scrollLeft;
-      if (phx >= HEADER_W && phx <= el.clientWidth) {
+      const phx = hw() + st.playhead * cur - el.scrollLeft;
+      if (phx >= hw() && phx <= el.clientWidth) {
         px = phx;
         t = st.playhead;
       } else {
-        px = HEADER_W + (el.clientWidth - HEADER_W) / 2;
-        t = (px + el.scrollLeft - HEADER_W) / cur;
+        px = hw() + (el.clientWidth - hw()) / 2;
+        t = (px + el.scrollLeft - hw()) / cur;
       }
     }
     anchor.current = { t: Math.max(0, t), px };
@@ -136,14 +182,14 @@ export default function Timeline() {
     const a = anchor.current;
     if (!el || !a) return;
     anchor.current = null;
-    el.scrollLeft = Math.max(0, HEADER_W + a.t * zoom - a.px);
+    el.scrollLeft = Math.max(0, hw() + a.t * zoom - a.px);
   }, [zoom]);
 
   const fit = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
     const d = projectDuration(useEditor.getState().project);
-    useEditor.getState().setZoom(fitZoom(d, el.clientWidth - HEADER_W - 24, ZMIN, ZMAX));
+    useEditor.getState().setZoom(fitZoom(d, el.clientWidth - hw() - 24, ZMIN, ZMAX));
     requestAnimationFrame(() => (el.scrollLeft = 0));
   }, []);
 
@@ -169,43 +215,42 @@ export default function Timeline() {
       const ge = e as Event & { scale: number; clientX: number };
       zoomTo(gz * ge.scale, ge.clientX);
     };
-    // pinça por toque (2 dedos)
-    const touches = new Map<number, number>();
+    // pinça por toque (2 dedos) — Touch Events seguem chegando mesmo quando o navegador rola
     let pinch0 = 0;
     let pinchZ = 0;
-    const onTDown = (e: PointerEvent) => {
-      if (e.pointerType !== 'touch') return;
-      touches.set(e.pointerId, e.clientX);
-      if (touches.size === 2) {
-        const [a, b] = [...touches.values()];
-        pinch0 = Math.abs(a - b);
+    const dist = (t: TouchList) => Math.abs(t[0].clientX - t[1].clientX) + Math.abs(t[0].clientY - t[1].clientY) * 0.25;
+    const onTStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        pinch0 = dist(e.touches);
         pinchZ = useEditor.getState().zoom;
+        cancelLongPress();
+        endGestureRef.current(false);
       }
     };
-    const onTMove = (e: PointerEvent) => {
-      if (!touches.has(e.pointerId)) return;
-      touches.set(e.pointerId, e.clientX);
-      if (touches.size === 2 && pinch0 > 10) {
-        const [a, b] = [...touches.values()];
-        zoomTo(pinchZ * (Math.abs(a - b) / pinch0), (a + b) / 2);
-      }
+    const onTMove = (e: TouchEvent) => {
+      if (e.touches.length !== 2 || pinch0 < 10) return;
+      e.preventDefault();
+      const mid = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      zoomTo(pinchZ * (dist(e.touches) / pinch0), mid);
     };
-    const onTUp = (e: PointerEvent) => touches.delete(e.pointerId);
+    const onTEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) pinch0 = 0;
+    };
     el.addEventListener('wheel', onWheel, { passive: false });
     el.addEventListener('gesturestart', onGStart as EventListener);
     el.addEventListener('gesturechange', onGChange as EventListener);
-    el.addEventListener('pointerdown', onTDown);
-    el.addEventListener('pointermove', onTMove);
-    el.addEventListener('pointerup', onTUp);
-    el.addEventListener('pointercancel', onTUp);
+    el.addEventListener('touchstart', onTStart, { passive: true });
+    el.addEventListener('touchmove', onTMove, { passive: false });
+    el.addEventListener('touchend', onTEnd);
+    el.addEventListener('touchcancel', onTEnd);
     return () => {
       el.removeEventListener('wheel', onWheel);
       el.removeEventListener('gesturestart', onGStart as EventListener);
       el.removeEventListener('gesturechange', onGChange as EventListener);
-      el.removeEventListener('pointerdown', onTDown);
-      el.removeEventListener('pointermove', onTMove);
-      el.removeEventListener('pointerup', onTUp);
-      el.removeEventListener('pointercancel', onTUp);
+      el.removeEventListener('touchstart', onTStart);
+      el.removeEventListener('touchmove', onTMove);
+      el.removeEventListener('touchend', onTEnd);
+      el.removeEventListener('touchcancel', onTEnd);
     };
   }, [zoomTo]);
 
@@ -246,8 +291,15 @@ export default function Timeline() {
   }, []);
 
   const toolbarActions = useMemo(
-    () => ({ split: () => split(), remove: () => remove(undefined, false), zoomTo: (z: number) => zoomTo(z), fit }),
-    [split, remove, zoomTo, fit],
+    () => ({
+      split: () => split(),
+      remove: () => remove(undefined, false),
+      zoomTo: (z: number) => zoomTo(z),
+      fit,
+      duplicate: () => duplicate(),
+      rippleRemove: () => remove(undefined, true),
+    }),
+    [split, remove, zoomTo, fit, duplicate],
   );
   const menuActions = useMemo(() => ({ split, duplicate, remove }), [split, duplicate, remove]);
 
@@ -264,7 +316,7 @@ export default function Timeline() {
     const r = tracksRef.current!.getBoundingClientRect();
     const x = clientX - r.left;
     const y = clientY - r.top;
-    return { x, y, t: (x - HEADER_W) / zoomRef.current };
+    return { x, y, t: (x - hw()) / zoomRef.current };
   };
 
   const snapPts = (p: Project, exclude: Id[]) => {
@@ -278,12 +330,20 @@ export default function Timeline() {
     const g = gesture.current;
     if (!g || g.kind === 'scrub') return;
     const { x, y, t } = toLocal(clientX, clientY);
+    if (g.kind === 'tap') {
+      if (!g.moved && Math.hypot(x - g.x0, y - g.y0) > TOUCH_SLOP) {
+        g.moved = true;
+        cancelLongPress();
+      }
+      return;
+    }
     const z = zoomRef.current;
     const ui = useTimelineUi.getState();
     if (!g.moved) {
       const dy = 'y0' in g ? Math.abs(y - g.y0) : 0;
       if (Math.abs(x - g.x0) < DRAG_THRESHOLD && dy < DRAG_THRESHOLD) return;
       g.moved = true;
+      cancelLongPress();
     }
     const thr = snapThreshold(z);
     const snapOn = ui.snapping && !shift; // Shift durante o arraste desliga o ímã temporariamente
@@ -381,8 +441,8 @@ export default function Timeline() {
     } else if (g.kind === 'marquee') {
       ui.set({ marquee: { x0: g.x0, y0: g.y0, x1: x, y1: y } });
       // seleção ao vivo
-      const t0 = (Math.min(g.x0, x) - HEADER_W) / z;
-      const t1 = (Math.max(g.x0, x) - HEADER_W) / z;
+      const t0 = (Math.min(g.x0, x) - hw()) / z;
+      const t1 = (Math.max(g.x0, x) - hw()) / z;
       const y0 = Math.min(g.y0, y);
       const y1 = Math.max(g.y0, y);
       const ids: Id[] = [];
@@ -400,17 +460,17 @@ export default function Timeline() {
     const el = scrollRef.current;
     const lp = lastPointer.current;
     const g = gesture.current;
-    if (!g || g.kind === 'scrub') return;
+    if (!g || g.kind === 'scrub' || g.kind === 'tap') return;
     if (!el || !lp || !g.moved) {
       edgeRaf.current = requestAnimationFrame(edgeLoop);
       return;
     }
     const r = el.getBoundingClientRect();
     let dx = 0;
-    if (lp.x < r.left + HEADER_W + EDGE) dx = -Math.ceil((r.left + HEADER_W + EDGE - lp.x) / 4);
+    if (lp.x < r.left + hw() + EDGE) dx = -Math.ceil((r.left + hw() + EDGE - lp.x) / 4);
     else if (lp.x > r.right - EDGE) dx = Math.ceil((lp.x - (r.right - EDGE)) / 4);
     let dy = 0;
-    const top = r.top + RULER_H;
+    const top = r.top + dimsRef.current.rulerH;
     if (lp.y < top + EDGE / 2 && lp.y > r.top - EDGE) dy = -Math.ceil((top + EDGE / 2 - lp.y) / 4);
     else if (lp.y > r.bottom - EDGE / 2) dy = Math.ceil((lp.y - (r.bottom - EDGE / 2)) / 4);
     if (dx || dy) {
@@ -426,6 +486,7 @@ export default function Timeline() {
   const endGesture = useCallback((commit: boolean) => {
     const g = gesture.current;
     gesture.current = null;
+    cancelLongPress();
     cancelAnimationFrame(edgeRaf.current);
     window.removeEventListener('pointermove', onWinMove);
     window.removeEventListener('pointerup', onWinUp);
@@ -482,6 +543,23 @@ export default function Timeline() {
       } else if (g.mode === 'cap-end' && Math.abs(d.end - seg.end) > 1e-6) {
         st.dispatch({ op: 'update_caption', segmentId: g.id, patch: { end: d.end } });
       }
+    } else if (g.kind === 'tap') {
+      if (g.moved) return;
+      if (g.clipId) {
+        st.select([g.clipId]);
+        ui.set({ captionSel: null });
+      } else if (g.capId) {
+        st.select([]);
+        ui.set({ captionSel: g.capId });
+      } else {
+        st.select([]);
+        ui.set({ captionSel: null });
+        const lp = lastPointer.current;
+        if (lp) {
+          const { t } = toLocal(lp.x, lp.y);
+          st.setPlayhead(toFrame(Math.max(0, t), st.project.fps));
+        }
+      }
     } else if (g.kind === 'marquee') {
       if (!g.moved) {
         const lp = lastPointer.current;
@@ -529,7 +607,28 @@ export default function Timeline() {
     window.addEventListener('pointerup', onWinUp);
     window.addEventListener('pointercancel', onWinCancel);
     window.addEventListener('keydown', onWinKey, true);
-    if (g.kind !== 'scrub') edgeRaf.current = requestAnimationFrame(edgeLoop);
+    if (g.kind !== 'scrub' && g.kind !== 'tap') edgeRaf.current = requestAnimationFrame(edgeLoop);
+  };
+
+  /** toque longo (~450 ms) no clipe abre o menu de contexto (substitui o botão direito) */
+  const startLongPress = (e: React.PointerEvent, clipId: Id) => {
+    cancelLongPress();
+    const x = e.clientX;
+    const y = e.clientY;
+    longPress.current = {
+      x,
+      y,
+      timer: window.setTimeout(() => {
+        longPress.current = null;
+        const g = gesture.current;
+        if (g && g.kind !== 'scrub' && g.moved) return;
+        endGestureRef.current(false);
+        const st = useEditor.getState();
+        if (!st.selection.includes(clipId)) st.select([clipId]);
+        try { navigator.vibrate?.(12); } catch {}
+        setUi({ menu: { x: x + 10, y: y + 10, clipId, touch: true } });
+      }, LONG_PRESS_MS),
+    };
   };
 
   useEffect(() => () => endGestureRef.current(false), []);
@@ -545,12 +644,25 @@ export default function Timeline() {
     const handle = target.closest<HTMLElement>('[data-handle]')?.dataset.handle as 'start' | 'end' | undefined;
     const clipEl = target.closest<HTMLElement>('[data-clip-id]');
     const capEl = target.closest<HTMLElement>('[data-cap-id]');
+    // toque/caneta: tocar seleciona; arrastar só move o que JÁ está selecionado (senão o dedo rola a timeline)
+    const touch = e.pointerType === 'touch' || e.pointerType === 'pen';
+
+    if (clipEl && touch && !handle && !st.selection.includes(clipEl.dataset.clipId!)) {
+      beginGesture({ kind: 'tap', x0: x, y0: y, moved: false, clipId: clipEl.dataset.clipId! }, e);
+      startLongPress(e, clipEl.dataset.clipId!);
+      return;
+    }
+    if (capEl && touch && !handle && useTimelineUi.getState().captionSel !== capEl.dataset.capId) {
+      beginGesture({ kind: 'tap', x0: x, y0: y, moved: false, capId: capEl.dataset.capId! }, e);
+      return;
+    }
 
     if (clipEl) {
       const id = clipEl.dataset.clipId!;
       const f = findClip(p, id);
       if (!f) return;
       e.preventDefault();
+      if (touch && !handle) startLongPress(e, id);
       setUi({ captionSel: null });
       const multi = e.shiftKey || e.metaKey || e.ctrlKey;
       const was = st.selection.includes(id);
@@ -624,7 +736,11 @@ export default function Timeline() {
       return;
     }
 
-    if (x < HEADER_W) return;
+    if (x < hw()) return;
+    if (touch) {
+      beginGesture({ kind: 'tap', x0: x, y0: y, moved: false }, e);
+      return;
+    }
     e.preventDefault();
     beginGesture({ kind: 'marquee', x0: x, y0: y, moved: false, additive: e.shiftKey || e.metaKey || e.ctrlKey, base: st.selection }, e);
   };
@@ -712,15 +828,19 @@ export default function Timeline() {
 
   /* ---------------- render ---------------- */
 
-  const contentW = HEADER_W + laneW;
+  const contentW = hw() + laneW;
   const empty = project.tracks.every((t) => t.clips.length === 0) && project.captions.segments.length === 0;
 
   return (
-    <div className="ep-tl">
+    <div
+      ref={rootRef}
+      className={`ep-tl${dims.compact ? ' compact' : ''}${dims.short ? ' short' : ''}${dims.coarse ? ' coarse' : ''}`}
+      style={{ ['--tl-head' as string]: `${dims.headerW}px` }}
+    >
       <Toolbar actions={toolbarActions} />
       <LiveBanner />
       <div className="ep-tl-scroll" ref={scrollRef} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
-        <div className="ep-tl-content" style={{ width: contentW, height: RULER_H + rowsH }}>
+        <div className="ep-tl-content" style={{ width: contentW, height: dimsRef.current.rulerH + rowsH }}>
           <Ruler zoom={zoom} width={laneW} onScrubStart={onScrubStart} />
           <div
             className="ep-tl-tracks"
@@ -733,15 +853,19 @@ export default function Timeline() {
             <DragLayer project={project} rows={rows} zoom={zoom} />
             <Guides zoom={zoom} height={rowsH} />
             <PlayheadLine zoom={zoom} height={rowsH} scrollRef={scrollRef} />
+            <TouchHandles project={project} rows={rows} zoom={zoom} />
             {empty && (
-              <div className="ep-tl-empty" style={{ left: HEADER_W }}>
-                Arraste mídias da biblioteca para cá — ou descreva o vídeo no chat e deixe a IA montar a timeline.
+              <div className="ep-tl-empty" style={{ left: hw() }}>
+                {dims.compact
+                  ? 'Adicione mídias pela biblioteca ou peça no chat.'
+                  : 'Arraste mídias da biblioteca para cá — ou descreva o vídeo no chat e deixe a IA montar a timeline.'}
               </div>
             )}
           </div>
         </div>
       </div>
       <ClipMenu actions={menuActions} />
+      <TrackPop />
     </div>
   );
 }

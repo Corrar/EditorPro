@@ -4,7 +4,7 @@ import { memo, useEffect, useRef, useState } from 'react';
 import type { Clip, Project, Track } from '@/lib/types';
 import { useEditor } from '@/lib/store';
 import { findClip } from '@/lib/ops';
-import { HEADER_W, type RowInfo, useTimelineUi } from '@/lib/timeline/ui';
+import { type RowInfo, useDims, useTimelineUi } from '@/lib/timeline/ui';
 import { ClipView } from './ClipView';
 import { CaptionBody, ClipBody } from './ClipBody';
 import { IAudio, ICaptions, IEye, IEyeOff, ILock, IMute, IPlus, IText, IUnlock, IVideo, IVolume } from './icons';
@@ -13,6 +13,8 @@ import { IAudio, ICaptions, IEye, IEyeOff, ILock, IMute, IPlus, IText, IUnlock, 
 
 function TrackHeaderInner({ track, height }: { track: Track; height: number }) {
   const dispatch = useEditor((s) => s.dispatch);
+  const { headerW, compact } = useDims();
+  const popOpen = useTimelineUi((s) => s.trackPop?.id === track.id);
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(track.name);
   useEffect(() => setName(track.name), [track.name]);
@@ -24,8 +26,29 @@ function TrackHeaderInner({ track, height }: { track: Track; height: number }) {
     if (n && n !== track.name) upd({ name: n });
     else setName(track.name);
   };
+  if (compact) {
+    const flags = [track.muted && 'mudo', track.hidden && 'oculta', track.locked && 'travada'].filter(Boolean).join(', ');
+    return (
+      <div className={`ep-tl-head compact k-${track.kind}${track.locked ? ' locked' : ''}`} style={{ width: headerW, height }}>
+        <button
+          className={`ep-tl-headic btn${popOpen ? ' on' : ''}`}
+          data-trackpop={track.id}
+          onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            const ui = useTimelineUi.getState();
+            ui.set({ trackPop: popOpen ? null : { id: track.id, x: r.right + 6, y: r.top } });
+          }}
+          aria-label={`${track.name}${flags ? ` (${flags})` : ''} — opções da trilha`}
+          aria-expanded={popOpen}
+        >
+          <Icon size={15} />
+          {flags && <i className="ep-tl-flag" />}
+        </button>
+      </div>
+    );
+  }
   return (
-    <div className={`ep-tl-head k-${track.kind}${track.locked ? ' locked' : ''}`} style={{ width: HEADER_W, height }}>
+    <div className={`ep-tl-head k-${track.kind}${track.locked ? ' locked' : ''}`} style={{ width: headerW, height }}>
       <span className="ep-tl-headic"><Icon size={13} /></span>
       <div className="ep-tl-headname">
         {editing ? (
@@ -69,8 +92,22 @@ function CaptionHeader({ height }: { height: number }) {
   const enabled = useEditor((s) => s.project.captions.enabled);
   const count = useEditor((s) => s.project.captions.segments.length);
   const dispatch = useEditor((s) => s.dispatch);
+  const { headerW, compact } = useDims();
+  if (compact)
+    return (
+      <div className="ep-tl-head compact k-captions" style={{ width: headerW, height }}>
+        <button
+          className={`ep-tl-headic btn${enabled ? '' : ' off'}`}
+          onClick={() => dispatch({ op: 'toggle_captions', enabled: !enabled })}
+          aria-label={enabled ? 'Legendas visíveis — tocar para ocultar' : 'Legendas ocultas — tocar para mostrar'}
+          aria-pressed={!enabled}
+        >
+          {enabled ? <ICaptions size={15} /> : <IEyeOff size={15} />}
+        </button>
+      </div>
+    );
   return (
-    <div className="ep-tl-head k-captions" style={{ width: HEADER_W, height }}>
+    <div className="ep-tl-head k-captions" style={{ width: headerW, height }}>
       <span className="ep-tl-headic"><ICaptions size={13} /></span>
       <div className="ep-tl-headname">
         <b>Legendas</b>
@@ -140,6 +177,7 @@ function NewTrackLane({ height, width }: { height: number; width: number }) {
 /* ---------------- linhas ---------------- */
 
 export const Rows = memo(function Rows({ rows, zoom, width }: { rows: RowInfo[]; zoom: number; width: number }) {
+  const { headerW, compact } = useDims();
   return (
     <>
       {rows.map((r) => (
@@ -151,9 +189,9 @@ export const Rows = memo(function Rows({ rows, zoom, width }: { rows: RowInfo[];
             </>
           ) : r.kind === 'new' ? (
             <>
-              <div className="ep-tl-head k-new" style={{ width: HEADER_W, height: r.height }}>
+              <div className={`ep-tl-head k-new${compact ? ' compact' : ''}`} style={{ width: headerW, height: r.height }}>
                 <span className="ep-tl-headic"><IPlus size={13} /></span>
-                <div className="ep-tl-headname"><b>Nova trilha</b></div>
+                {!compact && <div className="ep-tl-headname"><b>Nova trilha</b></div>}
               </div>
               <NewTrackLane height={r.height} width={width} />
             </>
@@ -174,6 +212,7 @@ export const Rows = memo(function Rows({ rows, zoom, width }: { rows: RowInfo[];
 export const DragLayer = memo(function DragLayer({ project, rows, zoom }: { project: Project; rows: RowInfo[]; zoom: number }) {
   const drag = useTimelineUi((s) => (s.drag?.mode === 'move' ? s.drag : null));
   const assets = useEditor((s) => s.assets);
+  const { headerW: HEADER_W } = useDims();
   if (!drag) return null;
   const items: { clip: Clip; row: RowInfo }[] = [];
   for (const id of drag.ids) {
@@ -209,6 +248,7 @@ export const Guides = memo(function Guides({ zoom, height }: { zoom: number; hei
   const snapLine = useTimelineUi((s) => s.snapLine);
   const drop = useTimelineUi((s) => s.dropHint);
   const mq = useTimelineUi((s) => s.marquee);
+  const { headerW: HEADER_W } = useDims();
   return (
     <>
       {snapLine != null && <div className="ep-tl-snapline" style={{ transform: `translateX(${HEADER_W + snapLine * zoom}px)`, height }} />}
@@ -230,6 +270,7 @@ export const PlayheadLine = memo(function PlayheadLine({ zoom, height, scrollRef
   const playing = useEditor((s) => s.playing);
   const live = useEditor((s) => s.live.running);
   const dragging = useTimelineUi((s) => !!s.drag);
+  const { headerW: HEADER_W } = useDims();
   const last = useRef(t);
 
   useEffect(() => {
@@ -248,7 +289,67 @@ export const PlayheadLine = memo(function PlayheadLine({ zoom, height, scrollRef
       el.scrollLeft = Math.max(0, x - HEADER_W - (el.clientWidth - HEADER_W) / 2);
     }
     last.current = t;
-  }, [t, zoom, playing, live, dragging, scrollRef]);
+  }, [t, zoom, playing, live, dragging, scrollRef, HEADER_W]);
 
   return <div className={`ep-tl-pline${live ? ' smooth' : ''}`} style={{ transform: `translateX(${HEADER_W + t * zoom}px)`, height }} aria-hidden />;
+});
+
+/* ---------------- alças de toque (ponteiro grosso) ----------------
+   Fora do clipe (não cortadas pelo overflow), área de 44px centrada na borda,
+   só no(s) item(ns) selecionado(s) — no toque nada depende de hover. */
+
+const TOUCH_HIT = 44;
+
+export const TouchHandles = memo(function TouchHandles({ project, rows, zoom }: { project: Project; rows: RowInfo[]; zoom: number }) {
+  const { headerW, coarse } = useDims();
+  const selection = useEditor((s) => s.selection);
+  const captionSel = useTimelineUi((s) => s.captionSel);
+  const drag = useTimelineUi((s) => s.drag);
+  if (!coarse) return null;
+  if (drag?.mode === 'move') return null;
+  const items: { key: string; start: number; end: number; row: RowInfo; clipId?: string; capId?: string }[] = [];
+  for (const id of selection.slice(0, 8)) {
+    const f = findClip(project, id);
+    if (!f || f.track.locked || f.clip.locked) continue;
+    const row = rows.find((r) => r.id === f.track.id);
+    if (!row) continue;
+    let start = f.clip.start;
+    let end = f.clip.start + f.clip.duration;
+    if (drag && (drag.mode === 'trim-start' || drag.mode === 'trim-end') && drag.id === id) ({ start, end } = drag);
+    items.push({ key: id, start, end, row, clipId: id });
+  }
+  if (captionSel) {
+    const seg = project.captions.segments.find((s) => s.id === captionSel);
+    const row = rows.find((r) => r.id === 'captions');
+    if (seg && row) {
+      let { start, end } = seg;
+      if (drag && drag.mode.startsWith('cap') && (drag as { id: string }).id === seg.id) ({ start, end } = drag as { start: number; end: number });
+      items.push({ key: seg.id, start, end, row, capId: seg.id });
+    }
+  }
+  return (
+    <>
+      {items.flatMap((it) =>
+        (['start', 'end'] as const).map((edge) => {
+          const x = headerW + (edge === 'start' ? it.start : it.end) * zoom;
+          const h = Math.max(TOUCH_HIT, it.row.height);
+          // parte da área que invade o clipe: no máx. 1/4 da largura, p/ o miolo continuar arrastável
+          const inner = Math.max(6, Math.min(TOUCH_HIT / 2, ((it.end - it.start) * zoom) / 4));
+          const x0 = edge === 'start' ? x - (TOUCH_HIT - inner) : x - inner;
+          return (
+            <span
+              key={`${it.key}-${edge}`}
+              className={`ep-tl-thandle ${edge === 'start' ? 'l' : 'r'}`}
+              data-handle={edge}
+              {...(it.clipId ? { 'data-clip-id': it.clipId } : { 'data-cap-id': it.capId })}
+              style={{ transform: `translate(${x0}px, ${it.row.top + (it.row.height - h) / 2}px)`, width: TOUCH_HIT, height: h }}
+              aria-label={edge === 'start' ? 'Aparar início' : 'Aparar fim'}
+            >
+              <i style={{ left: (edge === 'start' ? TOUCH_HIT - inner : inner) - 5 }} />
+            </span>
+          );
+        }),
+      )}
+    </>
+  );
 });

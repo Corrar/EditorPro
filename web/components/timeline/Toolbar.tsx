@@ -1,10 +1,10 @@
 'use client';
 /* Barra de ferramentas da timeline */
-import { memo } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import { useEditor, useDuration } from '@/lib/store';
-import { useTimelineUi } from '@/lib/timeline/ui';
+import { useDims, useTimelineUi } from '@/lib/timeline/ui';
 import { formatTime } from '@/lib/util';
-import { IFit, IMagnet, IPause, IPlay, IRedo, ISplit, ITrash, IUndo, IZoomIn, IZoomOut } from './icons';
+import { ICopy, IFit, IMagnet, IMore, IPause, IPlay, IRedo, IRipple, ISplit, ITrash, IUndo, IZoomIn, IZoomOut } from './icons';
 
 export const ZMIN = 8;
 export const ZMAX = 400;
@@ -16,17 +16,60 @@ export interface ToolbarActions {
   remove: () => void;
   zoomTo: (z: number) => void;
   fit: () => void;
+  duplicate: () => void;
+  rippleRemove: () => void;
 }
 
-function TimeReadout() {
+function TimeReadout({ compact }: { compact?: boolean }) {
   const t = useEditor((s) => s.playhead);
   const fps = useEditor((s) => s.project.fps);
   const total = useDuration();
   return (
-    <div className="ep-tl-time mono" aria-label="Tempo atual e total">
+    <div className={`ep-tl-time mono${compact ? ' compact' : ''}`} aria-label="Tempo atual e total">
       <b>{formatTime(t, { fps })}</b>
-      <span>/</span>
-      <span>{formatTime(total, { fps })}</span>
+      {!compact && <span>/</span>}
+      {!compact && <span>{formatTime(total, { fps })}</span>}
+    </div>
+  );
+}
+
+/* menu "⋯" com os itens menos usados (toolbar compacta) */
+function OverflowMenu({ actions, anchor }: { actions: ToolbarActions; anchor: React.RefObject<HTMLButtonElement> }) {
+  const open = useTimelineUi((s) => s.overflowOpen);
+  const snapping = useTimelineUi((s) => s.snapping);
+  const setUi = useTimelineUi((s) => s.set);
+  const hasSel = useEditor((s) => s.selection.length > 0);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: Event) => {
+      if (e instanceof KeyboardEvent && e.key !== 'Escape') return;
+      const t = e.target as Node;
+      if (e instanceof PointerEvent && (ref.current?.contains(t) || anchor.current?.contains(t))) return;
+      setUi({ overflowOpen: false });
+    };
+    window.addEventListener('pointerdown', close, true);
+    window.addEventListener('keydown', close, true);
+    window.addEventListener('resize', close);
+    return () => {
+      window.removeEventListener('pointerdown', close, true);
+      window.removeEventListener('keydown', close, true);
+      window.removeEventListener('resize', close);
+    };
+  }, [open, setUi, anchor]);
+  if (!open || !anchor.current) return null;
+  const r = anchor.current.getBoundingClientRect();
+  const run = (fn: () => void) => () => { setUi({ overflowOpen: false }); fn(); };
+  const top = r.bottom + 6 + 230 > window.innerHeight ? Math.max(8, r.top - 6 - 230) : r.bottom + 6;
+  return (
+    <div ref={ref} className="ep-tl-menu" role="menu" style={{ top, right: Math.max(8, window.innerWidth - r.right) }}>
+      <button role="menuitemcheckbox" aria-checked={snapping} onClick={run(() => setUi({ snapping: !snapping }))}>
+        <IMagnet size={15} /> Ímã {snapping ? 'ligado' : 'desligado'}
+      </button>
+      <button role="menuitem" onClick={run(actions.fit)}><IFit size={15} /> Ajustar à tela</button>
+      <div className="ep-tl-menusep" />
+      <button role="menuitem" disabled={!hasSel} onClick={run(actions.duplicate)}><ICopy size={15} /> Duplicar</button>
+      <button role="menuitem" className="danger" disabled={!hasSel} onClick={run(actions.rippleRemove)}><IRipple size={15} /> Excluir com ripple</button>
     </div>
   );
 }
@@ -50,6 +93,38 @@ function ToolbarInner({ actions }: { actions: ToolbarActions }) {
   const zoom = useEditor((s) => s.zoom);
   const snapping = useTimelineUi((s) => s.snapping);
   const setUi = useTimelineUi((s) => s.set);
+  const overflowOpen = useTimelineUi((s) => s.overflowOpen);
+  const { compact } = useDims();
+  const moreRef = useRef<HTMLButtonElement>(null);
+
+  if (compact)
+    return (
+      <div className="ep-tl-bar compact" role="toolbar" aria-label="Ferramentas da timeline">
+        <div className="ep-tl-barscroll">
+          <PlayBtn />
+          <TimeReadout compact />
+          <span className="ep-tl-sep" />
+          <button className="ep-tl-btn" onClick={undo} disabled={!canUndo} aria-label="Desfazer"><IUndo /></button>
+          <button className="ep-tl-btn" onClick={redo} disabled={!canRedo} aria-label="Refazer"><IRedo /></button>
+          <button className="ep-tl-btn" onClick={actions.split} aria-label="Dividir no cursor"><ISplit /></button>
+          <button className="ep-tl-btn" onClick={actions.remove} disabled={!hasSel} aria-label="Excluir"><ITrash /></button>
+          <span className="ep-tl-sep" />
+          <button className="ep-tl-btn" onClick={() => actions.zoomTo(zoom / 1.4)} aria-label="Diminuir zoom"><IZoomOut /></button>
+          <button className="ep-tl-btn" onClick={() => actions.zoomTo(zoom * 1.4)} aria-label="Aumentar zoom"><IZoomIn /></button>
+        </div>
+        <button
+          ref={moreRef}
+          className={`ep-tl-btn more${overflowOpen ? ' on' : ''}`}
+          onClick={() => setUi({ overflowOpen: !overflowOpen })}
+          aria-label="Mais opções"
+          aria-haspopup="menu"
+          aria-expanded={overflowOpen}
+        >
+          <IMore />
+        </button>
+        <OverflowMenu actions={actions} anchor={moreRef} />
+      </div>
+    );
 
   return (
     <div className="ep-tl-bar" role="toolbar" aria-label="Ferramentas da timeline">

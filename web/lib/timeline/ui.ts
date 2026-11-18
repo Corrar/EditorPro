@@ -39,40 +39,64 @@ export interface TimelineUi {
   /** destaque ao arrastar mídia da biblioteca */
   dropHint: { t: Seconds; rowId?: Id } | null;
   marquee: Marquee | null;
-  menu: { x: number; y: number; clipId: Id } | null;
+  /** touch = aberto por toque longo (ignora o "soltar" do dedo logo depois) */
+  menu: { x: number; y: number; clipId: Id; touch?: boolean } | null;
   captionSel: Id | null;
+  dims: Dims;
+  /** menu "⋯" da toolbar compacta / popover de trilha compacta */
+  overflowOpen: boolean;
+  trackPop: { id: Id; x: number; y: number } | null;
   set: (patch: Partial<Omit<TimelineUi, 'set'>>) => void;
 }
 
-export const useTimelineUi = create<TimelineUi>((set) => ({
-  snapping: true,
-  scrollLeft: 0,
-  viewW: 1000,
-  drag: null,
-  snapLine: null,
-  dropHint: null,
-  marquee: null,
-  menu: null,
-  captionSel: null,
-  set: (patch) => set(patch),
-}));
+
+
+/* ---------- dimensões (dependem do contêiner e do tipo de ponteiro) ---------- */
+
+export type RowKind = TrackKind | 'captions' | 'new';
+
+export interface Dims {
+  /** contêiner estreito (< 600px): cabeçalhos viram ícones, toolbar compacta */
+  compact: boolean;
+  /** contêiner baixo (< 180px): régua simplificada */
+  short: boolean;
+  /** ponteiro grosso (toque): alvos maiores */
+  coarse: boolean;
+  headerW: number;
+  rulerH: number;
+  rowH: Record<RowKind, number>;
+}
+
+export const COMPACT_W = 600;
+export const SHORT_H = 180;
+
+export function dimsFor(width: number, height: number, coarse: boolean): Dims {
+  const compact = width > 0 && width < COMPACT_W;
+  const short = height > 0 && height < SHORT_H;
+  const k = compact || short ? 0.74 : 1;
+  const touch = coarse ? 1.08 : 1;
+  const h = (v: number) => Math.round(v * k * touch);
+  return {
+    compact,
+    short,
+    coarse,
+    headerW: compact ? 52 : 184,
+    rulerH: short ? 16 : coarse ? 34 : 30,
+    rowH: { video: h(66), text: h(38), audio: h(50), captions: h(34), new: h(34) },
+  };
+}
 
 /* ---------- layout vertical (alturas fixas => sem medir DOM) ---------- */
 
+/** valores padrão (desktop, contêiner largo) — mantidos por compatibilidade */
 export const HEADER_W = 184;
 export const RULER_H = 30;
-export const ROW_H: Record<TrackKind | 'captions' | 'new', number> = {
-  video: 66,
-  text: 38,
-  audio: 50,
-  captions: 34,
-  new: 34,
-};
+export const ROW_H: Record<RowKind, number> = dimsFor(1200, 400, false).rowH;
 export const ROW_GAP = 4;
 
 export interface RowInfo {
   id: Id; // trackId, 'captions' ou 'new'
-  kind: TrackKind | 'captions' | 'new';
+  kind: RowKind;
   track?: Track;
   top: number; // relativo ao topo da área de trilhas (abaixo da régua)
   height: number;
@@ -82,11 +106,11 @@ export interface RowInfo {
  * ordem visual: legendas no topo, depois trilhas de vídeo/texto da camada
  * mais alta para a mais baixa, depois áudio, e a faixa "nova trilha".
  */
-export function rowLayout(p: Project, withNewRow: boolean): RowInfo[] {
+export function rowLayout(p: Project, withNewRow: boolean, rowH: Record<RowKind, number> = ROW_H): RowInfo[] {
   const rows: RowInfo[] = [];
   let y = ROW_GAP;
   const push = (r: Omit<RowInfo, 'top' | 'height'>) => {
-    const height = ROW_H[r.kind];
+    const height = rowH[r.kind];
     rows.push({ ...r, top: y, height });
     y += height + ROW_GAP;
   };
@@ -108,3 +132,22 @@ export function rowAtY(rows: RowInfo[], y: number): RowInfo | undefined {
   if (rows.length && y >= rows[rows.length - 1].top) return rows[rows.length - 1];
   return undefined;
 }
+
+/* store criado no fim do módulo: depende de dimsFor/constantes acima */
+export const useTimelineUi = create<TimelineUi>((set) => ({
+  snapping: true,
+  scrollLeft: 0,
+  viewW: 1000,
+  drag: null,
+  snapLine: null,
+  dropHint: null,
+  marquee: null,
+  menu: null,
+  captionSel: null,
+  dims: dimsFor(1200, 400, false),
+  overflowOpen: false,
+  trackPop: null,
+  set: (patch) => set(patch),
+}));
+
+export const useDims = () => useTimelineUi((s) => s.dims);

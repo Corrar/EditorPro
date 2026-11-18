@@ -30,6 +30,9 @@
   font-family: var(--font-ui), 'Poppins', system-ui, sans-serif;
   user-select: none;
   -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  --tl-head: 184px;
 }
 .ep-root.dark .ep-tl {
   --tl-tick: rgba(243, 235, 228, .14);
@@ -188,7 +191,7 @@
 .ep-tl-lane.hint { box-shadow: inset 0 0 0 2px var(--green); background: var(--tintG); }
 .ep-tl-lane.hidden > * { opacity: .38; }
 .ep-tl-lane.locked { background: repeating-linear-gradient(135deg, transparent 0 6px, rgba(128, 128, 128, .08) 6px 12px), var(--tl-lane); }
-.ep-tl-lanehint { position: sticky; left: calc(184px + 12px); display: inline-flex; align-items: center; gap: 6px; height: 100%; padding-left: 12px; font-size: 11px; color: var(--muted); white-space: nowrap; pointer-events: none; }
+.ep-tl-lanehint { position: sticky; left: calc(var(--tl-head) + 12px); display: inline-flex; align-items: center; gap: 6px; height: 100%; padding-left: 12px; font-size: 11px; color: var(--muted); white-space: nowrap; pointer-events: none; }
 .ep-tl-empty {
   position: absolute; top: 50%; transform: translateY(-50%); right: 0; padding: 0 24px; text-align: center;
   font-size: 12.5px; color: var(--muted); pointer-events: none;
@@ -206,7 +209,7 @@
   border-radius: 9px; overflow: hidden; cursor: grab;
   background: var(--cb); border: 1.5px solid var(--c);
   box-shadow: 0 1px 2px rgba(0, 0, 0, .08);
-  touch-action: none;
+  touch-action: pan-x pan-y; /* no toque, clipe não selecionado deixa o dedo rolar */
   transition: box-shadow .15s, opacity .15s, filter .15s;
 }
 .ep-tl-clip.k-image { --c: var(--tl-image); }
@@ -275,7 +278,7 @@
   --c: var(--tl-cap);
   position: absolute; top: 0; left: 0; border-radius: 8px; overflow: hidden; cursor: grab;
   background: var(--tl-capBg); border: 1.5px solid color-mix(in srgb, var(--tl-cap) 55%, transparent);
-  touch-action: none; transition: box-shadow .15s;
+  touch-action: pan-x pan-y; transition: box-shadow .15s;
 }
 .ep-tl-cap.sel { border-color: var(--tl-sel); box-shadow: 0 0 0 1.5px var(--tl-sel); z-index: 2; }
 .ep-tl-cap.trimming { box-shadow: 0 0 0 2px var(--green); z-index: 3; }
@@ -310,3 +313,77 @@
 .ep-tl-menu button.danger:hover:not(:disabled) { background: var(--redTint); }
 .ep-tl-menu kbd { margin-left: auto; font-family: var(--font-ui), sans-serif; font-size: 10.5px; font-weight: 600; color: var(--faint); background: var(--chip); border: 1px solid var(--line2); border-radius: 5px; padding: 1px 5px; }
 .ep-tl-menusep { height: 1px; background: var(--line); margin: 5px 4px; }
+
+/* =====================================================================
+   Responsivo + toque
+   ===================================================================== */
+.ep-tl-clip.sel, .ep-tl-cap.sel, .ep-tl-handle { touch-action: none; }
+/* sem atraso/engolir de toque duplo nos controles */
+.ep-tl button, .ep-tl input, .ep-tl-menu button { touch-action: manipulation; }
+
+/* alças de toque (fora do clipe, 44px) — só no item selecionado */
+.ep-tl-thandle {
+  position: absolute; top: 0; left: 0; z-index: 6;
+  display: flex; align-items: center;
+  touch-action: none; cursor: ew-resize;
+}
+.ep-tl-thandle i {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 10px; height: 64%; min-height: 22px; max-height: 46px; border-radius: 6px;
+  background: var(--card); border: 2px solid var(--green);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .3);
+}
+.ep-tl-thandle i::after { content: ''; display: block; width: 2px; height: 40%; margin: 30% auto 0; border-radius: 2px; background: var(--green); }
+.ep-tl.coarse .ep-tl-clip .ep-tl-handle, .ep-tl.coarse .ep-tl-cap .ep-tl-handle { display: none; }
+
+/* cabeçalhos compactos (só ícone, toque abre opções) */
+.ep-tl-head.compact { padding: 0; justify-content: center; gap: 0; }
+.ep-tl-headic.btn { width: 36px; height: 36px; border: 0; border-radius: 11px; cursor: pointer; position: relative; transition: .14s; }
+.ep-tl-headic.btn.on { box-shadow: 0 0 0 2px var(--green); }
+.ep-tl-headic.btn.off { background: var(--redTint); color: var(--red); }
+.ep-tl-flag { position: absolute; top: 3px; right: 3px; width: 8px; height: 8px; border-radius: 50%; background: var(--red); border: 1.5px solid var(--tl-bg); }
+.ep-tl-trackpop { min-width: 210px; }
+.ep-tl-trackpop .ep-tl-rename { font-size: 14px; padding: 8px 10px; margin-bottom: 2px; border-radius: 9px; }
+.ep-tl-trackpop .ep-tl-menuhead { display: block; padding: 4px 10px 6px; }
+
+/* toolbar compacta: uma linha de ícones com rolagem interna + "⋯" */
+.ep-tl-bar.compact { display: flex; gap: 4px; padding: 0 6px 0 8px; }
+.ep-tl-barscroll {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 2px;
+  overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent);
+          mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent);
+  padding-right: 14px;
+}
+.ep-tl-barscroll::-webkit-scrollbar { display: none; }
+.ep-tl-barscroll > * { flex: none; }
+.ep-tl-barscroll .ep-tl-play { margin-right: 6px; }
+.ep-tl-btn.more { flex: none; }
+.ep-tl-time.compact b { min-width: 0; font-size: 12.5px; }
+.ep-tl.compact .ep-tl-live { margin: 4px 6px 2px; font-size: 11.5px; }
+.ep-tl.compact .ep-tl-liveprog { width: 54px; }
+.ep-tl.compact .ep-tl-live .cnt { display: none; }
+.ep-tl.compact .ep-tl-empty { font-size: 11.5px; padding: 0 12px; }
+
+/* contêiner baixo: régua simplificada, barra menor */
+.ep-tl.short .ep-tl-bar { height: 38px; }
+.ep-tl.short .ep-tl-btn { width: 30px; height: 30px; }
+.ep-tl.short .ep-tl-play { width: 28px; height: 28px; }
+.ep-tl-ruler.short .ep-tl-scale { background-size: 100% 7px; }
+.ep-tl-ruler.short .ep-tl-phead { transform-origin: 50% 100%; }
+.ep-tl.short .ep-tl-live .txt b { display: none; }
+
+/* ponteiro grosso: alvos ≥ 40–44px, nada depende de hover */
+.ep-tl.coarse .ep-tl-bar { height: 52px; }
+.ep-tl.coarse .ep-tl-btn { width: 42px; height: 42px; border-radius: 12px; }
+.ep-tl.coarse .ep-tl-play { width: 40px; height: 40px; }
+.ep-tl.coarse .ep-tl-hb { width: 32px; height: 32px; }
+.ep-tl.coarse .ep-tl-pill { padding: 10px 14px; }
+.ep-tl.coarse .ep-tl-livestop { padding: 8px 14px; }
+.ep-tl.coarse .ep-tl-zoom::-webkit-slider-thumb { width: 22px; height: 22px; }
+.ep-tl.coarse .ep-tl-clip:hover { filter: none; }
+.ep-tl-menu button { min-height: 36px; }
+@media (pointer: coarse) {
+  .ep-tl-menu button { min-height: 46px; font-size: 14px; }
+  .ep-tl-menu kbd { display: none; }
+}
