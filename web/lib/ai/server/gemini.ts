@@ -64,7 +64,7 @@ export function friendlyError(e: unknown): AIError {
 export interface GeminiFile { name: string; uri: string; mimeType: string; state?: string; sizeBytes?: string; error?: { message?: string } }
 
 /** inicia upload resumable e devolve a URL de envio (não contém a chave) */
-export async function startResumableUpload(opts: { displayName: string; mime: string; size: number }): Promise<string> {
+export async function startResumableUpload(opts: { displayName: string; mime: string; size: number; origin?: string }): Promise<string> {
   const { apiKey } = aiConfig();
   if (!apiKey) throw new AIError('IA não configurada.', 503, 'not_configured');
   const res = await fetch(`${API_BASE}/upload/v1beta/files`, {
@@ -76,6 +76,8 @@ export async function startResumableUpload(opts: { displayName: string; mime: st
       'X-Goog-Upload-Header-Content-Length': String(opts.size),
       'X-Goog-Upload-Header-Content-Type': opts.mime,
       'Content-Type': 'application/json',
+      // servidores de upload do Google só liberam CORS na sessão se a origem vier no início
+      ...(opts.origin ? { Origin: opts.origin } : {}),
     },
     body: JSON.stringify({ file: { display_name: opts.displayName.slice(0, 120) } }),
   });

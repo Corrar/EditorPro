@@ -31,7 +31,10 @@ export async function POST(req: Request) {
     const size = Number(body.size);
     if (!MIME_OK.test(mime)) throw new AIError('Tipo de arquivo não suportado pela IA.', 415, 'bad_mime');
     if (!Number.isFinite(size) || size <= 0 || size > MAX_SIZE) throw new AIError('Arquivo vazio ou maior que 2 GB.', 413, 'bad_size');
-    const uploadUrl = await startResumableUpload({ displayName: String(body.name || 'editorpro'), mime, size });
+    // origem do navegador (p/ o Google liberar CORS no envio direto); só http(s) válido
+    const originHdr = req.headers.get('origin') || '';
+    const origin = /^https?:\/\/[\w.-]+(:\d+)?$/.test(originHdr) ? originHdr : undefined;
+    const uploadUrl = await startResumableUpload({ displayName: String(body.name || 'editorpro'), mime, size, origin });
     return ok({ uploadUrl, chunkSize: PROXY_CHUNK });
   } catch (e) {
     return fail(e);
