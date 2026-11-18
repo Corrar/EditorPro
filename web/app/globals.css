@@ -202,3 +202,5 @@ html, body { height: 100%; overflow: hidden; }
 .ep-login-card button { width:100%; margin-top:16px; background:var(--green); color:#fff; font-weight:600; font-size:14px; padding:13px; border:0; border-radius:14px; cursor:pointer; box-shadow:0 6px 16px rgba(217,100,30,.25); transition:.16s; }
 .ep-login-card button:hover { background:var(--greenD); }
 .ep-login-err { color:var(--red); font-size:12.5px; margin-top:12px; min-height:16px; text-align:center; }
+.ep-installbtn { display:inline-flex; align-items:center; gap:6px; background:var(--green); color:#fff; border-color:var(--green); }
+.ep-installbtn:hover { background:var(--greenD); color:#fff; }

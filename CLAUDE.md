@@ -24,6 +24,12 @@
   `playhead/playing/zoom/selection`, `messages`, `applyLive(ops)` (edição ao vivo, 1 desfazer).
 - Mudanças no contrato só aditivas (campo opcional / op nova + teste em `ops.test.ts`).
 
+## PWA (instalável) e design
+- `web/public/manifest.webmanifest`, `web/public/sw.js` (shell offline; nunca cacheia `/api/`),
+  ícones gerados (play + ponto, no estilo da marca do Radar). `web/lib/pwa.ts` = `registerPWA()`
+  (chamado em `app/pwa-register.tsx`) + hook `useInstallPrompt()` p/ o botão "Instalar app".
+- Modelo visual: `design/radar-reference/` (cópia somente leitura do painel Radar Local).
+
 ## Módulos (cada um com dono; não editar pasta alheia)
 - Timeline: `components/timeline/**`, `lib/timeline/**`, `styles/timeline.css`
 - Engine/Preview/Export: `lib/engine/**`, `lib/export/**`, `components/preview/**`, `styles/preview.css`
