@@ -17,9 +17,10 @@ function Labels({ zoom, fps, width }: { zoom: number; fps: number; width: number
     const t = i * major;
     const x = t * zoom;
     if (x > width) break;
+    const label = formatTick(t, major, fps);
     out.push(
-      <span key={i} className="ep-tl-tick mono" style={{ transform: `translateX(${x}px)` }}>
-        {formatTick(t, major, fps)}
+      <span key={i} className={`ep-tl-tick mono${label.endsWith('f') ? ' sub' : ''}`} style={{ transform: `translateX(${x}px)` }}>
+        {label}
       </span>,
     );
   }

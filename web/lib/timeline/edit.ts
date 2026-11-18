@@ -216,7 +216,7 @@ export function formatTick(t: Seconds, step: Seconds, fps = 30): string {
   if (step >= 1 - EPS) return base;
   const f = Math.round((s - ss) * fps);
   if (f === 0 || f >= fps) return base;
-  return `${base}:${String(f).padStart(2, '0')}f`;
+  return `${f}f`;
 }
 
 /** zoom (px/s) para caber `duration` em `width` px */

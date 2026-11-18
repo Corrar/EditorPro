@@ -153,7 +153,7 @@ describe('régua e mídia', () => {
 
   it('formatTick mostra frames em passos sub-segundo', () => {
     expect(formatTick(75, 5)).toBe('1:15');
-    expect(formatTick(1.5, 0.5)).toBe('0:01:15f');
+    expect(formatTick(1.5, 0.5)).toBe('15f');
     expect(formatTick(2, 0.5)).toBe('0:02');
   });
 
