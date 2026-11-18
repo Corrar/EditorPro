@@ -47,15 +47,16 @@ renderização em servidor.
   `<Preview>` usa elementos `<video>` sincronizados + requestAnimationFrame.
 - **Export**: mesmo `renderFrame` quadro a quadro → WebCodecs/MediaRecorder (+ ffmpeg.wasm
   se precisar de MP4) e mix de áudio via OfflineAudioContext.
-- **IA**: **Gemini** (gratuito no AI Studio; entende vídeo + áudio nativamente) via rotas
-  server-side `/api/ai/*` (chave `GEMINI_API_KEY` só no servidor). Sem chave → **modo demo**
+- **IA**: **Claude (API da Anthropic, modelo `claude-opus-5-5`)** — decisão do Bruno — via rotas
+  server-side `/api/ai/*` (chave `ANTHROPIC_API_KEY` só no servidor). O Claude recebe texto e
+  imagens (não vídeo/áudio), então: o navegador amostra quadros do vídeo-exemplo (+ detecção local
+  de cortes) e o Claude devolve o `StyleProfile`; a transcrição roda **no navegador com Whisper**
+  (transformers.js, gratuito). Sem chave → **modo demo**
   com planejador heurístico local (corta silêncios por análise de áudio, título, legenda de
   exemplo), para o app funcionar e ser testável sem custo.
   - `GET  /api/ai/status` → `{configured, provider, model}`
-  - `POST /api/ai/upload` → upload ao Gemini Files API (resumable; o navegador envia direto
-    quando possível para não bater no limite de 4,5 MB da Vercel)
-  - `POST /api/ai/analyze-reference` → `StyleProfile`
-  - `POST /api/ai/transcribe` → `CaptionSegment[]` (tempo da mídia, com palavras)
+  - `POST /api/ai/analyze-reference` (quadros JPEG + métricas de corte, < 4 MB) → `StyleProfile`
+  - transcrição: local (Web Worker + Whisper), sem rota
   - `POST /api/ai/edit` → `{reply, ops}` (saída estruturada JSON, validada no servidor)
 - **Persistência**: IndexedDB (projeto + blobs de mídia), autosave.
 

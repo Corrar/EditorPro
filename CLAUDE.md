@@ -8,8 +8,10 @@
 
 ## Stack
 - `web/` — Next.js 14 (app router) + TypeScript + zustand. Vitest p/ testes.
-- IA: Gemini via rotas server-side `/api/ai/*` (`GEMINI_API_KEY` no servidor; ver
-  `web/.env.example`). Sem chave → modo demo (planejador local).
+- IA: **Claude (API da Anthropic)** via rotas server-side `/api/ai/*` (`ANTHROPIC_API_KEY` só no
+  servidor; modelo `claude-opus-5-5`; ver `web/.env.example`). Claude não recebe vídeo/áudio: o
+  navegador extrai quadros (vídeo-exemplo/material) e transcreve com Whisper local
+  (transformers.js, grátis). Sem chave → modo demo (planejador local).
 - Sem CapCut: não há API pública. Ponte com outros editores = export MP4/SRT/FCPXML.
 
 ## Contrato (NÃO quebrar)
