@@ -129,3 +129,23 @@ describe('ops — recursos estilo CapCut', () => {
     expect(p.tracks[0].id).toBe('track_audio_1');
   });
 });
+
+describe('ops — cortes ancorados em palavras', () => {
+  it('remove_words corta o trecho das palavras com ripple', () => {
+    const { p } = withClip();
+    const q = applyOp(p, {
+      op: 'set_captions',
+      segments: [{ id: 's1', start: 1, end: 6, text: 'olá né tipo pessoal', words: [
+        { id: 'w0', start: 1, end: 1.5, text: 'olá' },
+        { id: 'w1', start: 2, end: 2.4, text: 'né' },
+        { id: 'w2', start: 2.5, end: 3, text: 'tipo' },
+        { id: 'w3', start: 5, end: 6, text: 'pessoal' },
+      ] }],
+    });
+    const r = applyOp(q, { op: 'remove_words', fromWordId: 'w1', toWordId: 'w2', padding: 0 });
+    expect(projectDuration(r)).toBeCloseTo(19, 5);
+    const words = r.captions.segments[0].words!;
+    expect(words.map((w) => w.id)).toEqual(['w0', 'w3']);
+    expect(words[1].start).toBeCloseTo(4, 5);
+  });
+});
