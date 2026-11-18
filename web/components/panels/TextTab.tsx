@@ -24,7 +24,7 @@ export function textSampleStyle(s: TextStyle, scale = 0.22): React.CSSProperties
     background: s.background || 'transparent',
     padding: s.background ? '2px 8px' : 0,
     borderRadius: s.background ? 6 : 0,
-    WebkitTextStroke: s.strokeWidth ? `${Math.min(2, s.strokeWidth * 0.25)}px ${s.strokeColor ?? '#000'}` : undefined,
+    WebkitTextStroke: s.strokeWidth ? `${Math.min(3, s.strokeWidth * 0.4)}px ${s.strokeColor ?? '#000'}` : undefined,
     textShadow: s.shadow ? '0 2px 6px rgba(0,0,0,.55)' : 'none',
     textAlign: s.align,
   };

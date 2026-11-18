@@ -52,6 +52,7 @@ export function startAutosave(): () => void {
   const onUnload = () => saveSoon.flush();
   document.addEventListener('visibilitychange', onHide);
   window.addEventListener('beforeunload', onUnload);
+  saveSoon(); // grava o estado inicial (ex.: projeto recém-criado pelo wizard)
   stopFn = () => {
     saveSoon.flush();
     unsub();

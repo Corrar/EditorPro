@@ -24,7 +24,7 @@
 /* ---------- rail ---------- */
 .ep-rail { gap:6px; padding:10px 0 12px; overflow-y:auto; scrollbar-width:none; z-index:6; }
 .ep-raillogo { height:46px; display:grid; place-items:center; margin-bottom:8px; flex:none; }
-.ep-railbtn { width:60px; flex:none; display:flex; flex-direction:column; align-items:center; gap:4px; padding:9px 2px 7px; border-radius:14px; border:1px solid transparent; background:none; color:var(--sub); font:inherit; font-size:10.5px; font-weight:600; cursor:pointer; transition:.15s; }
+.ep-railbtn { width:60px; flex:none; display:flex; flex-direction:column; align-items:center; gap:4px; padding:9px 2px 7px; border-radius:14px; border:1px solid transparent; background:none; color:var(--sub); font:inherit; font-size:10px; font-weight:600; cursor:pointer; transition:.15s; }
 .ep-railbtn span { line-height:1.1; white-space:nowrap; }
 .ep-railbtn:hover { background:var(--navHover); color:var(--ink); }
 .ep-railbtn.cur:not(.active) { color:var(--green); }
@@ -63,7 +63,7 @@
 .ep-exportbtn { display:inline-flex; align-items:center; gap:7px; padding:10px 18px; white-space:nowrap; }
 
 /* ---------- painel lateral ---------- */
-.ep-side { position:relative; scrollbar-width:thin; scrollbar-color:var(--line) transparent; }
+.ep-side { position:relative; overflow-x:hidden; scrollbar-width:thin; scrollbar-color:var(--line) transparent; }
 .ep-sideclose { display:none; position:absolute; top:12px; right:12px; z-index:3; width:30px; height:30px; border-radius:9px; border:1px solid var(--line); background:var(--card); color:var(--sub); place-items:center; cursor:pointer; }
 .ep-panelhead { position:sticky; top:0; z-index:2; display:flex; align-items:center; gap:10px; padding:16px 16px 12px; background:linear-gradient(var(--card) 70%, transparent); }
 .ep-root.dark .ep-panelhead { background:linear-gradient(#211813 70%, transparent); }
@@ -77,7 +77,8 @@
 .ep-tl-resizer:hover i, .ep-tl-resizer:focus-visible i, .ep-app.resizing .ep-tl-resizer i { opacity:1; background:var(--green); }
 .ep-app.resizing .ep-timeline { border-top-color:var(--green); }
 
-/* ---------- toasts ---------- */
+/* ---------- toasts (no editor: topo central, longe do chat e da timeline) ---------- */
+.ep-app ~ .ep-toasts { right:auto; bottom:auto; top:68px; left:50%; transform:translateX(-50%); align-items:center; }
 .ep-toast.k-error { border-color:rgba(201,79,61,.35); }
 .ep-toast .ep-toastundo { color:var(--muted); font-weight:500; }
 
@@ -100,7 +101,7 @@
 .ep-wlabel { display:block; font-size:15px; font-weight:700; letter-spacing:-.01em; margin:4px 0 10px; }
 .ep-brief { min-height:108px; font-size:14.5px; }
 .ep-examples { display:flex; flex-wrap:wrap; gap:7px; margin-top:10px; }
-.ep-exchip { border:1px dashed var(--tintGBl); background:none; color:var(--sub); border-radius:999px; padding:7px 13px; font:inherit; font-size:12px; cursor:pointer; text-align:left; transition:.15s; }
+.ep-exchip { border:1px dashed var(--tintGBl); background:none; color:var(--sub); border-radius:14px; padding:7px 13px; font:inherit; font-size:12px; cursor:pointer; text-align:left; transition:.15s; }
 .ep-exchip:hover { background:var(--tintG); color:var(--tintGInk); border-style:solid; }
 
 .ep-dzrow { display:grid; grid-template-columns:1.25fr 1fr; gap:14px; }
@@ -172,7 +173,7 @@
 @media (max-width: 1100px) {
   .ep-app, .ep-app.side-closed { grid-template-columns:64px minmax(0,1fr) minmax(280px,330px); }
   .ep-railbtn { width:54px; }
-  .ep-side { display:block; position:absolute; z-index:20; left:64px; top:56px; bottom:var(--tl-h,300px); width:320px; max-width:calc(100vw - 80px); border-right:1px solid var(--line); box-shadow:18px 0 40px rgba(0,0,0,.22); animation:epDrawer .2s cubic-bezier(.2,.7,.2,1) both; }
+  .ep-side { display:block; position:absolute; grid-column:auto; grid-row:auto; z-index:20; left:64px; top:56px; bottom:0; width:330px; max-width:calc(100vw - 80px); border-right:1px solid var(--line); box-shadow:18px 0 40px rgba(0,0,0,.22); animation:epDrawer .2s cubic-bezier(.2,.7,.2,1) both; }
   .ep-app.side-closed .ep-side { display:none; }
   .ep-sideclose { display:grid; }
   .ep-panelhead { padding-right:52px; }
@@ -209,7 +210,8 @@
   .ep-app[data-pane='side'] .ep-side { display:block; }
   .ep-sideclose, .ep-tl-resizer { display:none !important; }
   .ep-panelhead { padding-right:16px; }
-  .ep-toasts { left:12px; right:12px; bottom:76px; }
+  .ep-toasts { left:12px; right:12px; bottom:20px; }
+  .ep-app ~ .ep-toasts { top:60px; left:12px; right:12px; transform:none; }
   .ep-toast { max-width:none; }
 
   .ep-hometop { padding:12px 16px; }

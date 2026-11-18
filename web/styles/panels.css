@@ -64,7 +64,7 @@
 .ep-pfield > .ep-label { display:block; margin-bottom:5px; }
 .ep-insp .ep-input, .ep-insp .ep-select, .ep-insp .ep-textarea { padding:9px 11px; font-size:12.5px; border-radius:10px; }
 .ep-ptext { min-height:76px; }
-.ep-row2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; align-items:end; }
+.ep-row2 { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; align-items:end; }
 .ep-row2.center { align-items:center; margin-top:2px; }
 .ep-chips { display:flex; flex-wrap:wrap; gap:6px; }
 .ep-chips .ep-chipbtn { padding:6px 11px; font-size:11.5px; }
@@ -74,11 +74,11 @@
 .ep-phint p { font-size:12px; margin-top:4px; line-height:1.5; }
 
 /* modelos de texto */
-.ep-tpl-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.ep-tpl-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
 .ep-tpl { border:1px solid var(--line); background:var(--box); border-radius:13px; padding:7px; display:flex; flex-direction:column; align-items:flex-start; gap:2px; font:inherit; cursor:pointer; text-align:left; transition:.15s; }
 .ep-tpl:hover { border-color:var(--green); transform:translateY(-1px); box-shadow:0 8px 18px rgba(217,100,30,.14); }
 .ep-tpl-prev { width:100%; height:54px; border-radius:9px; background:linear-gradient(135deg,#3a2a21,#120d0a); display:grid; place-items:center; overflow:hidden; margin-bottom:5px; padding:0 6px; }
-.ep-tpl-prev span { white-space:nowrap; line-height:1.15; }
+.ep-tpl-prev span { white-space:nowrap; line-height:1.15; max-width:100%; overflow:hidden; text-overflow:ellipsis; paint-order:stroke fill; }
 .ep-tpl-l { font-size:12px; font-weight:700; color:var(--ink); padding:0 3px; }
 .ep-tpl-d { font-size:10.5px; color:var(--muted); padding:0 3px 2px; }
 .ep-posgrid { display:grid; grid-template-columns:repeat(3,1fr); gap:4px; width:120px; margin-bottom:12px; background:var(--box); border:1px solid var(--line); border-radius:12px; padding:5px; }
@@ -88,12 +88,12 @@
 
 /* legendas */
 .ep-capbar { display:flex; flex-direction:column; gap:8px; padding:0 0 12px; }
-.ep-capgrid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.ep-capgrid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
 .ep-cap { border:1.5px solid var(--line); background:var(--box); border-radius:13px; padding:6px; font:inherit; cursor:pointer; display:flex; flex-direction:column; gap:5px; transition:.15s; }
 .ep-cap:hover { border-color:var(--tintGBl); }
 .ep-cap.on { border-color:var(--green); box-shadow:0 6px 16px rgba(217,100,30,.18); }
 .ep-cap-prev { height:58px; border-radius:9px; background:linear-gradient(160deg,#5b4a3f,#1d1511 70%); display:grid; place-items:center; overflow:hidden; padding:0 4px; }
-.ep-cap-prev > span { white-space:nowrap; line-height:1.15; }
+.ep-cap-prev > span { white-space:nowrap; line-height:1.15; max-width:100%; overflow:hidden; paint-order:stroke fill; }
 .ep-cap-l { font-size:11.5px; font-weight:700; color:var(--ink); text-align:left; padding:0 3px 1px; display:flex; justify-content:space-between; }
 .ep-cap.on .ep-cap-l { color:var(--green); }
 .ep-seglist { display:flex; flex-direction:column; gap:8px; max-height:420px; overflow-y:auto; padding-right:2px; scrollbar-width:thin; scrollbar-color:var(--line) transparent; }
@@ -109,7 +109,7 @@
 .ep-segdel:hover { background:var(--redTint); color:var(--red); }
 
 /* efeitos / cor */
-.ep-lutgrid { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
+.ep-lutgrid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; }
 .ep-lut { border:0; background:none; padding:0; font:inherit; cursor:pointer; display:flex; flex-direction:column; gap:4px; align-items:center; }
 .ep-lut-img { width:100%; aspect-ratio:1; border-radius:10px; background:linear-gradient(135deg,#d88a4f,#3d6f8f 60%,#2b2b2b); background-size:cover; background-position:center; border:2px solid transparent; transition:.15s; }
 .ep-lut:hover .ep-lut-img { transform:scale(1.04); }
@@ -122,7 +122,7 @@
 .ep-insp .ep-btn.primary.ep-wide { margin-bottom:12px; }
 
 /* transições */
-.ep-trgrid { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; }
+.ep-trgrid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:7px; }
 .ep-tr { border:1.5px solid var(--line); background:var(--box); border-radius:12px; padding:5px 5px 6px; font:inherit; cursor:pointer; display:flex; flex-direction:column; gap:5px; transition:.15s; }
 .ep-tr:hover { border-color:var(--tintGBl); }
 .ep-tr.on { border-color:var(--green); box-shadow:0 6px 16px rgba(217,100,30,.18); }

@@ -1,7 +1,7 @@
-export default function Logo({ word = true, onClick }: { word?: boolean; onClick?: () => void }) {
+export default function Logo({ word = true, mark = true, onClick }: { word?: boolean; mark?: boolean; onClick?: () => void }) {
   const inner = (
     <>
-      <div className="mark"><span /><i /></div>
+      {mark && <div className="mark"><span /><i /></div>}
       {word && <b>Editor<em>Pro</em></b>}
     </>
   );

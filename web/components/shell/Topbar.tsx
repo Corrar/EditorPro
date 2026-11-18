@@ -57,7 +57,7 @@ export default function Topbar({ dark, onTheme, onHome }: { dark: boolean; onThe
   return (
     <header className="ep-topbar">
       <button type="button" className="ep-iconbtn ep-homebtn" onClick={onHome} title="Meus projetos" aria-label="Meus projetos"><IconHome size={18} /></button>
-      <Logo />
+      <Logo mark={false} />
       <span className="ep-tsep" />
       <ProjectName />
       <SaveBadge />

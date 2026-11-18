@@ -14,12 +14,12 @@ function CaptionSample({ style }: { style: Partial<CaptionStyle> }) {
     fontFamily: style.fontFamily ?? 'Poppins', fontSize: style.fontSize ?? 70, fontWeight: style.fontWeight ?? 800,
     color: style.color ?? '#fff', strokeColor: style.strokeColor, strokeWidth: style.strokeWidth, background: style.background,
     shadow: style.shadow, uppercase: style.uppercase, align: 'center',
-  }, 0.2);
+  }, 0.17);
   const hl = style.highlightColor && style.highlightColor !== style.color ? style.highlightColor : undefined;
   const glow = style.preset === 'neon' ? { textShadow: `0 0 6px ${style.highlightColor}, 0 0 14px ${style.strokeColor}` } : {};
   return (
     <span style={{ ...base, ...glow }}>
-      essa é a <span style={{ color: hl ?? base.color, background: style.preset === 'karaoke' ? 'transparent' : undefined }}>legenda</span>
+      sua <span style={{ color: hl ?? base.color, background: style.preset === 'karaoke' ? 'transparent' : undefined }}>legenda</span>
     </span>
   );
 }
