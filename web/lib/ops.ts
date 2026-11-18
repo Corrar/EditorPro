@@ -6,7 +6,7 @@
    ===================================================================== */
 
 import type {
-  AspectRatio, CaptionSegment, CaptionStyle, Clip, Id, Project, Seconds, Track, TrackKind,
+  AspectRatio, CaptionSegment, CaptionStyle, Clip, Id, Marker, Project, Seconds, Track, TrackKind,
 } from './types';
 import { ASPECT_SIZES } from './types';
 import { uid } from './util';
@@ -14,7 +14,7 @@ import { uid } from './util';
 type ClipPatch = Partial<Omit<Clip, 'id' | 'type'>> & Record<string, unknown>;
 
 export type EditOp = (
-  | { op: 'set_project'; patch: Partial<Pick<Project, 'name' | 'fps' | 'background' | 'brief' | 'style' | 'referenceAssetId'>> }
+  | { op: 'set_project'; patch: Partial<Pick<Project, 'name' | 'fps' | 'background' | 'brief' | 'style' | 'referenceAssetId' | 'canvas'>> }
   | { op: 'set_aspect'; aspect: AspectRatio }
   | { op: 'add_track'; track: Omit<Track, 'clips'> & { clips?: Clip[] }; index?: number }
   | { op: 'update_track'; trackId: Id; patch: Partial<Omit<Track, 'id' | 'clips' | 'kind'>> }
@@ -35,6 +35,15 @@ export type EditOp = (
   | { op: 'update_caption'; segmentId: Id; patch: Partial<Omit<CaptionSegment, 'id'>> }
   | { op: 'set_caption_style'; style: Partial<CaptionStyle> }
   | { op: 'toggle_captions'; enabled: boolean }
+  /** duplica o clipe logo após o original (ou em `start`), na mesma trilha ou em `trackId` */
+  | { op: 'duplicate_clip'; clipId: Id; newId?: Id; start?: Seconds; trackId?: Id }
+  | { op: 'add_marker'; marker: Marker }
+  | { op: 'update_marker'; markerId: Id; patch: Partial<Omit<Marker, 'id'>> }
+  | { op: 'remove_marker'; markerId: Id }
+  /** reordena trilhas (camadas): move a trilha para o índice */
+  | { op: 'move_track'; trackId: Id; index: number }
+  /** corta as palavras de fromWordId até toWordId (ids de CaptionWord) com ripple — cortes ancorados na fala */
+  | { op: 'remove_words'; fromWordId: string; toWordId: string; padding?: Seconds }
 ) & {
   /** id único da operação (preenchido por normalizeOp se faltar) */
   id?: Id;
@@ -66,10 +75,19 @@ export function findClip(p: Project, clipId: Id): { track: Track; clip: Clip; in
 }
 
 export function trackKindFor(clip: Clip): TrackKind {
-  if (clip.type === 'audio') return 'audio';
-  if (clip.type === 'text') return 'text';
-  return 'video';
+  switch (clip.type) {
+    case 'audio': return 'audio';
+    case 'text': return 'text';
+    case 'sticker':
+    case 'shape': return 'overlay';
+    case 'adjustment': return 'effect';
+    default: return 'video';
+  }
 }
+
+export const TRACK_NAMES: Record<TrackKind, string> = {
+  video: 'Vídeo', audio: 'Áudio', text: 'Texto', overlay: 'Sobreposição', effect: 'Ajuste',
+};
 
 /** clipes ativos no tempo t (de baixo p/ cima), ignorando trilhas ocultas */
 export function clipsAt(p: Project, t: Seconds): { track: Track; clip: Clip }[] {
@@ -110,10 +128,14 @@ export function splitClipValue(c: Clip, at: Seconds, newId: Id): [Clip, Clip] | 
   if (hasSourceIn(c) && hasSourceIn(right)) right.in = c.in + leftDur * speedOf(c);
   // transição de entrada fica só no pedaço esquerdo; keyframes deslocam
   if ('transitionIn' in right) delete (right as { transitionIn?: unknown }).transitionIn;
-  if ((c.type === 'video' || c.type === 'image') && c.keyframes?.length) {
-    (left as typeof c).keyframes = c.keyframes.filter((k) => k.t <= leftDur);
-    (right as typeof c).keyframes = c.keyframes.filter((k) => k.t >= leftDur).map((k) => ({ ...k, t: k.t - leftDur }));
+  const kfs = (c as { keyframes?: import('./types').Keyframe[] }).keyframes;
+  if (kfs?.length) {
+    (left as { keyframes?: unknown }).keyframes = kfs.filter((k) => k.t <= leftDur);
+    (right as { keyframes?: unknown }).keyframes = kfs.filter((k) => k.t >= leftDur).map((k) => ({ ...k, t: k.t - leftDur }));
   }
+  // animação de saída fica só na direita; de entrada só na esquerda
+  if ('animationOut' in left) delete (left as { animationOut?: unknown }).animationOut;
+  if ('animationIn' in right) delete (right as { animationIn?: unknown }).animationIn;
   return [left, right];
 }
 
@@ -178,6 +200,21 @@ function rippleCaptions(segs: CaptionSegment[], start: Seconds, end: Seconds): C
 
 export class OpError extends Error {}
 
+/** todas as palavras das legendas, em ordem */
+export function allWords(p: Project): import('./types').CaptionWord[] {
+  return p.captions.segments.flatMap((s) => s.words ?? []);
+}
+
+/** intervalo de tempo (timeline) coberto pelas palavras fromId..toId (inclusive) */
+export function wordRange(p: Project, fromId: string, toId: string): { start: Seconds; end: Seconds } | null {
+  const words = allWords(p);
+  const a = words.findIndex((w) => w.id === fromId);
+  const b = words.findIndex((w) => w.id === toId);
+  if (a < 0 || b < 0) return null;
+  const [i, j] = a <= b ? [a, b] : [b, a];
+  return { start: words[i].start, end: words[j].end };
+}
+
 export function applyOp(p: Project, op: EditOp): Project {
   const next = applyOpInner(p, op);
   return next === p ? p : { ...next, updatedAt: Date.now() };
@@ -215,8 +252,7 @@ function applyOpInner(p: Project, op: EditOp): Project {
       if (!tracks.some((t) => t.id === op.trackId)) {
         const kind = trackKindFor(clip);
         const n = tracks.filter((t) => t.kind === kind).length + 1;
-        const names: Record<TrackKind, string> = { video: 'Vídeo', audio: 'Áudio', text: 'Texto' };
-        tracks = [...tracks, { id: op.trackId, kind, name: `${names[kind]} ${n}`, clips: [] }];
+        tracks = [...tracks, { id: op.trackId, kind, name: `${TRACK_NAMES[kind]} ${n}`, clips: [] }];
       }
       return {
         ...p,
@@ -298,9 +334,13 @@ function applyOpInner(p: Project, op: EditOp): Project {
 
     case 'ripple_delete': {
       if (op.end - op.start <= EPS) return p;
+      const gap = op.end - op.start;
       return {
         ...mapTracks(p, (t) => rippleTrack(t, op.start, op.end)),
         captions: { ...p.captions, segments: rippleCaptions(p.captions.segments, op.start, op.end) },
+        markers: p.markers
+          ?.filter((m) => !(m.t >= op.start && m.t < op.end))
+          .map((m) => (m.t >= op.end ? { ...m, t: m.t - gap } : m)),
       };
     }
 
@@ -329,6 +369,40 @@ function applyOpInner(p: Project, op: EditOp): Project {
 
     case 'toggle_captions':
       return { ...p, captions: { ...p.captions, enabled: op.enabled } };
+
+    case 'duplicate_clip': {
+      const found = findClip(p, op.clipId);
+      if (!found) throw new OpError(`clipe não encontrado: ${op.clipId}`);
+      const copy = { ...found.clip, id: op.newId ?? uid('clip'), start: op.start ?? clipEnd(found.clip) } as Clip;
+      const dest = op.trackId ?? found.track.id;
+      if (!p.tracks.some((t) => t.id === dest)) throw new OpError(`trilha não encontrada: ${dest}`);
+      return mapTracks(p, (t) => (t.id === dest ? { ...t, clips: sortClips([...t.clips, copy]) } : t));
+    }
+
+    case 'add_marker':
+      return { ...p, markers: [...(p.markers ?? []).filter((m) => m.id !== op.marker.id), op.marker].sort((a, b) => a.t - b.t) };
+
+    case 'update_marker':
+      return { ...p, markers: (p.markers ?? []).map((m) => (m.id === op.markerId ? { ...m, ...op.patch } : m)).sort((a, b) => a.t - b.t) };
+
+    case 'remove_marker':
+      return { ...p, markers: (p.markers ?? []).filter((m) => m.id !== op.markerId) };
+
+    case 'remove_words': {
+      const r = wordRange(p, op.fromWordId, op.toWordId);
+      if (!r) throw new OpError(`palavras não encontradas: ${op.fromWordId}..${op.toWordId}`);
+      const pad = op.padding ?? 0.02;
+      return applyOpInner(p, { op: 'ripple_delete', start: Math.max(0, r.start - pad), end: r.end + pad });
+    }
+
+    case 'move_track': {
+      const i = p.tracks.findIndex((t) => t.id === op.trackId);
+      if (i < 0) throw new OpError(`trilha não encontrada: ${op.trackId}`);
+      const tracks = [...p.tracks];
+      const [t] = tracks.splice(i, 1);
+      tracks.splice(Math.max(0, Math.min(op.index, tracks.length)), 0, t);
+      return { ...p, tracks };
+    }
 
     default: {
       const never: never = op;
@@ -366,6 +440,9 @@ export function opFocus(p: Project, op: EditOp): { time?: Seconds; clipId?: Id }
     case 'split_clip': return { time: op.at, clipId: op.clipId };
     case 'ripple_delete': return { time: op.start };
     case 'update_caption': { const s = p.captions.segments.find((x) => x.id === op.segmentId); return { time: s?.start }; }
+    case 'duplicate_clip': { const f = findClip(p, op.clipId); return { time: op.start ?? (f ? clipEnd(f.clip) : undefined), clipId: op.newId }; }
+    case 'add_marker': return { time: op.marker.t };
+    case 'remove_words': { const r = wordRange(p, op.fromWordId, op.toWordId); return { time: r?.start }; }
     default: return {};
   }
 }

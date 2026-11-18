@@ -43,13 +43,18 @@ export interface MediaAsset {
   /** referência do arquivo já enviado ao provedor de IA (opcional; não usado com Claude) */
   aiFileUri?: string;
   aiFileMime?: string;
+  /** batidas detectadas na música (segundos da mídia) — p/ sincronizar cortes */
+  beats?: number[];
+  /** veio da biblioteca embutida (stickers, formas, sons) e não do usuário */
+  library?: boolean;
 }
 
 /* ---------- efeitos ---------- */
 
 export type FilterKind =
   | 'brightness' | 'contrast' | 'saturation' | 'temperature'
-  | 'blur' | 'vignette' | 'grain' | 'bw' | 'sepia';
+  | 'blur' | 'vignette' | 'grain' | 'bw' | 'sepia'
+  | 'exposure' | 'highlights' | 'shadows' | 'tint' | 'hue' | 'sharpen' | 'fade';
 
 export interface Filter {
   kind: FilterKind;
@@ -62,7 +67,55 @@ export type ColorPreset = 'none' | 'cinematic' | 'warm' | 'cool' | 'vibrant' | '
 
 export type TransitionKind =
   | 'cut' | 'fade' | 'crossfade' | 'slide-left' | 'slide-right' | 'slide-up'
-  | 'zoom-in' | 'zoom-out' | 'whip' | 'glitch' | 'flash';
+  | 'zoom-in' | 'zoom-out' | 'whip' | 'glitch' | 'flash'
+  | 'slide-down' | 'dip-black' | 'dip-white' | 'blur' | 'spin' | 'wipe-left' | 'wipe-right'
+  | 'wipe-up' | 'circle-open' | 'pixelate' | 'shake' | 'rgb-split' | 'film-burn';
+
+/** efeitos visuais aplicados ao clipe (ou a uma camada de ajuste) */
+export type VisualEffectKind =
+  | 'shake' | 'glitch' | 'rgb-split' | 'zoom-pulse' | 'vhs' | 'film-grain' | 'light-leak'
+  | 'pixelate' | 'mirror' | 'kaleidoscope' | 'blur-motion' | 'flash-strobe' | 'old-film'
+  | 'vignette-pulse' | 'sparkle' | 'soft-glow' | 'neon-edge' | 'black-bars';
+
+export interface VisualEffect {
+  kind: VisualEffectKind;
+  intensity: number; // 0..1
+  speed?: number; // 0..2 (1 = normal)
+}
+
+export type BlendMode = 'normal' | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten' | 'add' | 'difference';
+
+export type MaskShape = 'rect' | 'circle' | 'heart' | 'star' | 'line' | 'mirror';
+
+export interface Mask {
+  shape: MaskShape;
+  /** centro/tamanho normalizados ao quadro */
+  x: number; y: number; w: number; h: number;
+  rotation: number;
+  feather: number; // 0..1
+  invert?: boolean;
+}
+
+export interface ChromaKey {
+  color: string; // '#00FF00'
+  similarity: number; // 0..1
+  smoothness: number; // 0..1
+}
+
+/** recorte em coordenadas normalizadas da MÍDIA (0..1) */
+export interface Crop { x: number; y: number; w: number; h: number }
+
+export type FitMode = 'cover' | 'contain' | 'fill';
+
+/** curva de velocidade (CapCut: montagem, herói, bala, flash in/out) — pontos t 0..1 relativos ao clipe */
+export interface SpeedPoint { t: number; speed: number }
+export type SpeedPreset = 'montage' | 'hero' | 'bullet' | 'jump-cut' | 'flash-in' | 'flash-out';
+
+export type AudioEffectKind =
+  | 'noise-reduction' | 'normalize' | 'voice-enhance' | 'chipmunk' | 'deep' | 'robot'
+  | 'echo' | 'reverb' | 'telephone' | 'megaphone' | 'bass-boost';
+
+export interface AudioEffect { kind: AudioEffectKind; amount: number /* 0..1 */ }
 
 export interface Transition {
   kind: TransitionKind;
@@ -101,7 +154,39 @@ interface BaseClip {
   locked?: boolean;
 }
 
-export interface VideoClip extends BaseClip {
+/** campos visuais comuns a vídeo/imagem/sticker (todos opcionais) */
+export interface VisualExtras {
+  fit?: FitMode; // padrão 'cover'
+  crop?: Crop;
+  flipH?: boolean;
+  flipV?: boolean;
+  blendMode?: BlendMode;
+  mask?: Mask;
+  chromaKey?: ChromaKey;
+  effects?: VisualEffect[];
+  /** recorta a pessoa do fundo (segmentação no navegador) */
+  removeBackground?: boolean;
+  animationIn?: { kind: ClipAnimation; duration: Seconds };
+  animationOut?: { kind: ClipAnimation; duration: Seconds };
+  animationLoop?: { kind: ClipAnimation; duration: Seconds };
+}
+
+export type ClipAnimation =
+  | 'fade' | 'zoom-in' | 'zoom-out' | 'slide-left' | 'slide-right' | 'slide-up' | 'slide-down'
+  | 'spin' | 'bounce' | 'pop' | 'shake' | 'swing' | 'blur' | 'flip';
+
+/** campos de áudio comuns a vídeo/áudio */
+export interface AudioExtras {
+  audioEffects?: AudioEffect[];
+  /** semitons (-12..12), mantendo a duração */
+  pitch?: number;
+  /** congela/reproduz ao contrário */
+  reverse?: boolean;
+  speedCurve?: SpeedPoint[];
+  speedPreset?: SpeedPreset;
+}
+
+export interface VideoClip extends BaseClip, VisualExtras, AudioExtras {
   type: 'video';
   assetId: Id;
   /** ponto de entrada na mídia de origem */
@@ -119,7 +204,7 @@ export interface VideoClip extends BaseClip {
   fadeOut?: Seconds;
 }
 
-export interface ImageClip extends BaseClip {
+export interface ImageClip extends BaseClip, VisualExtras {
   type: 'image';
   assetId: Id;
   transform: Transform;
@@ -128,7 +213,7 @@ export interface ImageClip extends BaseClip {
   transitionIn?: Transition;
 }
 
-export interface AudioClip extends BaseClip {
+export interface AudioClip extends BaseClip, AudioExtras {
   type: 'audio';
   assetId: Id;
   in: Seconds;
@@ -140,7 +225,9 @@ export interface AudioClip extends BaseClip {
   duckUnderVoice?: boolean;
 }
 
-export type TextAnimation = 'none' | 'fade' | 'pop' | 'slide-up' | 'typewriter' | 'bounce' | 'karaoke';
+export type TextAnimation =
+  | 'none' | 'fade' | 'pop' | 'slide-up' | 'typewriter' | 'bounce' | 'karaoke'
+  | 'slide-down' | 'slide-left' | 'slide-right' | 'zoom' | 'blur' | 'wave' | 'glitch' | 'flicker' | 'spin';
 
 export interface TextStyle {
   fontFamily: string;
@@ -155,6 +242,15 @@ export interface TextStyle {
   shadow?: boolean;
   uppercase?: boolean;
   align: 'left' | 'center' | 'right';
+  italic?: boolean;
+  underline?: boolean;
+  letterSpacing?: number; // em px (base 1920)
+  lineHeight?: number; // multiplicador (1.2)
+  /** gradiente no preenchimento (sobrepõe color) */
+  gradient?: { from: string; to: string; angle: number };
+  /** raio da caixa de fundo (px) */
+  backgroundRadius?: number;
+  opacity?: number;
 }
 
 export interface TextClip extends BaseClip {
@@ -164,14 +260,53 @@ export interface TextClip extends BaseClip {
   /** posição do centro do texto, normalizada 0..1 */
   position: { x: number; y: number };
   animation: TextAnimation;
+  /** animação de saída e de loop (CapCut: entrada/saída/loop) */
+  animationOut?: TextAnimation;
+  animationLoop?: TextAnimation;
+  rotation?: number;
+  scale?: number;
+  keyframes?: Keyframe[];
+  /** id do modelo de texto usado (título, CTA, lower third...) */
+  templateId?: string;
 }
 
-export type Clip = VideoClip | ImageClip | AudioClip | TextClip;
+/** stickers/emoji/GIF (asset de imagem) ou emoji desenhado direto */
+export interface StickerClip extends BaseClip, VisualExtras {
+  type: 'sticker';
+  assetId?: Id; // imagem/GIF da biblioteca ou do usuário
+  emoji?: string; // alternativa: emoji nativo
+  transform: Transform;
+  keyframes?: Keyframe[];
+}
+
+export type ShapeKind = 'rect' | 'rounded-rect' | 'circle' | 'triangle' | 'star' | 'arrow' | 'line' | 'heart' | 'speech-bubble';
+
+export interface ShapeClip extends BaseClip, VisualExtras {
+  type: 'shape';
+  shape: ShapeKind;
+  fill: string;
+  stroke?: string;
+  strokeWidth?: number;
+  cornerRadius?: number;
+  transform: Transform;
+  keyframes?: Keyframe[];
+}
+
+/** camada de ajuste: aplica filtros/efeitos a tudo que está ABAIXO dela no intervalo */
+export interface AdjustmentClip extends BaseClip {
+  type: 'adjustment';
+  filters: Filter[];
+  colorPreset?: ColorPreset;
+  effects?: VisualEffect[];
+}
+
+export type Clip = VideoClip | ImageClip | AudioClip | TextClip | StickerClip | ShapeClip | AdjustmentClip;
 export type ClipType = Clip['type'];
 
 /* ---------- trilhas ---------- */
 
-export type TrackKind = 'video' | 'audio' | 'text';
+/** overlay = stickers/formas (picture-in-picture de vídeo pode ir em trilha 'video' extra); effect = camadas de ajuste */
+export type TrackKind = 'video' | 'audio' | 'text' | 'overlay' | 'effect';
 
 export interface Track {
   id: Id;
@@ -186,6 +321,8 @@ export interface Track {
 /* ---------- legendas ---------- */
 
 export interface CaptionWord {
+  /** id estável da palavra ("w00012") — a IA ancora cortes em palavras, não em segundos */
+  id?: string;
   start: Seconds; // tempo NA TIMELINE
   end: Seconds;
   text: string;
@@ -250,6 +387,9 @@ export interface Project {
   /** o que o usuário pediu (descrição inicial) */
   brief: string;
   referenceAssetId?: Id;
+  /** fundo quando a mídia não preenche o quadro (CapCut: "Tela de fundo") */
+  canvas?: { type: 'color' | 'blur' | 'image'; color?: string; blur?: number; assetId?: Id };
+  markers?: Marker[];
   style?: StyleProfile;
   createdAt: number;
   updatedAt: number;
@@ -266,6 +406,33 @@ export interface ChatMessage {
   createdAt: number;
   /** operações aplicadas por esta mensagem (para desfazer/ver) */
   opIds?: Id[];
+  /** para onde o usuário "apontou" ao escrever (clipe, trecho, ponto do quadro, linha de legenda) */
+  context?: ChatContext;
   status?: 'pending' | 'streaming' | 'applying' | 'done' | 'error';
   attachments?: Id[]; // assetIds
+}
+
+/* ---------- marcadores / comentários de revisão ---------- */
+export interface Marker {
+  id: Id;
+  t: Seconds;
+  /** fim opcional (comentário sobre um trecho) */
+  end?: Seconds;
+  label?: string;
+  color?: string;
+  kind?: 'user' | 'beat' | 'chapter' | 'comment';
+  /** comentário de revisão: pendente até a IA aplicar */
+  resolved?: boolean;
+}
+
+/* ---------- "apontar para qualquer coisa" (contexto do chat) ---------- */
+export interface ChatContext {
+  clipIds?: Id[];
+  range?: { start: Seconds; end: Seconds };
+  /** ponto no quadro (normalizado 0..1) no tempo t */
+  point?: { x: number; y: number; t: Seconds };
+  segmentId?: Id;
+  markerId?: Id;
+  /** rótulo curto mostrado no chip acima do campo ("Clipe 2 · 0:04–0:09") */
+  label: string;
 }
