@@ -11,9 +11,11 @@ import { useEditor } from '../store';
 import { emit } from '../events';
 import { formatTime, uid } from '../util';
 import {
-  copyItems, deleteOps, detachAudioOps, duplicateOps, freezeFrameOps, mainTrackId, packOps, pasteOps, speedOps, splitOps,
+  copyItems, deleteOps, detachAudioOps, duplicateOps, mainTrackId, packOps, pasteOps, speedOps, splitOps,
 } from './edit';
 import { useTimelineUi } from './ui';
+import { captureFrame } from '../media/tools';
+import { freezeFrameOps as placeFreezeFrameOps } from '../media/place';
 import { keyframeToggleOps } from './keyframes';
 
 const toast = (text: string, kind: 'info' | 'ok' | 'error' = 'info') => emit('ep:toast', { text, kind });
@@ -111,11 +113,10 @@ export function setSpeed(speed: number, ids?: Id[]) {
 }
 
 /**
- * Congelar quadro no playhead. Precisa de uma IMAGEM do quadro (MediaAsset kind 'image'),
- * que o engine/preview captura (canvas → Blob → asset). Sem ela, avisa.
- * Uso pelo engine: `freezeFrame(assetDoQuadro)` (o asset já deve estar em store.assets).
+ * Congelar quadro no playhead: captura o quadro (lib/media captureFrame, já ingere o asset de imagem)
+ * e aplica as ops do shell (lib/media/place freezeFrameOps). Pode receber um asset de imagem pronto.
  */
-export function freezeFrame(imageAsset?: MediaAsset, opts: { clipId?: Id; hold?: Seconds } = {}) {
+export async function freezeFrame(imageAsset?: MediaAsset, opts: { clipId?: Id; hold?: Seconds } = {}) {
   const st = useEditor.getState();
   const t = st.playhead;
   const target =
@@ -125,13 +126,27 @@ export function freezeFrame(imageAsset?: MediaAsset, opts: { clipId?: Id; hold?:
       return f?.clip.type === 'video' && t > f.clip.start && t < clipEnd(f.clip);
     }) ??
     st.project.tracks.flatMap((tr) => (tr.hidden ? [] : tr.clips)).find((c) => c.type === 'video' && t > c.start && t < clipEnd(c))?.id;
-  if (!target) return toast('Posicione o cursor sobre um clipe de vídeo para congelar o quadro');
-  if (!imageAsset) return toast('Congelar quadro: aguardando a captura do quadro pelo preview', 'error');
-  if (!st.assets[imageAsset.id]) st.addAsset(imageAsset);
-  const { ops, imageId } = freezeFrameOps(st.project, target, t, imageAsset, opts.hold ?? 2);
-  if (!ops.length) return;
-  commit(ops);
-  if (imageId) st.select([imageId]);
+  const f = target ? findClip(st.project, target) : null;
+  if (!f || f.clip.type !== 'video' || t <= f.clip.start || t >= clipEnd(f.clip)) return toast('Posicione o cursor sobre um clipe de vídeo para congelar o quadro');
+  if (f.track.locked) return toast('Clipe travado — destrave a trilha');
+  const clip = f.clip;
+  try {
+    let frame = imageAsset;
+    if (!frame) {
+      const src = st.assets[clip.assetId];
+      if (!src) return toast('Mídia do clipe não encontrada', 'error');
+      toast('Capturando quadro…');
+      frame = await captureFrame(src, clip.in + (t - clip.start) * (clip.speed || 1));
+    }
+    if (!useEditor.getState().assets[frame.id]) useEditor.getState().addAsset(frame);
+    const hold = opts.hold ?? 2;
+    const ops = placeFreezeFrameOps(useEditor.getState().project, clip.id, t, frame, hold);
+    if (!ops.length) return;
+    useEditor.getState().dispatch(ops);
+    toast(`Quadro congelado por ${hold}s`, 'ok');
+  } catch (e) {
+    toast(e instanceof Error ? e.message : 'Não consegui capturar o quadro', 'error');
+  }
 }
 
 /* ---------- trilhas ---------- */

@@ -22,7 +22,9 @@ export type DragPreview =
       newTrack?: boolean;
     }
   | { mode: 'trim-start' | 'trim-end'; id: Id; start: Seconds; end: Seconds }
-  | { mode: 'cap-move' | 'cap-start' | 'cap-end'; id: Id; start: Seconds; end: Seconds };
+  | { mode: 'cap-move' | 'cap-start' | 'cap-end'; id: Id; start: Seconds; end: Seconds }
+  | { mode: 'marker'; id: Id; t: Seconds; end?: Seconds }
+  | { mode: 'keyframe'; clipId: Id; index: number; t: Seconds };
 
 export interface Marquee {
   x0: number;
@@ -41,7 +43,11 @@ export interface TimelineUi {
   dropHint: { t: Seconds; rowId?: Id } | null;
   marquee: Marquee | null;
   /** touch = aberto por toque longo (ignora o "soltar" do dedo logo depois) */
-  menu: { x: number; y: number; clipId: Id; touch?: boolean } | null;
+  menu: { x: number; y: number; clipId?: Id; capId?: Id; touch?: boolean } | null;
+  /** modo seleção de trecho na régua (toque não tem Shift) */
+  rangeMode: boolean;
+  /** trilha sob o cabeçalho arrastado (reordenar) */
+  reorderOver: Id | null;
   captionSel: Id | null;
   /** trilha principal magnética (fecha buracos na 1ª trilha de vídeo) */
   magnetic: boolean;
@@ -75,6 +81,8 @@ export type RowKind = TrackKind | 'captions' | 'new';
 export interface Dims {
   /** contêiner estreito (< 600px): cabeçalhos viram ícones, toolbar compacta */
   compact: boolean;
+  /** toolbar estreita (< 820px): barra compacta com "⋯" mesmo com cabeçalhos completos */
+  barCompact: boolean;
   /** contêiner baixo (< 180px): régua simplificada */
   short: boolean;
   /** ponteiro grosso (toque): alvos maiores */
@@ -85,6 +93,7 @@ export interface Dims {
 }
 
 export const COMPACT_W = 600;
+export const BAR_COMPACT_W = 820;
 export const SHORT_H = 180;
 
 export function dimsFor(width: number, height: number, coarse: boolean): Dims {
@@ -95,6 +104,7 @@ export function dimsFor(width: number, height: number, coarse: boolean): Dims {
   const h = (v: number) => Math.round(v * k * touch);
   return {
     compact,
+    barCompact: compact || (width > 0 && width < BAR_COMPACT_W),
     short,
     coarse,
     headerW: compact ? 52 : 184,
@@ -162,6 +172,8 @@ export const useTimelineUi = create<TimelineUi>((set) => ({
   menu: null,
   captionSel: null,
   magnetic: true,
+  rangeMode: false,
+  reorderOver: null,
   dropMode: 'insert',
   clipboard: [],
   range: null,

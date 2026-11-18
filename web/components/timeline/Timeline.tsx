@@ -20,7 +20,7 @@ import { emit } from '@/lib/events';
 import { uid } from '@/lib/util';
 import { collectSnapPoints, snapSpan, snapThreshold, snapTime } from '@/lib/timeline/snap';
 import {
-  MIN_CLIP, fitZoom, insertOps, kindForMedia, magneticInsertTime, magneticOrder, mainTrackId, overlaps, overwriteOps, packOps,
+  MIN_CLIP, fitZoom, insertOps, markerSnapPoints, kindForMedia, magneticInsertTime, magneticOrder, mainTrackId, overlaps, overwriteOps, packOps,
   placeClip, toFrame, trimBounds,
 } from '@/lib/timeline/edit';
 import {
@@ -29,9 +29,12 @@ import {
 import { type RowInfo, dimsFor, rowAtY, rowLayout, rowsHeight, useDims, useTimelineUi } from '@/lib/timeline/ui';
 import { Toolbar, ZMAX, ZMIN } from './Toolbar';
 import { Ruler } from './Ruler';
-import { DragLayer, Guides, PlayheadLine, Rows, TouchHandles } from './Rows';
+import { DragLayer, Guides, KeyframeLayer, PlayheadLine, Rows, TouchHandles } from './Rows';
 import { ClipMenu, LiveBanner, TrackPop } from './Overlays';
 import { useShortcuts } from './useShortcuts';
+import { MarkerLines, MarkerPop, RangePop } from './Markers';
+import { Minimap } from './Minimap';
+import { keyframesOf, moveKeyframeOps } from '@/lib/timeline/keyframes';
 import { assetOf } from '@/lib/timeline/clip';
 
 const ASSET_MIME = 'application/x-ep-asset';
@@ -60,7 +63,11 @@ type Gesture =
   | { kind: 'marquee'; x0: number; y0: number; moved: boolean; additive: boolean; base: Id[] }
   | { kind: 'scrub' }
   /** toque: decide no soltar (tocar = selecionar / mover playhead); se o dedo andar, o navegador rola */
-  | { kind: 'tap'; x0: number; y0: number; moved: boolean; clipId?: Id; capId?: Id };
+  | { kind: 'tap'; x0: number; y0: number; moved: boolean; clipId?: Id; capId?: Id }
+  | { kind: 'marker'; x0: number; moved: boolean; id: Id; t0: Seconds; end0?: Seconds; points: Seconds[] }
+  | { kind: 'range'; x0: number; moved: boolean; t0: Seconds; points: Seconds[] }
+  | { kind: 'kf'; x0: number; moved: boolean; clipId: Id; index: number; start: Seconds; dur: Seconds; t0: Seconds; points: Seconds[] }
+  | { kind: 'reorder'; x0: number; y0: number; moved: boolean; trackId: Id; overId?: Id };
 
 function trackLabel(kind: TrackKind, p: Project): string {
   const n = p.tracks.filter((t) => t.kind === kind).length + 1;
@@ -72,6 +79,7 @@ export default function Timeline() {
   const zoom = useEditor((s) => s.zoom);
   const showNew = useTimelineUi((s) => s.drag?.mode === 'move' || !!s.dropHint);
   const viewW = useTimelineUi((s) => s.viewW);
+  const showMinimap = useTimelineUi((s) => s.showMinimap);
   const setUi = useTimelineUi((s) => s.set);
   const dims = useDims();
   const dimsRef = useRef(dims);
@@ -121,7 +129,7 @@ export default function Timeline() {
       const r = el.getBoundingClientRect();
       const next = dimsFor(r.width, r.height, !!mq?.matches);
       const cur = useTimelineUi.getState().dims;
-      if (next.compact !== cur.compact || next.short !== cur.short || next.coarse !== cur.coarse) setUi({ dims: next });
+      if (next.compact !== cur.compact || next.barCompact !== cur.barCompact || next.short !== cur.short || next.coarse !== cur.coarse) setUi({ dims: next });
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -275,6 +283,8 @@ export default function Timeline() {
       fit,
       duplicate: () => duplicate(),
       rippleRemove: () => remove(undefined, true),
+      marker: () => openNewMarkerRef.current('user'),
+      comment: () => openNewMarkerRef.current('comment'),
     }),
     [split, remove, zoomTo, fit, duplicate],
   );
@@ -293,6 +303,8 @@ export default function Timeline() {
     keyframe: () => toggleKeyframe(),
   });
 
+  const openNewMarkerRef = useRef<(k: 'user' | 'comment') => void>(() => {});
+  openNewMarkerRef.current = (k) => openNewMarker(k);
   /** cria marcador/comentário no playhead e abre o popover para editar o texto */
   const openNewMarker = (kind: 'user' | 'comment') => {
     const id = addMarker(kind);
@@ -314,7 +326,7 @@ export default function Timeline() {
 
   const snapPts = (p: Project, exclude: Id[]) => {
     if (!useTimelineUi.getState().snapping) return [];
-    return collectSnapPoints(p, { exclude, playhead: useEditor.getState().playhead });
+    return collectSnapPoints(p, { exclude, playhead: useEditor.getState().playhead, extra: markerSnapPoints(p, useEditor.getState().assets, exclude) });
   };
 
   /* ---------------- gestos ---------------- */
@@ -340,6 +352,44 @@ export default function Timeline() {
     }
     const thr = snapThreshold(z);
     const snapOn = ui.snapping && !shift; // Shift durante o arraste desliga o ímã temporariamente
+
+    if (g.kind === 'marker') {
+      let tt = Math.max(0, g.t0 + (x - g.x0) / z);
+      let point: Seconds | undefined;
+      if (snapOn) {
+        const sn = snapTime(tt, g.points, thr);
+        if (sn.point != null) { tt = sn.t; point = sn.point; }
+      }
+      const end = g.end0 != null ? g.end0 + (tt - g.t0) : undefined;
+      ui.set({ drag: { mode: 'marker', id: g.id, t: tt, end }, snapLine: point ?? null });
+      return;
+    }
+    if (g.kind === 'range') {
+      let tt = Math.max(0, t);
+      if (ui.snapping) tt = snapTime(tt, g.points, thr).t;
+      ui.set({ range: { start: Math.min(g.t0, tt), end: Math.max(g.t0, tt) } });
+      return;
+    }
+    if (g.kind === 'kf') {
+      let tt = g.t0 + (x - g.x0) / z; // tempo global
+      let point: Seconds | undefined;
+      if (snapOn) {
+        const sn = snapTime(tt, g.points, thr);
+        if (sn.point != null) { tt = sn.t; point = sn.point; }
+      }
+      const rel = Math.max(0, Math.min(g.dur, tt - g.start));
+      ui.set({ drag: { mode: 'keyframe', clipId: g.clipId, index: g.index, t: rel }, snapLine: point ?? null });
+      return;
+    }
+    if (g.kind === 'reorder') {
+      const row = rowAtY(rowsRef.current, y);
+      const over = row?.track && row.track.id !== g.trackId ? row.track.id : undefined;
+      if (over !== g.overId) {
+        g.overId = over;
+        ui.set({ reorderOver: over ?? null });
+      }
+      return;
+    }
 
     if (g.kind === 'move') {
       const p = useEditor.getState().project;
@@ -556,6 +606,32 @@ export default function Timeline() {
       } else if (g.mode === 'cap-end' && Math.abs(d.end - seg.end) > 1e-6) {
         st.dispatch({ op: 'update_caption', segmentId: g.id, patch: { end: d.end } });
       }
+    } else if (g.kind === 'marker') {
+      if (!g.moved) {
+        const lp = lastPointer.current;
+        ui.set({ markerPop: { id: g.id, x: lp?.x ?? 0, y: (lp?.y ?? 0) + 14 } });
+        return;
+      }
+      if (drag?.mode === 'marker' && Math.abs(drag.t - g.t0) > 1e-6)
+        st.dispatch({ op: 'update_marker', markerId: g.id, patch: { t: drag.t, ...(drag.end != null ? { end: drag.end } : {}) } });
+    } else if (g.kind === 'range') {
+      const r = useTimelineUi.getState().range;
+      const lp = lastPointer.current;
+      if (!g.moved || !r || r.end - r.start < 1 / (st.project.fps || 30)) {
+        ui.set({ range: null, rangePop: null });
+        st.setPlayhead(toFrame(g.t0, st.project.fps));
+      } else ui.set({ rangePop: { x: lp?.x ?? 0, y: (lp?.y ?? 0) + 14 } });
+    } else if (g.kind === 'kf') {
+      if (!g.moved) {
+        st.setPlayhead(toFrame(g.t0, st.project.fps));
+        return;
+      }
+      if (drag?.mode === 'keyframe') st.dispatch(moveKeyframeOps(st.project, g.clipId, g.index, drag.t));
+    } else if (g.kind === 'reorder') {
+      ui.set({ reorderOver: null });
+      if (!g.moved || !g.overId) return;
+      const target = st.project.tracks.findIndex((t) => t.id === g.overId);
+      if (target >= 0) st.dispatch({ op: 'move_track', trackId: g.trackId, index: target, explain: 'Reordenando trilhas' });
     } else if (g.kind === 'tap') {
       if (g.moved) return;
       if (g.clipId) {
@@ -624,7 +700,7 @@ export default function Timeline() {
   };
 
   /** toque longo (~450 ms) no clipe abre o menu de contexto (substitui o botão direito) */
-  const startLongPress = (e: React.PointerEvent, clipId: Id) => {
+  const startLongPress = (e: React.PointerEvent, target: { clipId?: Id; capId?: Id }) => {
     cancelLongPress();
     const x = e.clientX;
     const y = e.clientY;
@@ -637,9 +713,10 @@ export default function Timeline() {
         if (g && g.kind !== 'scrub' && g.moved) return;
         endGestureRef.current(false);
         const st = useEditor.getState();
-        if (!st.selection.includes(clipId)) st.select([clipId]);
+        if (target.clipId && !st.selection.includes(target.clipId)) st.select([target.clipId]);
+        if (target.capId) setUi({ captionSel: target.capId });
         try { navigator.vibrate?.(12); } catch {}
-        setUi({ menu: { x: x + 10, y: y + 10, clipId, touch: true } });
+        setUi({ menu: { x: x + 10, y: y + 10, ...target, touch: true } });
       }, LONG_PRESS_MS),
     };
   };
@@ -650,7 +727,16 @@ export default function Timeline() {
     if (e.button !== 0 || gesture.current) return;
     if (e.pointerType === 'touch' && !e.isPrimary) return;
     const target = e.target as HTMLElement;
-    if (target.closest('.ep-tl-head')) return;
+    const headEl = target.closest<HTMLElement>('.ep-tl-head');
+    if (headEl) {
+      // arrastar o cabeçalho (fora dos botões) reordena as trilhas
+      const tid = headEl.dataset.trackId;
+      if (tid && !target.closest('button, input') && e.pointerType === 'mouse') {
+        const { x: hx, y: hy } = toLocal(e.clientX, e.clientY);
+        beginGesture({ kind: 'reorder', x0: hx, y0: hy, moved: false, trackId: tid }, e);
+      }
+      return;
+    }
     const st = useEditor.getState();
     const p = st.project;
     const { x, y } = toLocal(e.clientX, e.clientY);
@@ -660,13 +746,26 @@ export default function Timeline() {
     // toque/caneta: tocar seleciona; arrastar só move o que JÁ está selecionado (senão o dedo rola a timeline)
     const touch = e.pointerType === 'touch' || e.pointerType === 'pen';
 
+    const kfEl = target.closest<HTMLElement>('[data-kf]');
+    if (kfEl) {
+      const [cid, idx] = kfEl.dataset.kf!.split('|');
+      const f = findClip(p, cid);
+      const kf = f && keyframesOf(f.clip)[+idx];
+      if (f && kf) {
+        e.preventDefault();
+        beginGesture({ kind: 'kf', x0: x, moved: false, clipId: cid, index: +idx, start: f.clip.start, dur: f.clip.duration, t0: f.clip.start + kf.t, points: snapPts(p, []) }, e);
+        return;
+      }
+    }
+
     if (clipEl && touch && !handle && !st.selection.includes(clipEl.dataset.clipId!)) {
       beginGesture({ kind: 'tap', x0: x, y0: y, moved: false, clipId: clipEl.dataset.clipId! }, e);
-      startLongPress(e, clipEl.dataset.clipId!);
+      startLongPress(e, { clipId: clipEl.dataset.clipId! });
       return;
     }
     if (capEl && touch && !handle && useTimelineUi.getState().captionSel !== capEl.dataset.capId) {
       beginGesture({ kind: 'tap', x0: x, y0: y, moved: false, capId: capEl.dataset.capId! }, e);
+      startLongPress(e, { capId: capEl.dataset.capId! });
       return;
     }
 
@@ -675,7 +774,7 @@ export default function Timeline() {
       const f = findClip(p, id);
       if (!f) return;
       e.preventDefault();
-      if (touch && !handle) startLongPress(e, id);
+      if (touch && !handle) startLongPress(e, { clipId: id });
       setUi({ captionSel: null });
       const multi = e.shiftKey || e.metaKey || e.ctrlKey;
       const was = st.selection.includes(id);
@@ -728,6 +827,7 @@ export default function Timeline() {
       e.preventDefault();
       st.select([]);
       setUi({ captionSel: id });
+      if (touch && !handle) startLongPress(e, { capId: id });
       const seg = segs[i];
       const min = i > 0 ? Math.min(seg.start, segs[i - 1].end) : 0;
       const max = i < segs.length - 1 ? Math.max(seg.end, segs[i + 1].start) : Infinity;
@@ -762,6 +862,21 @@ export default function Timeline() {
     if (e.button !== 0) return;
     e.preventDefault();
     const st = useEditor.getState();
+    const { x: lx, t: lt } = toLocal(e.clientX, e.clientY);
+    const mkEl = (e.target as HTMLElement).closest<HTMLElement>('[data-marker-id]');
+    if (mkEl) {
+      const m = st.project.markers?.find((mm) => mm.id === mkEl.dataset.markerId);
+      if (m) {
+        beginGesture({ kind: 'marker', x0: lx, moved: false, id: m.id, t0: m.t, end0: m.end, points: snapPts(st.project, [m.id]) }, e);
+        return;
+      }
+    }
+    if (e.shiftKey || useTimelineUi.getState().rangeMode) {
+      const t0 = Math.max(0, lt);
+      setUi({ range: { start: t0, end: t0 }, rangePop: null });
+      beginGesture({ kind: 'range', x0: lx, moved: false, t0, points: snapPts(st.project, []) }, e);
+      return;
+    }
     st.setPlaying(false);
     const { t } = toLocal(e.clientX, e.clientY);
     st.setPlayhead(toFrame(Math.max(0, t), st.project.fps));
@@ -769,6 +884,12 @@ export default function Timeline() {
   };
 
   const onContextMenu = (e: React.MouseEvent) => {
+    const capEl = (e.target as HTMLElement).closest<HTMLElement>('[data-cap-id]');
+    if (capEl) {
+      e.preventDefault();
+      setUi({ captionSel: capEl.dataset.capId!, menu: { x: e.clientX, y: e.clientY, capId: capEl.dataset.capId! } });
+      return;
+    }
     const clipEl = (e.target as HTMLElement).closest<HTMLElement>('[data-clip-id]');
     if (!clipEl) return;
     e.preventDefault();
@@ -863,6 +984,7 @@ export default function Timeline() {
     >
       <Toolbar actions={toolbarActions} />
       <LiveBanner />
+      {showMinimap && !dims.short && <Minimap scrollRef={scrollRef} />}
       <div className="ep-tl-scroll" ref={scrollRef} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
         <div className="ep-tl-content" style={{ width: contentW, height: dimsRef.current.rulerH + rowsH }}>
           <Ruler zoom={zoom} width={laneW} onScrubStart={onScrubStart} />
@@ -878,6 +1000,8 @@ export default function Timeline() {
             <Guides zoom={zoom} height={rowsH} />
             <PlayheadLine zoom={zoom} height={rowsH} scrollRef={scrollRef} />
             <TouchHandles project={project} rows={rows} zoom={zoom} />
+            <KeyframeLayer project={project} rows={rows} zoom={zoom} />
+            <MarkerLines zoom={zoom} height={rowsH} headerW={dims.headerW} />
             {empty && (
               <div className="ep-tl-empty" style={{ left: hw() }}>
                 {dims.compact
@@ -889,6 +1013,8 @@ export default function Timeline() {
         </div>
       </div>
       <ClipMenu actions={menuActions} />
+      <MarkerPop />
+      <RangePop />
       <TrackPop />
     </div>
   );
