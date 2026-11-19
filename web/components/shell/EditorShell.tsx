@@ -8,7 +8,8 @@
    - ingestão via 'ep:attach-files' e por arquivos soltos na janela
    ===================================================================== */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { emit } from '@/lib/events';
+import { emit, on } from '@/lib/events';
+import { useAudioView } from '@/components/panels/AudioTab';
 import { ingestFile, ingestFiles, listenAttachFiles } from '@/lib/media/ingest';
 import { projectNameFromBrief, sequenceOps } from '@/lib/media/place';
 import { flushAutosave, openProject, resetWorkspace, restoreLastProject, startAutosave, startFromProject } from '@/lib/persist';
@@ -19,12 +20,19 @@ import type { AspectRatio } from '@/lib/types';
 import Home, { type WizardInput } from './Home';
 import MobileNav from './MobileNav';
 import MobileToolbar from './MobileToolbar';
+import AiPopupHost, { type AiPopupMode, type AiPopupBodyProps } from './AiPopupHost';
+import AiPopup from '@/components/chat/AiPopup';
+
+/* pop-up definitivo da IA (sessão de IA) no contêiner do shell */
+function AiPopupBody({ onMinimize, onOpenChat }: AiPopupBodyProps) {
+  return <AiPopup onMinimize={onMinimize} onExpand={onOpenChat} autoFocus />;
+}
 import SettingsModal from './SettingsModal';
 import Sidebar from './Sidebar';
 import Toasts from './Toasts';
 import { applySystemChrome, useTheme } from './theme';
 import Workspace from './Workspace';
-import type { ToolId } from './tools';
+import { TOOLS, type ToolId } from './tools';
 
 type View = 'loading' | 'home' | 'editor';
 const SB_KEY = 'ep_sb_min';
@@ -41,6 +49,9 @@ export default function EditorShell() {
   const [sideOpen, setSideOpen] = useState(true);
   const [chatOpen, setChatOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [aiMode, setAiModeRaw] = useState<AiPopupMode>('closed');
+  const [aiPrompt, setAiPrompt] = useState<string | undefined>();
+  const setAiMode = (m: AiPopupMode) => { if (m === 'open') setSideOpen(false); setAiModeRaw(m); };
   const [sbMin, setSbMin] = useState(false);
   const [settings, setSettings] = useState(false);
   const [focusWizard, setFocusWizard] = useState(false);
@@ -160,6 +171,25 @@ export default function EditorShell() {
     setChatOpen(open);
   };
 
+  // eventos do contrato: a timeline (e outros) pedem ferramenta / pop-up da IA
+  useEffect(() => on('ep:open-tool', ({ tool: t }) => {
+    const id = (t === 'sfx' || t === 'music' ? 'audio' : t) as ToolId;
+    if (!TOOLS.some((x) => x.id === id)) return;
+    if (t === 'sfx' || t === 'music') useAudioView.setState({ view: t });
+    if (mq('(max-width: 1099px)')) setChatOpen(false);
+    setAiModeRaw((m) => (m === 'open' ? 'min' : m));
+    setTool(id); setSideOpen(true);
+  }), []);
+  useEffect(() => on('ep:open-ai-popup', ({ prompt }) => {
+    setAiPrompt(prompt);
+    if (mq('(max-width: 899px) and (orientation: portrait)') || (mq('(max-width: 899px)') && !mq('(max-height: 520px)'))) {
+      setChatOpen(false); setSideOpen(false); setAiModeRaw('open');
+    } else {
+      if (mq('(max-width: 1099px)')) setSideOpen(false);
+      setChatOpen(true);
+    }
+  }), []);
+
   const startWizard = async (w: WizardInput) => {
     const brief = w.brief.trim() || DEFAULT_BRIEF;
     try {
@@ -243,7 +273,12 @@ export default function EditorShell() {
             {view === 'editor' && <Workspace tool={tool} sideOpen={sideOpen} onCloseSide={() => setSideOpen(false)} chatOpen={chatOpen} onChat={openChat} onHome={goHome} />}
           </div>
           <MobileNav {...nav} chatOpen={chatOpen} onChat={openChat} menuOpen={menuOpen} onMenuOpen={setMenuOpen} />
-          {view === 'editor' && !chatOpen && <MobileToolbar tool={tool} toolOpen={sideOpen} onTool={pickTool} onChat={openChat} onMenu={() => setMenuOpen(true)} />}
+          {view === 'editor' && !chatOpen && (
+            <>
+              <MobileToolbar tool={tool} toolOpen={sideOpen} onTool={(t) => { if (aiMode === 'open') setAiModeRaw('min'); pickTool(t); }} onAi={() => setAiMode('open')} onMenu={() => setMenuOpen(true)} />
+              <AiPopupHost fabHidden={sideOpen} prompt={aiPrompt} mode={aiMode} setMode={setAiMode} onOpenChat={() => openChat(true)} Body={AiPopupBody} />
+            </>
+          )}
         </div>
       )}
       {settings && <SettingsModal dark={dark} onTheme={toggleTheme} onClose={() => setSettings(false)} />}

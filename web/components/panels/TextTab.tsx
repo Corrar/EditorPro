@@ -1,5 +1,7 @@
 'use client';
 import { useEditor } from '@/lib/store';
+import Icon from '@/components/ui/Icon';
+import { AnimationPicker, FontPicker, TextTemplateGallery } from '@/components/library';
 import type { TextAnimation, TextClip, TextStyle } from '@/lib/types';
 import { formatTime } from '@/lib/util';
 import { targetTrackId } from '@/lib/media/place';
@@ -159,24 +161,28 @@ export default function TextTab() {
     // avança o playhead para depois da animação de entrada: o texto aparece já no preview
     st.setPlayhead(c.start + Math.min(0.6, c.duration / 2));
   };
+  // modelos da biblioteca: seleciona e avança o playhead para o texto aparecer já animado
+  const afterInsert = (ids: string[]) => {
+    const st = useEditor.getState();
+    const c = ids.map((id) => st.project.tracks.flatMap((t) => t.clips).find((x) => x.id === id)).find(Boolean);
+    if (!c) return;
+    select(ids);
+    st.setPlayhead(c.start + Math.min(0.6, c.duration / 2));
+  };
 
   return (
     <>
-      <Section title="Modelos prontos">
-        <div className="ep-tpl-grid">
-          {TEXT_TEMPLATES.map((t) => {
-            const sample = t.make(0);
-            return (
-              <button key={t.id} type="button" className="ep-tpl" onClick={() => addTemplate(t.id)} title={`Adicionar ${t.label} no playhead`}>
-                <span className="ep-tpl-prev"><span style={textSampleStyle(sample.style)}>{t.label}</span></span>
-                <span className="ep-tpl-l">{t.label}</span>
-                <span className="ep-tpl-d">{t.desc}</span>
-              </button>
-            );
-          })}
-        </div>
-      </Section>
-      {clip ? <TextEditor clip={clip} /> : <EmptyHint icon={<IconText />} title="Nenhum texto selecionado" text="Escolha um modelo acima ou toque em um texto na timeline para editar." />}
+      <div className="ep-textadd">
+        <button type="button" className="ep-btn primary ep-wide" onClick={() => addTemplate('plain')}><Icon name="add" size={16} /> Adicionar texto</button>
+      </div>
+      <Section title="Modelos de texto"><TextTemplateGallery onInserted={afterInsert} /></Section>
+      {clip ? (
+        <>
+          <TextEditor clip={clip} />
+          <Section title="Fontes"><FontPicker /></Section>
+          <Section title="Animações"><AnimationPicker mode="text" /></Section>
+        </>
+      ) : <EmptyHint icon={<IconText />} title="Nenhum texto selecionado" text="Escolha um modelo acima ou toque em um texto na timeline para editar." />}
     </>
   );
 }

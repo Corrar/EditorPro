@@ -65,7 +65,7 @@ describe('emojiFor', () => {
 
 describe('estilos de legenda', () => {
   it('20 presets com ids únicos e base nativa', () => {
-    expect(CAPTION_PRESETS.length).toBeGreaterThanOrEqual(20);
+    expect(CAPTION_PRESETS.length).toBeGreaterThanOrEqual(30);
     expect(new Set(CAPTION_PRESETS.map((c) => c.id)).size).toBe(CAPTION_PRESETS.length);
     for (const c of CAPTION_PRESETS) {
       expect(fontDef(c.style.fontFamily)).toBeTruthy();
@@ -257,7 +257,7 @@ describe('looks', () => {
 
 describe('efeitos sonoros', () => {
   it('catálogo com ~16 efeitos', () => {
-    expect(SFX_CATALOG.length).toBeGreaterThanOrEqual(16);
+    expect(SFX_CATALOG.length).toBeGreaterThanOrEqual(24);
   });
   for (const s of SFX_CATALOG) {
     it(`"${s.id}" gera WAV válido com a duração certa e sem silêncio/clip`, () => {
@@ -308,5 +308,22 @@ describe('catálogo p/ IA', () => {
     expect(s).toContain('lt-caixa');
     expect(s).toContain('teal-laranja');
     expect(s).toContain('whoosh');
+  });
+});
+
+import { matchesQuery, searchLibrary } from './search';
+describe('busca única', () => {
+  it('ignora acento/caixa e exige todas as palavras', () => {
+    expect(matchesQuery('legenda neon', ['Legenda', 'Néon vibrante'])).toBe(true);
+    expect(matchesQuery('neon azul', ['Neon'])).toBe(false);
+    expect(matchesQuery('', ['x'])).toBe(true);
+  });
+  it('conta resultados por aba', () => {
+    const c = searchLibrary('neon');
+    expect(c.legendas).toBeGreaterThan(0);
+    expect(c.looks).toBeGreaterThan(0);
+    expect(searchLibrary('whoosh').sons).toBe(1);
+    expect(searchLibrary('lower third').modelos).toBe(5);
+    expect(Object.values(searchLibrary('zzzqqq')).every((n) => n === 0)).toBe(true);
   });
 });

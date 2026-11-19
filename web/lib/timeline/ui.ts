@@ -85,6 +85,11 @@ export interface Dims {
   compact: boolean;
   /** toolbar estreita (< 820px): barra compacta com "⋯" mesmo com cabeçalhos completos */
   barCompact: boolean;
+  /**
+   * modo celular estilo CapCut (= compact): playhead FIXO no centro, a timeline rola por baixo.
+   * headerW vira a metade da largura (espaço antes do t=0, onde ficam "Capa" e "Editar com IA").
+   */
+  center: boolean;
   /** contêiner baixo (< 180px): régua simplificada */
   short: boolean;
   /** ponteiro grosso (toque): alvos maiores */
@@ -107,11 +112,15 @@ export function dimsFor(width: number, height: number, coarse: boolean): Dims {
   return {
     compact,
     barCompact: compact || (width > 0 && width < BAR_COMPACT_W),
+    center: compact,
     short,
     coarse,
-    headerW: compact ? 52 : 204,
+    headerW: compact ? Math.round(width / 2) : 204,
     rulerH: short ? 16 : coarse ? 34 : 30,
-    rowH: { video: h(66), text: h(38), audio: h(50), overlay: h(42), effect: h(32), captions: h(34), new: h(34) },
+    rowH: compact
+      ? // CapCut: trilha principal com tira de miniaturas grande (~56px), demais finas
+        { video: 62, text: 34, audio: 40, overlay: 36, effect: 30, captions: 30, new: 30 }
+      : { video: h(66), text: h(38), audio: h(50), overlay: h(42), effect: h(32), captions: h(34), new: h(34) },
   };
 }
 
@@ -155,10 +164,10 @@ export function rowLayout(p: Project, withNewRow: boolean, rowH: Record<RowKind,
  * no compacto, estica as alturas das trilhas para preencher a altura disponível
  * (sem sobra vazia embaixo), no máximo 1,6x.
  */
-export function fillRowHeights(rowH: Record<RowKind, number>, p: Project, available: number): Record<RowKind, number> {
+export function fillRowHeights(rowH: Record<RowKind, number>, p: Project, available: number, maxK = 1.6): Record<RowKind, number> {
   const base = rowsHeight(rowLayout(p, false, rowH));
   if (available <= 0 || base <= 0 || available <= base) return rowH;
-  const k = Math.min(1.6, available / base);
+  const k = Math.min(maxK, available / base);
   const out = { ...rowH };
   for (const key of Object.keys(out) as RowKind[]) if (key !== 'new') out[key] = Math.floor(out[key] * k);
   return out;

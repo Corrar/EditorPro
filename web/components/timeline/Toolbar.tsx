@@ -87,13 +87,24 @@ function Popover({ open, anchor, onClose, children, width = 240, role = 'menu' }
 }
 
 /** itens de configuração/ações menos usados (menu "⋯") */
-function MoreItems({ actions, close, compact }: { actions: ToolbarActions; close: () => void; compact: boolean }) {
+function MoreItems({ actions, close, compact, center }: { actions: ToolbarActions; close: () => void; compact: boolean; center?: boolean }) {
   const ui = useTimelineUi();
   const zoom = useEditor((s) => s.zoom);
   const hasSel = useEditor((s) => s.selection.length > 0);
   const run = (fn: () => void) => () => { close(); fn(); };
   return (
     <>
+      {center && (
+        <>
+          <div className="ep-tl-menuhead">Clipe no cursor</div>
+          <div className="ep-tl-speedrow" role="group" aria-label="Ações rápidas">
+            <button onClick={run(actions.split)} aria-label="Dividir no cursor" title="Dividir"><ISplit size={16} /></button>
+            <button onClick={run(() => toggleKeyframe())} disabled={!hasSel} aria-label="Keyframe no cursor" title="Keyframe"><IDiamond size={16} /></button>
+            <button onClick={run(actions.marker)} aria-label="Marcador no cursor" title="Marcador"><IFlag size={16} /></button>
+          </div>
+          <div className="ep-tl-menusep" />
+        </>
+      )}
       <div className="ep-tl-menuhead">Edição</div>
       <button role="menuitemcheckbox" aria-checked={ui.snapping} onClick={run(() => ui.set({ snapping: !ui.snapping }))}>
         <IMagnet size={15} /> Ímã (encaixe) <span className={`ep-tl-check${ui.snapping ? ' on' : ''}`} />
@@ -335,3 +346,49 @@ function ToolbarInner({ actions }: { actions: ToolbarActions }) {
 }
 
 export const Toolbar = memo(ToolbarInner);
+
+/* ---------------- modo celular (CapCut): playhead fixo, tempo e "⋯" sobre a timeline ---------------- */
+
+const mmss = (t: number) => {
+  const s = Math.max(0, Math.floor(t + 1e-6));
+  return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+};
+
+function CenterTime() {
+  const t = useEditor((s) => Math.floor(s.playhead));
+  const total = useDuration();
+  return (
+    <div className="ep-tl-ctime mono" aria-label="Tempo atual e total">
+      <b>{mmss(t)}</b>
+      <i>/</i>
+      <span>{mmss(total)}</span>
+    </div>
+  );
+}
+
+export function CenterOverlay({ actions }: { actions: ToolbarActions }) {
+  const open = useTimelineUi((s) => s.overflowOpen);
+  const setUi = useTimelineUi((s) => s.set);
+  const live = useEditor((s) => s.live.running);
+  const moreRef = useRef<HTMLButtonElement>(null);
+  const close = () => setUi({ overflowOpen: false });
+  return (
+    <>
+      <div className={`ep-tl-cline${live ? ' live' : ''}`} aria-hidden><i /></div>
+      <CenterTime />
+      <button
+        ref={moreRef}
+        className={`ep-tl-cmore${open ? ' on' : ''}`}
+        onClick={() => setUi({ overflowOpen: !open })}
+        aria-label="Mais opções da timeline"
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        <IMore size={18} />
+      </button>
+      <Popover open={open} anchor={moreRef} onClose={close} width={260}>
+        <MoreItems actions={actions} close={close} compact center />
+      </Popover>
+    </>
+  );
+}

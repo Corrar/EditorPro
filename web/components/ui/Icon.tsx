@@ -14,7 +14,7 @@ import {
   Search, SendHorizontal, Settings, Shapes, Share, Shuffle, SkipBack, SlidersHorizontal, Smartphone,
   Snowflake, Sparkles, Square, Sticker, Sun, Timer, Trash2, Type, Undo2, Upload, UserRound, Video,
   Volume2, VolumeX, Wand, WandSparkles, X, ZoomIn, ZoomOut, Flame, RectangleVertical,
-  PanelLeft, FastForward, PictureInPicture2, Wallpaper, Waves, Activity, AudioWaveform, Type as TypeIcon, Wind, ChevronsUpDown, Pencil, ArrowLeft, Replace, Rewind,
+  PanelLeft, FastForward, PictureInPicture2, Wallpaper, Waves, Activity, AudioWaveform, Type as TypeIcon, Wind, ChevronsUpDown, Pencil, ArrowLeft, Replace, Rewind, ChevronDown,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -38,7 +38,7 @@ export const ICONS = {
   marker: Bookmark, shuffle: Shuffle, loop: Repeat, rotate: RotateCw, flip: FlipHorizontal2,
   chroma: Droplet, picker: Pipette, user: UserRound, timer: Timer,
   // (aditivo, shell)
-  sidebar: PanelLeft, expand: ChevronsUpDown, rename: Pencil, arrowLeft: ArrowLeft, replace: Replace, reverse: Rewind, extend: FastForward, overlay: PictureInPicture2, background: Wallpaper, fades: Waves, beats: Activity, voicefx: AudioWaveform, font: TypeIcon, sfx: Wind,
+  sidebar: PanelLeft, expand: ChevronsUpDown, rename: Pencil, arrowLeft: ArrowLeft, replace: Replace, reverse: Rewind, extend: FastForward, overlay: PictureInPicture2, background: Wallpaper, fades: Waves, beats: Activity, voicefx: AudioWaveform, font: TypeIcon, sfx: Wind, minimize: ChevronDown,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;

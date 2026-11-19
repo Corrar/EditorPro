@@ -12,7 +12,8 @@ import { emit } from '@/lib/events';
 import type { Clip, MediaAsset, Project } from '@/lib/types';
 import { LOOKS, LOOK_CATEGORY_LABELS, detectLook, lookAdjustmentOps, lookClipOps, lookFilters, type LookCategory, type LookDef } from '@/lib/library/looks';
 import { MiniCanvas, SCENE_ASSET, drawMini, miniMedia, miniProject } from './mini';
-import { PillRow } from './shared';
+import { PillRow, Empty } from './shared';
+import { matchesQuery } from '@/lib/library/search';
 
 type Cat = LookCategory | 'todos';
 type Target = 'clip' | 'all';
@@ -60,7 +61,7 @@ function LookTile({ def, selected, frame, onPick }: { def: LookDef | null; selec
   );
 }
 
-export default function LookGallery({ onApply }: { onApply?: (lookId: string | null, intensity: number) => void }) {
+export default function LookGallery({ onApply, query }: { onApply?: (lookId: string | null, intensity: number) => void; query?: string }) {
   const [cat, setCat] = useState<Cat>('todos');
   const project = useEditor((s) => s.project);
   const assets = useEditor((s) => s.assets);
@@ -95,7 +96,7 @@ export default function LookGallery({ onApply }: { onApply?: (lookId: string | n
     }
   };
 
-  const list = LOOKS.filter((l) => cat === 'todos' || l.category === cat);
+  const list = LOOKS.filter((l) => (cat === 'todos' || l.category === cat) && matchesQuery(query, [l.name, l.description, LOOK_CATEGORY_LABELS[l.category], 'cor filtro']));
   const selectedId = mode === 'clip' ? applied?.id ?? (target && 'filters' in target && !target.filters.length ? null : undefined) : undefined;
 
   return (
@@ -115,6 +116,7 @@ export default function LookGallery({ onApply }: { onApply?: (lookId: string | n
           aria-label="Intensidade do look" />
       </label>
       <PillRow value={cat} options={CATS} onChange={setCat} label="Categorias de look" />
+      {!list.length && <Empty>Nenhum look encontrado{query ? ` para “${query}”` : ''}.</Empty>}
       <div className="ep-lib-grid sm">
         {mode === 'clip' && <LookTile def={null} selected={selectedId === null} frame={frame} onPick={() => apply(null)} />}
         {list.map((l) => <LookTile key={l.id} def={l} selected={selectedId === l.id} frame={frame} onPick={() => apply(l.id)} />)}
