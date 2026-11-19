@@ -4,9 +4,10 @@ import type { ImageClip, TransitionKind, VideoClip } from '@/lib/types';
 import { IconTransitions } from '@/components/shell/icons';
 import { EmptyHint, Section, Slider } from './controls';
 import { secs, useClipPatch, useSelectedClip } from './hooks';
-import { TRANSITIONS } from './presets';
+import { useCatalogs } from './catalog';
 
 export default function TransitionsTab() {
+  const transitions = useCatalogs((c) => c.transitions);
   const found = useSelectedClip();
   const dispatch = useEditor((s) => s.dispatch);
   const clip = found && (found.clip.type === 'video' || found.clip.type === 'image') ? (found.clip as VideoClip | ImageClip) : null;
@@ -36,7 +37,7 @@ export default function TransitionsTab() {
       <Section title="Transição de entrada">
         {isFirst && <p className="ep-pnote">Este é o primeiro clipe da trilha: a transição entra a partir do fundo.</p>}
         <div className="ep-trgrid">
-          {TRANSITIONS.map((t) => (
+          {transitions.map((t) => (
             <button key={t.kind} type="button" className={`ep-tr${current === t.kind ? ' on' : ''}`} onClick={() => apply(t.kind)} title={t.label}>
               <span className={`ep-tr-prev k-${t.kind}`}><i className="a" /><i className="b" /></span>
               <span className="ep-tr-l">{t.label}</span>
@@ -51,7 +52,7 @@ export default function TransitionsTab() {
       )}
       {found.track.clips.length > 2 && (
         <button type="button" className="ep-btn sec ep-wide" onClick={applyAll}>
-          Aplicar “{TRANSITIONS.find((t) => t.kind === current)?.label}” em todos os cortes da trilha
+          Aplicar “{transitions.find((t) => t.kind === current)?.label}” em todos os cortes da trilha
         </button>
       )}
     </>

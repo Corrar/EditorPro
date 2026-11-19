@@ -16,7 +16,7 @@ import {
 } from './icons';
 import { PROJECT_TEMPLATES } from './templates';
 import { AUDIO_ACCEPT, GALLERY_ACCEPT } from '@/components/media/pickers';
-import { TOOLS, type ToolId } from './tools';
+import { useVisibleTools, type ToolId } from './tools';
 import { applySystemChrome } from './theme';
 
 export interface WizardInput { brief: string; material: File[]; reference: File | null; aspect: AspectRatio }
@@ -324,7 +324,8 @@ export default function Home({ onStart, onEmpty, onOpen, onTemplate, onTool, onI
   }, [dark, wizard]);
 
   const ql = q.trim().toLowerCase();
-  const toolHits = useMemo(() => (ql ? TOOLS.filter((t) => t.id !== 'edit' && t.label.toLowerCase().includes(ql)) : []), [ql]);
+  const visibleTools = useVisibleTools();
+  const toolHits = useMemo(() => (ql ? visibleTools.filter((t) => t.id !== 'edit' && t.label.toLowerCase().includes(ql)) : []), [ql, visibleTools]);
 
   if (wizard) return <div className="ep-home"><Wizard onStart={onStart} onEmpty={onEmpty} onBack={() => setWizard(false)} busy={busy} focus /></div>;
 

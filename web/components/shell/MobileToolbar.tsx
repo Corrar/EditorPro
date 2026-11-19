@@ -21,12 +21,13 @@ import { uid } from '@/lib/util';
 import ToolSheet, { type SheetKind } from './ToolSheet';
 import { openMediaPicker } from '@/components/media/pickerStore';
 import { useAudioView } from '@/components/panels/AudioTab';
+import { useColorAvailable } from '@/components/panels/ColorTool';
 import type { ToolId } from './tools';
 
 interface Item { id: string; label: string; icon: IconName; run: () => void; on?: boolean; danger?: boolean; tag?: string }
 
 /** id do item da barra → data-ep-tool (cursor da IA) */
-const ITEM_TOOL: Record<string, string> = { edit: 'edit', audio: 'audio', text: 'text', effects: 'effects', captions: 'captions', filters: 'filters', adjust: 'adjust', stickers: 'stickers', templates: 'templates', format: 'formats', transitions: 'transitions', media: 'media', review: 'review' };
+const ITEM_TOOL: Record<string, string> = { color: 'color', edit: 'edit', audio: 'audio', text: 'text', effects: 'effects', captions: 'captions', filters: 'filters', adjust: 'adjust', stickers: 'stickers', templates: 'templates', format: 'formats', transitions: 'transitions', media: 'media', review: 'review' };
 
 const toast = (text: string, kind: 'ok' | 'error' | 'info' = 'info') => emit('ep:toast', { text, kind });
 
@@ -36,6 +37,7 @@ export default function MobileToolbar({ onTool, onAi, onMenu, tool, toolOpen }: 
   const selId = useEditor((s) => s.selection[0]);
   const clip = useEditor((s) => (s.selection[0] ? findClip(s.project, s.selection[0])?.clip ?? null : null));
   const select = useEditor((s) => s.select);
+  const colorOk = useColorAvailable();
   const [level2, setLevel2] = useState<string | null>(null);
   const [sheet, setSheet] = useState<SheetKind | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
@@ -98,6 +100,7 @@ export default function MobileToolbar({ onTool, onAi, onMenu, tool, toolOpen }: 
     { id: 'captions', label: 'Legendas', icon: 'captions', run: () => openPanel('captions'), on: isOn('captions') },
     { id: 'filters', label: 'Filtros', icon: 'filters', run: () => openPanel('filters'), on: isOn('filters') },
     { id: 'adjust', label: 'Ajustar', icon: 'adjust', run: () => openPanel('adjust'), on: isOn('adjust') },
+    ...(colorOk ? [{ id: 'color', label: 'Cor', icon: 'filters' as IconName, run: () => openPanel('color'), on: isOn('color') }] : []),
     { id: 'stickers', label: 'Stickers', icon: 'stickers', run: () => openPanel('stickers'), on: isOn('stickers') },
     { id: 'templates', label: 'Modelos', icon: 'templates', run: () => openPanel('templates'), on: isOn('templates'), tag: 'Novo' },
     { id: 'gen', label: 'Gerar com IA', icon: 'ai', run: () => openPanel('media'), on: isOn('media'), tag: 'IA' },
@@ -149,6 +152,7 @@ export default function MobileToolbar({ onTool, onAi, onMenu, tool, toolOpen }: 
       { id: 'fx', label: 'Efeitos', icon: 'effects', run: S('effects') },
       { id: 'flt', label: 'Filtros', icon: 'filters', run: S('filters') },
       { id: 'adj', label: 'Ajustes', icon: 'adjust', run: S('adjust') },
+      ...(colorOk ? [{ id: 'color', label: 'Cor', icon: 'filters' as IconName, run: () => openPanel('color') }] : []),
       { id: 'pos', label: 'Transformar', icon: 'fullscreen', run: S('motion') },
       { id: 'opacity', label: 'Opacidade', icon: 'show', run: S('opacity') },
       { id: 'transition', label: 'Transição', icon: 'transitions', run: () => openPanel('transitions') },
@@ -169,6 +173,7 @@ export default function MobileToolbar({ onTool, onAi, onMenu, tool, toolOpen }: 
       { id: 'fx', label: 'Efeitos', icon: 'effects', run: S('effects') },
       { id: 'flt', label: 'Filtros', icon: 'filters', run: S('filters') },
       { id: 'adj', label: 'Ajustes', icon: 'adjust', run: S('adjust') },
+      ...(colorOk ? [{ id: 'color', label: 'Cor', icon: 'filters' as IconName, run: () => openPanel('color') }] : []),
       { id: 'pos', label: 'Transformar', icon: 'fullscreen', run: S('motion') },
       { id: 'opacity', label: 'Opacidade', icon: 'show', run: S('opacity') },
       { id: 'transition', label: 'Transição', icon: 'transitions', run: () => openPanel('transitions') },
@@ -217,6 +222,7 @@ export default function MobileToolbar({ onTool, onAi, onMenu, tool, toolOpen }: 
     ],
     adjustment: [
       { id: 'adj', label: 'Ajustes', icon: 'adjust', run: S('adjust') },
+      ...(colorOk ? [{ id: 'color', label: 'Cor', icon: 'filters' as IconName, run: () => openPanel('color') }] : []),
       { id: 'flt', label: 'Filtros', icon: 'filters', run: S('filters') },
       { id: 'fx', label: 'Efeitos', icon: 'effects', run: S('effects') },
       common.dup, common.del,
