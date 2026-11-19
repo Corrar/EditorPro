@@ -149,6 +149,8 @@ export interface Keyframe {
 
 interface BaseClip {
   id: Id;
+  /** clipes de um mesmo modelo (lower third, CTA…) compartilham o groupId e se movem juntos */
+  groupId?: Id;
   /** posição na timeline */
   start: Seconds;
   /** duração NA TIMELINE (já considerando speed) */
@@ -233,7 +235,11 @@ export interface AudioClip extends BaseClip, AudioExtras {
 
 export type TextAnimation =
   | 'none' | 'fade' | 'pop' | 'slide-up' | 'typewriter' | 'bounce' | 'karaoke'
-  | 'slide-down' | 'slide-left' | 'slide-right' | 'zoom' | 'blur' | 'wave' | 'glitch' | 'flicker' | 'spin';
+  | 'slide-down' | 'slide-left' | 'slide-right' | 'zoom' | 'blur' | 'wave' | 'glitch' | 'flicker' | 'spin'
+  /* por palavra / por letra (biblioteca profissional) */
+  | 'word-pop' | 'word-fade' | 'word-slide' | 'word-bounce' | 'word-drop' | 'word-highlight'
+  | 'char-wave' | 'char-fade' | 'char-pop' | 'char-typewriter'
+  | 'scale-in' | 'blur-in' | 'stomp' | 'drop' | 'highlight-sweep' | 'underline-draw' | 'box-reveal' | 'shake';
 
 export interface TextStyle {
   fontFamily: string;
@@ -257,6 +263,14 @@ export interface TextStyle {
   /** raio da caixa de fundo (px) */
   backgroundRadius?: number;
   opacity?: number;
+  /** sombra detalhada (sobrepõe `shadow` simples) */
+  shadowColor?: string;
+  shadowBlur?: number; // px (base 1920)
+  shadowOffset?: { x: number; y: number };
+  /** brilho externo (neon) */
+  glow?: { color: string; blur: number };
+  /** padding da caixa de fundo (px, base 1920) */
+  backgroundPadding?: number;
 }
 
 export interface TextClip extends BaseClip {
@@ -344,7 +358,8 @@ export interface CaptionSegment {
   emphasis?: string[];
 }
 
-export type CaptionPreset = 'classic' | 'bold-pop' | 'karaoke' | 'minimal' | 'boxed' | 'neon';
+/** presets embutidos + ids da biblioteca (web/lib/library/captions) */
+export type CaptionPreset = 'classic' | 'bold-pop' | 'karaoke' | 'minimal' | 'boxed' | 'neon' | (string & {});
 
 export interface CaptionStyle extends TextStyle {
   preset: CaptionPreset;
@@ -352,6 +367,18 @@ export interface CaptionStyle extends TextStyle {
   animation: TextAnimation;
   /** máximo de palavras visíveis por vez (estilo TikTok = 1–3) */
   maxWords: number;
+  /** caixa atrás da PALAVRA ATIVA (estilo creator) */
+  wordBox?: { color: string; radius: number; padding: number };
+  /** escala da palavra ativa (1 = igual) */
+  activeScale?: number;
+  /** opacidade das palavras ainda não faladas (karaokê "acendendo") */
+  inactiveOpacity?: number;
+  /** emoji automático por palavra-chave (biblioteca decide o mapa) */
+  autoEmoji?: boolean;
+  /** número máximo de linhas visíveis */
+  lines?: 1 | 2;
+  /** rotação leve aleatória por bloco (estilo dinâmico), em graus */
+  jitter?: number;
 }
 
 export interface Captions {
