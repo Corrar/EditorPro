@@ -155,6 +155,67 @@ export const CAPTION_PRESETS: CaptionPresetDef[] = [
     style: { fontFamily: 'Cormorant Garamond', fontWeight: 600, fontSize: 52, color: '#F3F0E8', highlightColor: '#F3F0E8', strokeWidth: 0, uppercase: false,
       letterSpacing: 2, shadow: false, position: { x: 0.5, y: 0.93 }, maxWords: 8, lines: 2, animation: 'fade', activeScale: 1 },
   },
+  {
+    id: 'faixa-preta', name: 'Faixa preta', category: 'classico', base: 'boxed', sample: 'direto ao ponto',
+    description: 'Faixa preta sólida atrás da linha, texto branco forte.',
+    style: { fontFamily: 'Inter', fontWeight: 800, fontSize: 66, color: '#FFFFFF', highlightColor: '#FFD23F', strokeWidth: 0, uppercase: false,
+      background: '#0B0B0C', backgroundRadius: 4, backgroundPadding: 18, maxWords: 4, lines: 1, animation: 'slide-up', shadow: false, activeScale: 1.04 },
+  },
+  {
+    id: 'faixa-cor', name: 'Faixa da marca', category: 'destaque', base: 'boxed', sample: 'novidade chegando',
+    description: 'Faixa laranja com cantos levemente arredondados e palavra ativa escura.',
+    style: { fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 68, color: '#FFFFFF', highlightColor: '#141414', strokeWidth: 0, uppercase: true,
+      background: '#F2681F', backgroundRadius: 12, backgroundPadding: 16, maxWords: 3, lines: 1, animation: 'box-reveal', shadow: false, activeScale: 1.05 },
+  },
+  {
+    id: 'contorno-rosa', name: 'Contorno rosa', category: 'estilizado', base: 'bold-pop', sample: 'muito estiloso',
+    description: 'Letras brancas com contorno rosa choque grosso.',
+    style: { fontFamily: 'Poppins', fontWeight: 900, fontSize: 82, color: '#FFFFFF', highlightColor: '#FFE14D', strokeColor: '#FF2E88', strokeWidth: 10,
+      uppercase: true, activeScale: 1.14, maxWords: 2, animation: 'pop', shadow: true, shadowColor: 'rgba(0,0,0,.35)', shadowBlur: 10 },
+  },
+  {
+    id: 'contorno-azul', name: 'Contorno azul', category: 'estilizado', base: 'bold-pop', sample: 'frio e marcante',
+    description: 'Amarelo com contorno azul royal, estilo pôster.',
+    style: { fontFamily: 'Lilita One', fontWeight: 400, fontSize: 90, color: '#FFE14D', highlightColor: '#FFFFFF', strokeColor: '#1E3FFF', strokeWidth: 11,
+      uppercase: true, activeScale: 1.12, maxWords: 2, animation: 'word-bounce', shadow: false },
+  },
+  {
+    id: 'duas-linhas-cinema', name: 'Duas linhas cinema', category: 'classico', base: 'minimal', sample: 'quando a noite caiu ela voltou para casa',
+    description: 'Duas linhas pequenas e elegantes, como legenda de filme.',
+    style: { fontFamily: 'Lora', fontWeight: 500, fontSize: 54, color: '#FFFFFF', highlightColor: '#FFFFFF', strokeWidth: 0, uppercase: false,
+      shadow: true, shadowColor: 'rgba(0,0,0,.8)', shadowBlur: 8, shadowOffset: { x: 0, y: 2 }, lineHeight: 1.3, maxWords: 10, lines: 2, animation: 'fade', activeScale: 1 },
+  },
+  {
+    id: 'palavra-gigante', name: 'Palavra gigante', category: 'creator', base: 'bold-pop', sample: 'UMA POR VEZ',
+    description: 'Uma palavra por vez, enorme e batendo na tela.',
+    style: { fontFamily: 'Anton', fontWeight: 400, fontSize: 168, color: '#FFFFFF', highlightColor: '#FFFFFF', strokeColor: '#000000', strokeWidth: 10,
+      uppercase: true, maxWords: 1, lines: 1, animation: 'stomp', activeScale: 1, shadow: true, shadowColor: 'rgba(0,0,0,.6)', shadowBlur: 0, shadowOffset: { x: 0, y: 8 }, jitter: 4 },
+  },
+  {
+    id: 'quadrinhos', name: 'Quadrinhos', category: 'estilizado', base: 'boxed', sample: 'pow! que demais',
+    description: 'Fonte de HQ em caixa amarela com contorno preto.',
+    style: { fontFamily: 'Bangers', fontWeight: 400, fontSize: 84, color: '#141414', highlightColor: '#E62E2E', strokeWidth: 0, uppercase: true, letterSpacing: 2,
+      background: '#FFE14D', backgroundRadius: 6, backgroundPadding: 14, maxWords: 3, animation: 'pop', jitter: 3, shadow: false, activeScale: 1.1 },
+  },
+  {
+    id: 'pilula-vidro', name: 'Pílula de vidro', category: 'destaque', base: 'boxed', sample: 'clean e moderno',
+    description: 'Pílula translúcida escura e palavra ativa com caixa clara.',
+    style: { fontFamily: 'Outfit', fontWeight: 700, fontSize: 64, color: '#FFFFFF', highlightColor: '#141414', strokeWidth: 0, uppercase: false,
+      background: 'rgba(20,20,24,0.55)', backgroundRadius: 60, backgroundPadding: 18, wordBox: { color: '#FFFFFF', radius: 30, padding: 8 },
+      maxWords: 4, lines: 1, animation: 'fade', shadow: false, activeScale: 1 },
+  },
+  {
+    id: 'tech-mono', name: 'Tech', category: 'estilizado', base: 'neon', sample: 'sistema iniciado',
+    description: 'Mono verde com brilho, estilo terminal.',
+    style: { fontFamily: 'JetBrains Mono', fontWeight: 700, fontSize: 60, color: '#B8FFCF', highlightColor: '#39FF88', strokeWidth: 0, uppercase: true,
+      glow: { color: '#18E070', blur: 20 }, maxWords: 3, animation: 'char-typewriter', shadow: false, activeScale: 1.04 },
+  },
+  {
+    id: 'sombra-suave', name: 'Sombra suave', category: 'creator', base: 'bold-pop', sample: 'leve e legível',
+    description: 'Branco grosso com sombra difusa grande e palavra ativa pêssego.',
+    style: { fontFamily: 'Rubik', fontWeight: 800, fontSize: 78, color: '#FFFFFF', highlightColor: '#FFB38A', strokeWidth: 0, uppercase: false,
+      shadow: true, shadowColor: 'rgba(0,0,0,.7)', shadowBlur: 34, shadowOffset: { x: 0, y: 6 }, maxWords: 3, animation: 'word-slide', activeScale: 1.1 },
+  },
 ];
 
 const BY_ID = new Map(CAPTION_PRESETS.map((p) => [p.id, p]));

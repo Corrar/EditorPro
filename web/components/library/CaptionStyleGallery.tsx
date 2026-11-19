@@ -14,7 +14,8 @@ import { CAPTION_CATEGORY_LABELS, CAPTION_PRESETS, captionPresetOp, captionStyle
 import { emojiForWords } from '@/lib/library/emoji';
 import { ensureFont } from '@/lib/library/fonts';
 import { MiniCanvas, drawMini, miniProject } from './mini';
-import { PillRow } from './shared';
+import { PillRow, Empty } from './shared';
+import { matchesQuery } from '@/lib/library/search';
 
 type Cat = CaptionCategory | 'todos';
 const CATS: { id: Cat; label: string }[] = [{ id: 'todos', label: 'Todos' }, ...(Object.keys(CAPTION_CATEGORY_LABELS) as CaptionCategory[]).map((id) => ({ id, label: CAPTION_CATEGORY_LABELS[id] }))];
@@ -59,13 +60,13 @@ function PresetTile({ def, selected, onPick }: { def: CaptionPresetDef; selected
   );
 }
 
-export default function CaptionStyleGallery({ value, onSelect }: { value?: string; onSelect?: (id: string) => void }) {
+export default function CaptionStyleGallery({ value, onSelect, query }: { value?: string; onSelect?: (id: string) => void; query?: string }) {
   const [cat, setCat] = useState<Cat>('todos');
   const style = useEditor((s) => s.project.captions.style);
   const captions = useEditor((s) => s.project.captions);
   const dispatch = useEditor((s) => s.dispatch);
   const current = value ?? style.preset;
-  const list = CAPTION_PRESETS.filter((c) => cat === 'todos' || c.category === cat);
+  const list = CAPTION_PRESETS.filter((c) => (cat === 'todos' || c.category === cat) && matchesQuery(query, [c.name, c.description, c.sample, CAPTION_CATEGORY_LABELS[c.category]]));
 
   const pick = (def: CaptionPresetDef) => {
     if (onSelect) { onSelect(def.id); return; }
@@ -80,6 +81,7 @@ export default function CaptionStyleGallery({ value, onSelect }: { value?: strin
   return (
     <div className="ep-lib ep-lib-captions">
       <PillRow value={cat} options={CATS} onChange={setCat} label="Categorias de legenda" />
+      {!list.length && <Empty>Nenhum estilo encontrado{query ? ` para “${query}”` : ''}.</Empty>}
       <div className="ep-lib-grid wide">
         {list.map((d) => <PresetTile key={d.id} def={d} selected={current === d.id} onPick={pick} />)}
       </div>

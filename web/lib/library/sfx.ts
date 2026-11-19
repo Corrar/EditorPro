@@ -44,6 +44,14 @@ export const SFX_CATALOG: SfxDef[] = [
   { id: 'caixa-registradora', name: 'Caixa registradora', category: 'efeito', duration: 1, description: 'Ding de venda com mecânica.' },
   { id: 'aplausos', name: 'Aplausos', category: 'efeito', duration: 2.5, description: 'Plateia aplaudindo.', volume: 0.8 },
   { id: 'obturador', name: 'Obturador de câmera', category: 'efeito', duration: 0.3, description: 'Clique de foto.' },
+  { id: 'riser-longo', name: 'Subida longa', category: 'transicao', duration: 4.5, description: 'Tensão lenta crescendo por vários segundos.' },
+  { id: 'boom-grave', name: 'Boom de impacto', category: 'impacto', duration: 2.4, description: 'Impacto grave e longo, com cauda.' },
+  { id: 'swipe', name: 'Swipe', category: 'transicao', duration: 0.3, description: 'Deslizar de dedo na tela.' },
+  { id: 'tick-tock', name: 'Tique-taque', category: 'efeito', duration: 2, description: 'Relógio marcando os segundos.' },
+  { id: 'notificacao-suave', name: 'Notificação suave', category: 'interface', duration: 0.9, description: 'Aviso delicado e redondo.' },
+  { id: 'ding-duplo', name: 'Ding duplo', category: 'interface', duration: 1.2, description: 'Dois dings de acerto.' },
+  { id: 'glitch-curto', name: 'Glitch curto', category: 'efeito', duration: 0.2, description: 'Falha digital rapidinha.' },
+  { id: 'sino-loja', name: 'Sino de loja', category: 'efeito', duration: 1.6, description: 'Sininho de porta de loja.' },
 ];
 
 const BY_ID = new Map(SFX_CATALOG.map((s) => [s.id, s]));
@@ -278,6 +286,93 @@ const SYNTHS: Record<string, Synth> = {
     for (let i = 0; i < n; i++) {
       const t = i / sr;
       out[i] = f(noise(), 3200, 1.4).band * (clk(t, 1) + clk(t - 0.11, 0.8)) * 3 + f(noise(), 600, 1).band * (t < 0.12 ? 0.25 : 0);
+    }
+    return out;
+  },
+  'riser-longo': (n, sr) => {
+    const out = buf(n), noise = rng(91), f = svf(sr);
+    let ph1 = 0, ph2 = 0, ph3 = 0;
+    for (let i = 0; i < n; i++) {
+      const p = i / n;
+      const fr = 90 * Math.pow(10, p);
+      ph1 += (TAU * fr) / sr; ph2 += (TAU * fr * 1.005) / sr; ph3 += (TAU * fr * 0.5) / sr;
+      const saw = ((ph1 / TAU) % 1) * 2 - 1, saw2 = ((ph2 / TAU) % 1) * 2 - 1;
+      const nz = f(noise(), 250 + 8000 * p * p, 1.4).band;
+      const trem = 1 + 0.25 * Math.sin(TAU * (2 + 10 * p) * (i / sr));
+      const env = Math.pow(p, 2) * (1 - Math.pow(Math.max(0, p - 0.98) / 0.02, 2));
+      out[i] = (0.25 * (saw + saw2) + 0.3 * Math.sin(ph3) + 0.6 * nz) * env * trem;
+    }
+    return out;
+  },
+  'boom-grave': (n, sr) => {
+    const out = buf(n), noise = rng(43), f = svf(sr), f2 = svf(sr);
+    let ph = 0;
+    for (let i = 0; i < n; i++) {
+      const t = i / sr;
+      const fr = 34 + 90 * expDecay(t, 0.08);
+      ph += (TAU * fr) / sr;
+      const body = Math.sin(ph) * expDecay(t, 0.9);
+      const hit = f(noise(), 700, 0.8).low * expDecay(t, 0.08) * 2.2;
+      const tail = f2(noise(), 180, 0.7).low * expDecay(t, 0.7) * 1.5;
+      out[i] = Math.tanh((body + hit + tail) * 1.8) * attack(t, 0.001);
+    }
+    return out;
+  },
+  swipe: (n, sr) => {
+    const out = buf(n), noise = rng(29), f = svf(sr);
+    for (let i = 0; i < n; i++) {
+      const p = i / n;
+      const env = Math.sin(Math.PI * p) ** 2;
+      out[i] = f(noise(), 1500 + 9000 * Math.pow(p, 1.5), 3).band * env * 2;
+    }
+    return out;
+  },
+  'tick-tock': (n, sr) => {
+    const out = buf(n), noise = rng(83), f = svf(sr);
+    for (let i = 0; i < n; i++) {
+      const t = i / sr;
+      const k = Math.floor(t / 0.5), d = t - k * 0.5;
+      const fr = k % 2 === 0 ? 3200 : 2300;
+      const nz = f(noise(), fr, 6).band;
+      out[i] = d < 0.04 ? (nz * 2 + Math.sin(TAU * fr * d) * 0.6) * expDecay(d, 0.006) : nz * 0;
+    }
+    return out;
+  },
+  'notificacao-suave': (n, sr) => {
+    const out = buf(n);
+    const tone = (t: number, fr: number) => (t < 0 ? 0 : (Math.sin(TAU * fr * t) + 0.15 * Math.sin(TAU * fr * 3 * t)) * expDecay(t, 0.22) * attack(t, 0.012));
+    for (let i = 0; i < n; i++) {
+      const t = i / sr;
+      out[i] = 0.5 * (tone(t, 659) + tone(t - 0.12, 880) * 0.8);
+    }
+    return out;
+  },
+  'ding-duplo': (n, sr) => {
+    const out = buf(n);
+    const ding = (t: number, fr: number) => (t < 0 ? 0 : (Math.sin(TAU * fr * t) * 0.6 + Math.sin(TAU * fr * 2 * t) * 0.25 * expDecay(t, 0.1)) * expDecay(t, 0.28) * attack(t, 0.002));
+    for (let i = 0; i < n; i++) {
+      const t = i / sr;
+      out[i] = ding(t, 1568) + ding(t - 0.16, 2093);
+    }
+    return out;
+  },
+  'glitch-curto': (n, sr) => {
+    const out = buf(n), noise = rng(7), pick = rng(19);
+    const block = Math.round(sr * 0.015);
+    let mode = 0, fr = 800, ph = 0;
+    for (let i = 0; i < n; i++) {
+      if (i % block === 0) { mode = Math.floor((pick() + 1) * 1.5); fr = 300 + Math.abs(pick()) * 3000; }
+      ph += (TAU * fr) / sr;
+      out[i] = (mode === 0 ? noise() : mode === 1 ? Math.sign(Math.sin(ph)) : Math.round(Math.sin(ph) * 2) / 2) * 0.6;
+    }
+    return out;
+  },
+  'sino-loja': (n, sr) => {
+    const out = buf(n);
+    const bell = (t: number, fr: number, a: number) => (t < 0 ? 0 : (Math.sin(TAU * fr * t) + 0.5 * Math.sin(TAU * fr * 2.76 * t) * expDecay(t, 0.2) + 0.3 * Math.sin(TAU * fr * 5.4 * t) * expDecay(t, 0.1)) * a * expDecay(t, 0.45) * attack(t, 0.002));
+    for (let i = 0; i < n; i++) {
+      const t = i / sr;
+      out[i] = bell(t, 2349, 0.5) + bell(t - 0.09, 2637, 0.4) + bell(t - 0.2, 2349, 0.3) + bell(t - 0.33, 2794, 0.2);
     }
     return out;
   },

@@ -118,3 +118,8 @@
   .ep-lib-card, .ep-lib-pill { transition:none; }
   .ep-lib-spin { animation-duration:2s; }
 }
+
+/* busca única do hub */
+.ep-lib-count { min-width:22px; height:22px; padding:0 7px; border-radius:999px; background:var(--card); color:var(--ink); font-size:12px; font-weight:800; display:inline-grid; place-items:center; }
+.ep-lib-tabs .ep-pill2.on .ep-lib-count { background:rgba(255,255,255,.25); color:#fff; }
+.ep-lib-tabs .ep-pill2.dim { opacity:.5; }

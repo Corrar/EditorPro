@@ -39,7 +39,7 @@ function FontRow({ f, selected, sample, onPick }: { f: FontDef; selected: boolea
   );
 }
 
-export default function FontPicker({ value, onChange, sample: sampleProp }: { value?: string; onChange?: (family: string, weight: number) => void; sample?: string }) {
+export default function FontPicker({ value, onChange, sample: sampleProp, query }: { value?: string; onChange?: (family: string, weight: number) => void; sample?: string; query?: string }) {
   const [q, setQ] = useState('');
   const [cat, setCat] = useState<Cat>('todas');
   const selection = useEditor((s) => s.selection);
@@ -54,7 +54,8 @@ export default function FontPicker({ value, onChange, sample: sampleProp }: { va
   const current = value ?? (target === 'texts' ? selectedTexts[0]?.style.fontFamily : project.captions.style.fontFamily);
   const sample = sampleProp ?? (target === 'texts' ? selectedTexts[0]?.text.split('\n')[0].slice(0, 22) : '') ?? '';
 
-  const list = useMemo(() => searchFonts(q, cat), [q, cat]);
+  const effQ = query ?? q;
+  const list = useMemo(() => searchFonts(effQ, cat), [effQ, cat]);
 
   const pick = (f: FontDef) => {
     if (onChange) { onChange(f.family, f.display); return; }
@@ -73,7 +74,7 @@ export default function FontPicker({ value, onChange, sample: sampleProp }: { va
 
   return (
     <div className="ep-lib ep-lib-fonts">
-      <SearchPill value={q} onChange={setQ} placeholder="Buscar fonte" />
+      {query === undefined && <SearchPill value={q} onChange={setQ} placeholder="Buscar fonte" />}
       <PillRow value={cat} options={CATS} onChange={setCat} label="Categorias de fonte" />
       {target !== 'custom' && (
         <div className="ep-lib-target">Aplicando em: <b>{target === 'texts' ? (selectedTexts.length > 1 ? `${selectedTexts.length} textos` : 'texto selecionado') : 'legendas'}</b></div>

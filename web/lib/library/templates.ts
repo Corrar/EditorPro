@@ -30,10 +30,10 @@ export interface BrandColors {
 export const DEFAULT_BRAND: BrandColors = { primary: '#F2681F', secondary: '#FFD23F', text: '#FFFFFF', dark: '#141414' };
 
 export type TemplateKind = 'texto' | 'motion';
-export type TemplateCategory = 'titulo' | 'texto' | 'lower-third' | 'cta' | 'info' | 'marca';
+export type TemplateCategory = 'titulo' | 'texto' | 'lower-third' | 'cta' | 'engajamento' | 'info' | 'marca';
 
 export const TEMPLATE_CATEGORY_LABELS: Record<TemplateCategory, string> = {
-  titulo: 'Títulos', texto: 'Textos', 'lower-third': 'Lower thirds', cta: 'Chamadas (CTA)', info: 'Informação', marca: 'Marca',
+  titulo: 'Títulos', texto: 'Textos', 'lower-third': 'Lower thirds', cta: 'Chamadas (CTA)', engajamento: 'Engajamento', info: 'Informação', marca: 'Marca',
 };
 
 export interface TemplateParam {
@@ -605,6 +605,192 @@ export const TEMPLATES: TemplateDef[] = [
       return [
         { kind: 'shape', shape: 'circle', fill: f.brand.primary, opacity: 0.75, box: { cx: right - w - 0.012 - dotW / 2, cy: y, w: dotW, h: dot }, animIn: 'fade', label: 'Marca' },
         { kind: 'text', text: v.texto, style: st, x: right - w / 2, y, animation: 'fade', label: 'Marca d’água' },
+      ];
+    },
+  },
+
+  /* ===== pacote 2 ===== */
+  {
+    id: 'contagem-321', name: 'Contagem 3-2-1 (flash)', kind: 'motion', category: 'info', duration: 3,
+    description: 'Números gigantes em círculos coloridos que estouram a cada segundo.',
+    params: [N('de', 'Começar de', 3)],
+    build: (v, f) => {
+      const n = Math.max(1, Math.min(9, Math.round(Number(v.de) || 3)));
+      const step = f.dur / n;
+      const colors = [f.brand.primary, f.brand.secondary, '#FFFFFF'];
+      const d = 0.5 * f.short;
+      const pieces: Piece[] = [];
+      for (let i = 0; i < n; i++) {
+        const fill = colors[i % colors.length];
+        pieces.push({ kind: 'shape', shape: 'circle', fill, box: { cx: 0.5, cy: 0.5, w: d / f.W, h: d / f.H }, t0: i * step, dur: step, animIn: 'zoom-out', animInDur: 0.25, animOut: 'zoom-in' });
+        pieces.push({ kind: 'text', text: String(n - i), x: 0.5, y: 0.5, t0: i * step, dur: step, animation: 'stomp', animationOut: 'fade',
+          style: ts({ fontFamily: 'Anton', fontWeight: 400, fontSize: 340, color: fill === '#FFFFFF' || fill === f.brand.secondary ? f.brand.dark : '#FFFFFF' }) });
+      }
+      return pieces;
+    },
+  },
+  {
+    id: 'antes-depois-divisoria', name: 'Antes / depois · divisória', kind: 'motion', category: 'info', duration: 4,
+    description: 'Divisória com botão de setas no meio e etiquetas nas metades.',
+    params: [P('antes', 'Etiqueta 1', 'ANTES'), P('depois', 'Etiqueta 2', 'DEPOIS')],
+    build: (v, f) => {
+      const tag = ts({ fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 44, color: '#FFFFFF', uppercase: true, letterSpacing: 4, shadowColor: 'rgba(0,0,0,.6)', shadowBlur: 12 });
+      const knob = 0.11 * f.short;
+      const vert = !f.portrait;
+      return [
+        { kind: 'shape', shape: 'line', fill: '#FFFFFF', box: vert ? { cx: 0.5, cy: 0.5, w: 0.006, h: 1.3 } : { cx: 0.5, cy: 0.5, w: 1.3, h: 0.004 }, animIn: vert ? 'slide-down' : 'slide-right', animOut: 'fade' },
+        { kind: 'shape', shape: 'circle', fill: '#FFFFFF', box: { cx: 0.5, cy: 0.5, w: knob / f.W, h: knob / f.H }, t0: 0.25, animIn: 'pop', animOut: 'fade' },
+        { kind: 'text', text: vert ? '⟷' : '⇅', x: 0.5, y: 0.5, t0: 0.35, style: ts({ fontFamily: 'Inter', fontWeight: 800, fontSize: 64, color: f.brand.dark }), animation: 'pop', animationOut: 'fade' },
+        { kind: 'text', text: v.antes, style: tag, x: vert ? 0.25 : 0.5, y: vert ? 0.9 : 0.44, t0: 0.4, animation: 'slide-up', animationOut: 'fade' },
+        { kind: 'text', text: v.depois, style: { ...tag, color: f.brand.secondary }, x: vert ? 0.75 : 0.5, y: vert ? 0.9 : 0.56, t0: 0.55, animation: 'slide-up', animationOut: 'fade' },
+      ];
+    },
+  },
+  {
+    id: 'enquete', name: 'Enquete / pergunta', kind: 'motion', category: 'engajamento', duration: 5,
+    description: 'Pergunta num cartão e duas opções em pílulas para o público responder.',
+    params: [P('pergunta', 'Pergunta', 'Qual você prefere?'), P('a', 'Opção A', 'Café ☕'), P('b', 'Opção B', 'Chá 🍵')],
+    build: (v, f) => {
+      const q = ts({ fontFamily: 'Poppins', fontWeight: 800, fontSize: 64, color: f.brand.dark });
+      const opt = ts({ fontFamily: 'Poppins', fontWeight: 700, fontSize: 52, color: '#FFFFFF' });
+      const cw = Math.min(0.88, Math.max(f.textW(v.pergunta, q), f.textW(v.a, opt) + f.textW(v.b, opt) + 0.12) + 0.12);
+      const y = f.portrait ? 0.36 : 0.36;
+      const ch = fy(64) * 1.9 + fy(52) * 2.4 + 0.03;
+      const pw = (cw - 0.08) / 2;
+      const oy = y + fy(64) * 0.9 + fy(52) * 1.1;
+      return [
+        { kind: 'shape', shape: 'rounded-rect', fill: '#FFFFFF', radiusPx: 36 * f.H / 1920, box: { cx: 0.5, cy: y + ch / 2 - fy(64) * 0.9, w: cw, h: ch }, animIn: 'pop', animOut: 'zoom-out' },
+        { kind: 'text', text: v.pergunta, style: q, x: 0.5, y, t0: 0.15, animation: 'word-pop', animationOut: 'fade' },
+        { kind: 'shape', shape: 'line', fill: f.brand.primary, box: { cx: 0.5 - pw / 2 - 0.01, cy: oy, w: pw, h: fy(52) * 1.8 }, t0: 0.5, animIn: 'slide-up', animOut: 'fade' },
+        { kind: 'text', text: v.a, style: opt, x: 0.5 - pw / 2 - 0.01, y: oy, t0: 0.6, animation: 'fade', animationOut: 'fade' },
+        { kind: 'shape', shape: 'line', fill: '#2F6BFF', box: { cx: 0.5 + pw / 2 + 0.01, cy: oy, w: pw, h: fy(52) * 1.8 }, t0: 0.65, animIn: 'slide-up', animOut: 'fade' },
+        { kind: 'text', text: v.b, style: opt, x: 0.5 + pw / 2 + 0.01, y: oy, t0: 0.75, animation: 'fade', animationOut: 'fade' },
+      ];
+    },
+  },
+  {
+    id: 'checklist', name: 'Check-list animado', kind: 'motion', category: 'info', duration: 5,
+    description: 'Itens que aparecem e recebem um ✅ um por um.',
+    params: [P('item1', 'Item 1', 'Roteiro pronto'), P('item2', 'Item 2', 'Luz e áudio'), P('item3', 'Item 3', 'Edição com ritmo'), P('item4', 'Item 4 (opcional)', 'Publicar!')],
+    build: (v, f) => {
+      const items = [v.item1, v.item2, v.item3, v.item4].filter((x) => x?.trim());
+      const st = ts({ fontFamily: 'Outfit', fontWeight: 700, fontSize: 60, color: '#FFFFFF', align: 'left', shadowColor: 'rgba(0,0,0,.55)', shadowBlur: 14 });
+      const box = fy(60) * 1.4;
+      const boxW = (box * f.H) / f.W;
+      const left = mx(f) + 0.03;
+      const gap = f.portrait ? 0.08 : 0.12;
+      const y0 = 0.5 - ((items.length - 1) * gap) / 2;
+      const pieces: Piece[] = [];
+      items.forEach((it, i) => {
+        const y = y0 + i * gap;
+        const t0 = 0.2 + i * 0.25;
+        const tick = 0.9 + i * 0.7;
+        pieces.push({ kind: 'shape', shape: 'rounded-rect', fill: 'rgba(255,255,255,.18)', stroke: '#FFFFFF', strokeWidth: 8, radiusPx: 12 * f.H / 1920, box: { cx: left + boxW / 2, cy: y, w: boxW, h: box }, t0, animIn: 'pop', animOut: 'fade' });
+        pieces.push({ kind: 'text', text: it, style: st, x: leftX(f, left + boxW + 0.03, it, st), y, t0: t0 + 0.05, animation: 'slide-right', animationOut: 'fade' });
+        pieces.push({ kind: 'sticker', emoji: '✅', cx: left + boxW / 2, cy: y, size: box * f.H / f.short * 1.1, t0: tick, animIn: 'pop' });
+      });
+      return pieces;
+    },
+  },
+  {
+    id: 'frase-marca-texto', name: 'Frase de impacto', kind: 'motion', category: 'texto', duration: 3.5,
+    description: 'Frase grande com marca-texto passando por trás da palavra-chave.',
+    params: [P('antes', 'Começo', 'Isso vai'), P('destaque', 'Palavra-chave', 'MUDAR'), P('depois', 'Final', 'tudo')],
+    build: (v, f) => {
+      const st = ts({ fontFamily: 'Archivo Black', fontWeight: 400, fontSize: 104, color: '#FFFFFF', uppercase: true, shadowColor: 'rgba(0,0,0,.45)', shadowBlur: 16 });
+      const hl = { ...st, color: f.brand.dark, shadowBlur: 0, shadowColor: undefined };
+      const y = 0.46;
+      const hw = f.textW(v.destaque, hl) + 0.05;
+      return [
+        { kind: 'text', text: v.antes, style: st, x: 0.5, y: y - fy(104) * 1.15, animation: 'slide-up', animationOut: 'fade' },
+        { kind: 'shape', shape: 'rect', fill: f.brand.secondary, box: { cx: 0.5, cy: y + fy(6), w: hw, h: fy(104) * 1.05 }, t0: 0.35, animIn: 'slide-right', animInDur: 0.35, animOut: 'fade', rotation: -2 },
+        { kind: 'text', text: v.destaque, style: hl, x: 0.5, y, t0: 0.45, animation: 'stomp', animationOut: 'fade' },
+        { kind: 'text', text: v.depois, style: st, x: 0.5, y: y + fy(104) * 1.15, t0: 0.7, animation: 'slide-up', animationOut: 'fade' },
+      ];
+    },
+  },
+  {
+    id: 'data-local', name: 'Data e local', kind: 'motion', category: 'info', duration: 4,
+    description: 'Pílulas com 📍 local e 📅 data, para eventos e viagens.',
+    params: [P('local', 'Local', 'São Paulo, SP'), P('data', 'Data', '25 de novembro')],
+    build: (v, f) => {
+      const st = ts({ fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 48, color: f.brand.dark, align: 'left' });
+      const left = mx(f);
+      const y = f.portrait ? 0.15 : 0.14;
+      const rows = [`📍 ${v.local}`, `📅 ${v.data}`];
+      return rows.flatMap((txt, i): Piece[] => {
+        const w = f.textW(txt, st) + 0.07;
+        const yy = y + i * fy(48) * 2.1;
+        return [
+          { kind: 'shape', shape: 'line', fill: 'rgba(255,255,255,.94)', box: { cx: left + w / 2, cy: yy, w, h: fy(48) * 1.75 }, t0: i * 0.25, animIn: 'slide-right', animOut: 'slide-left' },
+          { kind: 'text', text: txt, style: st, x: leftX(f, left + 0.035, txt, st), y: yy, t0: i * 0.25 + 0.15, animation: 'fade', animationOut: 'fade' },
+        ];
+      });
+    },
+  },
+  {
+    id: 'preco-riscado', name: 'Preço com desconto riscado', kind: 'motion', category: 'info', duration: 4,
+    description: 'Preço antigo sendo riscado e o novo preço batendo na tela.',
+    params: [P('antes', 'Preço antigo', 'R$ 199'), P('preco', 'Novo preço', 'R$ 129'), P('rotulo', 'Rótulo', 'SÓ HOJE')],
+    build: (v, f) => {
+      const old = ts({ fontFamily: 'Montserrat', fontWeight: 800, fontSize: 86, color: 'rgba(255,255,255,.85)', shadowColor: 'rgba(0,0,0,.5)', shadowBlur: 10 });
+      const price = ts({ fontFamily: 'Archivo Black', fontWeight: 400, fontSize: 180, color: f.brand.secondary, strokeColor: '#000', strokeWidth: 6, shadow: true });
+      const y = 0.48;
+      const ow = f.textW(v.antes, old) + 0.03;
+      return [
+        { kind: 'text', text: v.rotulo, x: 0.5, y: y - fy(86) * 2.1, style: ts({ fontFamily: 'Montserrat', fontWeight: 900, fontSize: 44, color: '#FFFFFF', background: '#E62E2E', backgroundRadius: 40, backgroundPadding: 12, letterSpacing: 3 }), animation: 'pop', animationOut: 'fade' },
+        { kind: 'text', text: v.antes, style: old, x: 0.5, y: y - fy(86) * 0.9, t0: 0.1, animation: 'fade', animationOut: 'fade' },
+        { kind: 'shape', shape: 'line', fill: '#E62E2E', box: { cx: 0.5, cy: y - fy(86) * 0.9, w: ow, h: fy(10) }, t0: 0.6, rotation: -8, animIn: 'slide-right', animInDur: 0.3, animOut: 'fade' },
+        { kind: 'text', text: v.preco, style: price, x: 0.5, y: y + fy(180) * 0.35, t0: 0.95, animation: 'stomp', animationOut: 'zoom' },
+      ];
+    },
+  },
+  {
+    id: 'avaliacao', name: 'Avaliação ★★★★★', kind: 'motion', category: 'engajamento', duration: 4,
+    description: 'Cinco estrelas acendendo em sequência com a nota.',
+    params: [N('estrelas', 'Estrelas (1–5)', 5), P('texto', 'Texto', '4,9 de 5 · +2 mil avaliações')],
+    build: (v, f) => {
+      const k = Math.max(1, Math.min(5, Math.round(Number(v.estrelas) || 5)));
+      const size = (f.portrait ? 0.13 : 0.1);
+      const gapW = (size * f.short) / f.W * 1.05;
+      const y = 0.46;
+      const pieces: Piece[] = [];
+      for (let i = 0; i < 5; i++) {
+        const cx = 0.5 + (i - 2) * gapW;
+        const sz = { cx, cy: y, w: (size * f.short) / f.W, h: (size * f.short) / f.H };
+        pieces.push({ kind: 'shape', shape: 'star', fill: 'rgba(255,255,255,.25)', box: sz, animIn: 'fade', animOut: 'fade', label: 'Estrela vazia' });
+        if (i < k) pieces.push({ kind: 'shape', shape: 'star', fill: '#FFC83D', box: sz, t0: 0.3 + i * 0.18, animIn: 'pop', animOut: 'fade', label: 'Estrela' });
+      }
+      if (v.texto) pieces.push({ kind: 'text', text: v.texto, x: 0.5, y: y + (size * f.short) / f.H * 0.85, t0: 1.3, style: ts({ fontFamily: 'Inter', fontWeight: 700, fontSize: 46, color: '#FFFFFF', shadowColor: 'rgba(0,0,0,.6)', shadowBlur: 12 }), animation: 'fade', animationOut: 'fade' });
+      return pieces;
+    },
+  },
+  {
+    id: 'assinatura', name: 'Assinatura animada', kind: 'motion', category: 'marca', duration: 4,
+    description: 'Nome em letra cursiva se escrevendo, traço e @ embaixo.',
+    params: [P('nome', 'Nome', 'Ana Souza'), P('perfil', '@ (opcional)', '@anasouza')],
+    build: (v, f) => {
+      const sig = ts({ fontFamily: 'Dancing Script', fontWeight: 700, fontSize: 130, color: '#FFFFFF', shadowColor: 'rgba(0,0,0,.45)', shadowBlur: 14 });
+      const w = Math.min(0.8, f.textW(v.nome, sig));
+      const y = f.portrait ? 0.78 : 0.76;
+      return [
+        { kind: 'text', text: v.nome, style: sig, x: 0.5, y, animation: 'char-fade', animationOut: 'fade' },
+        { kind: 'shape', shape: 'line', fill: f.brand.primary, box: { cx: 0.5, cy: y + fy(130) * 0.55, w: w * 0.9, h: 0.005 }, t0: 0.9, animIn: 'slide-right', animInDur: 0.5, animOut: 'fade' },
+        ...(v.perfil ? [{ kind: 'text', text: v.perfil, x: 0.5, y: y + fy(130) * 0.55 + 0.035, t0: 1.2, style: ts({ fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 38, color: 'rgba(255,255,255,.9)', letterSpacing: 2 }), animation: 'fade', animationOut: 'fade' } as TextPiece] : []),
+      ];
+    },
+  },
+  {
+    id: 'transicao-capitulo', name: 'Transição de capítulo', kind: 'motion', category: 'titulo', duration: 2.5,
+    description: 'Faixa cheia na cor da marca cruza a tela revelando número e título.',
+    params: [N('numero', 'Número', 2), P('titulo', 'Título', 'A solução')],
+    build: (v, f) => {
+      const num = ts({ fontFamily: 'Bebas Neue', fontWeight: 400, fontSize: 300, color: 'rgba(255,255,255,.35)' });
+      const title = ts({ fontFamily: 'League Spartan', fontWeight: 900, fontSize: 110, color: '#FFFFFF', uppercase: true });
+      return [
+        { kind: 'shape', shape: 'rect', fill: f.brand.primary, box: { cx: 0.5, cy: 0.5, w: 1.02, h: f.portrait ? 0.34 : 0.5 }, animIn: 'slide-right', animInDur: 0.35, animOut: 'slide-left', label: 'Faixa' },
+        { kind: 'text', text: String(v.numero).padStart(2, '0'), style: num, x: 0.5, y: 0.5, t0: 0.25, animation: 'scale-in', animationOut: 'fade' },
+        { kind: 'text', text: v.titulo, style: title, x: 0.5, y: 0.5, t0: 0.4, animation: 'word-slide', animationOut: 'fade' },
       ];
     },
   },

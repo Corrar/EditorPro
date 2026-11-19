@@ -7,12 +7,13 @@ import { useEffect, useRef, useState } from 'react';
 import Icon from '@/components/ui/Icon';
 import { emit } from '@/lib/events';
 import { SFX_CATALOG, SFX_CATEGORY_LABELS, insertSfx, previewSfx, type SfxCategory } from '@/lib/library/sfx';
-import { PillRow } from './shared';
+import { PillRow, Empty } from './shared';
+import { matchesQuery } from '@/lib/library/search';
 
 type Cat = SfxCategory | 'todos';
 const CATS: { id: Cat; label: string }[] = [{ id: 'todos', label: 'Todos' }, ...(Object.keys(SFX_CATEGORY_LABELS) as SfxCategory[]).map((id) => ({ id, label: SFX_CATEGORY_LABELS[id] }))];
 
-export default function SfxList({ onInserted }: { onInserted?: (assetId: string) => void }) {
+export default function SfxList({ onInserted, query }: { onInserted?: (assetId: string) => void; query?: string }) {
   const [cat, setCat] = useState<Cat>('todos');
   const [playing, setPlaying] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -49,10 +50,11 @@ export default function SfxList({ onInserted }: { onInserted?: (assetId: string)
     }
   };
 
-  const list = SFX_CATALOG.filter((s) => cat === 'todos' || s.category === cat);
+  const list = SFX_CATALOG.filter((s) => (cat === 'todos' || s.category === cat) && matchesQuery(query, [s.name, s.description, SFX_CATEGORY_LABELS[s.category], 'som efeito']));
   return (
     <div className="ep-lib ep-lib-sfx">
       <PillRow value={cat} options={CATS} onChange={setCat} label="Categorias de efeito sonoro" />
+      {!list.length && <Empty>Nenhum som encontrado{query ? ` para “${query}”` : ''}.</Empty>}
       <div className="ep-rows ep-lib-sfxrows">
         {list.map((s) => (
           <div key={s.id} className="ep-row ep-lib-sfxrow">
