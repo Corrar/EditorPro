@@ -8,7 +8,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { emit } from '@/lib/events';
 import { ingestFiles, useIngestQueue } from '@/lib/media/ingest';
-import { placeAssetOp } from '@/lib/media/place';
+import { placeAssetOp, sequenceOps } from '@/lib/media/place';
 import { cancelPreviewProxy, useProxyProgress } from '@/lib/media/proxy';
 import { openMediaPicker } from './pickerStore';
 import { useFilePickers } from './pickers';
@@ -90,7 +90,7 @@ function AssetCard({ asset, onAdd }: { asset: MediaAsset; onAdd: (a: MediaAsset)
         {asset.proxyStatus === 'ready' && <span className="ep-asset-proxy ok" title="Cópia leve pronta: a reprodução fica fluida">Pronto para editar</span>}
         {usage > 0 && <span className="ep-asset-used" title={`${usage} clipe(s) na timeline`}>{usage}× na timeline</span>}
         <div className="ep-asset-actions">
-          <button type="button" title="Adicionar no fim da timeline" onClick={(e) => { e.stopPropagation(); onAdd(asset); }}><IconPlus size={15} /></button>
+          <button type="button" title="Adicionar no fim da timeline" aria-label={`Pôr “${asset.name}” na timeline`} onClick={(e) => { e.stopPropagation(); onAdd(asset); }}><IconPlus size={15} /></button>
           <button type="button" title="Remover" onClick={(e) => { e.stopPropagation(); setConfirm(true); }}><IconTrash size={15} /></button>
         </div>
         {confirm && (
@@ -142,7 +142,17 @@ export default function MediaBin() {
   const importFiles = async (files: File[]) => {
     if (!files.length) return;
     const done = await ingestFiles(files);
-    if (done.length) emit('ep:toast', { text: done.length === 1 ? `“${done[0].name}” importado` : `${done.length} arquivos importados`, kind: 'ok' });
+    if (!done.length) return;
+    // timeline vazia: a 1ª importação já entra em sequência na trilha principal (B9); 1 desfazer
+    const st = useEditor.getState();
+    const empty = st.project.tracks.every((t) => t.clips.length === 0);
+    const placeable = done.filter((a) => a.role !== 'reference');
+    if (empty && placeable.length) {
+      st.dispatch(sequenceOps(st.project, placeable));
+      emit('ep:toast', { text: placeable.length === 1 ? `“${placeable[0].name}” adicionado à timeline` : `${placeable.length} itens adicionados à timeline`, kind: 'ok', action: { label: 'Desfazer', run: () => useEditor.getState().undo() } });
+      return;
+    }
+    emit('ep:toast', { text: done.length === 1 ? `“${done[0].name}” importado — toque em + para pôr na timeline` : `${done.length} arquivos importados — toque em + para pôr na timeline`, kind: 'ok' });
   };
   const pickers = useFilePickers((files) => void importFiles(files));
 

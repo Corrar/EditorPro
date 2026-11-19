@@ -67,12 +67,22 @@
   módulo → tsc + vitest + build + E2E (Playwright) → PR por módulo (rascunho → pronto) → merge pelo GitHub (método merge).
   Se o GitHub acusar conflito que o git local não tem, mesclar localmente na integração e pushar (o PR fecha como mesclado).
 
-## Estado (2026-11-18, 1ª integração)
-- As 4 sessões de módulo foram integradas na `claude/ai-video-editor-r0tr67` e publicadas: 181 testes, build ok,
-  fluxo wizard → IA (demo) → editor validado no Playwright (14 ops ao vivo, sem erros), desktop + iPhone sem overflow.
-- IA real depende de `ANTHROPIC_API_KEY` na Vercel (status hoje: demo). Hosts externos usados no navegador:
-  cdn.jsdelivr.net (transformers.js/MediaPipe), huggingface.co (Whisper), storage.googleapis.com (MediaPipe).
-- Sessões de módulo seguem nas branches `-timeline/-engine/-ai/-shell`; integrar de novo com merge (sem rebase).
+## Estado (2026-11-19, rodada "nível CapCut/DaVinci")
+- Em produção (editorpro-ia.vercel.app, Claude real configurado): preview híbrido (<video> nativo + canvas
+  transparente; quadro só "pronto" após requestVideoFrameCallback; último quadro no fim da timeline), proxy 720p,
+  export WebCodecs (~7× mais rápido, detector de quadro preto, erro claro p/ HEVC sem suporte, Rápido/Equilibrado/Qualidade),
+  FX (91 efeitos, 97 transições, 17 blends, 11 máscaras, 34 animações — catálogo em `lib/fx/catalog.ts`),
+  COR estilo DaVinci (`lib/color`, painel Cor: rodas, curvas, HSL, LUT .cube, 15 looks, escopos), timeline profissional
+  (lâmina, ripple/roll/slip/slide, vínculo A/V, J/K/L), preview pro (velocidade, loop, zonas seguras, antes/depois, arrastar
+  no quadro), 80 estilos de legenda, IA com catálogo completo + vídeo modelo + cor do modelo (`COLOR_GRADE_LIVE = true`).
+- Contrato corrigido (2026-11-19): split/trim/ripple preservam reverso/curva/keyframes e tiram fades nas bordas do corte;
+  applyLive fecha o lote certo com Parar/desfazer/edição manual/troca de projeto (testes em `ops.cuts.test.ts`, `store.test.ts`).
+- Pendências conhecidas: biblioteca (modelos ≥60, fontes ≥60, SFX ≥100, catálogo de músicas), Deliver do export (presets
+  por plataforma, GIF, trecho in/out), transições em shader no modo nativo (pico ~110 ms na troca nativo↔canvas),
+  export mais lento com efeitos/cor (passar filtros para WebGL), gestão de projetos/histórico visível (shell).
+- Testes E2E da principal ficam no scratchpad (blink2.js = tela preta por captura real; exp.js; fxcor.js; pvmenu.js…);
+  a suíte da QA fica em `web/e2e` (`npm run e2e`, `npm run e2e:ux`).
+- Limite semanal de uso dos agentes pode parar as sessões (aconteceu 2026-11-19 ~03h–11h UTC): reagendar e retomar.
 
 ## Como rodar/validar
 ```

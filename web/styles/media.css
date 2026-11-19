@@ -24,9 +24,8 @@
 .ep-asset-kind { position:absolute; left:6px; top:6px; width:22px; height:22px; border-radius:7px; background:rgba(0,0,0,.55); color:#fff; display:grid; place-items:center; backdrop-filter:blur(4px); }
 .ep-asset-dur { position:absolute; right:6px; bottom:6px; font-size:10px; font-weight:500; color:#fff; background:rgba(0,0,0,.62); border-radius:6px; padding:2px 6px; }
 .ep-asset-used { position:absolute; left:6px; bottom:6px; font-size:9.5px; font-weight:700; color:#fff; background:var(--green); border-radius:6px; padding:2px 6px; }
-.ep-asset-actions { position:absolute; right:6px; top:6px; display:flex; gap:4px; opacity:0; transform:translateY(-3px); transition:.15s; }
-.ep-asset:hover .ep-asset-actions, .ep-asset:focus-within .ep-asset-actions { opacity:1; transform:none; }
-.ep-asset-actions button { width:26px; height:26px; border-radius:8px; border:0; background:rgba(0,0,0,.6); color:#fff; display:grid; place-items:center; cursor:pointer; backdrop-filter:blur(4px); transition:.12s; }
+.ep-asset-actions { position:absolute; right:6px; top:6px; display:flex; gap:4px; } /* sempre visível: nada depende de hover (B9) */
+.ep-asset-actions button { width:30px; height:30px; border-radius:8px; border:0; background:rgba(0,0,0,.6); color:#fff; display:grid; place-items:center; cursor:pointer; backdrop-filter:blur(4px); transition:.12s; }
 .ep-asset-actions button:first-child:hover { background:var(--green); }
 .ep-asset-actions button:last-child:hover { background:var(--red); }
 .ep-asset-confirm { position:absolute; inset:0; background:rgba(16,12,9,.86); color:#fff; display:flex; flex-direction:column; justify-content:center; gap:8px; padding:8px; font-size:11.5px; text-align:center; cursor:default; animation:toastIn .15s ease both; }
@@ -122,3 +121,6 @@
 .ep-msrc { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:8px; margin:0 0 12px; }
 .ep-msrc button { min-height:48px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; border:0; border-radius:14px; background:var(--tile); color:var(--ink); font:inherit; font-size:12px; font-weight:700; cursor:pointer; }
 .ep-msrc button svg { color:var(--green); }
+
+.ep-asset-actions button:first-child { background:var(--green); }
+.ep-asset { cursor:grab; }

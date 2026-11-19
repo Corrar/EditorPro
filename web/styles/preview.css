@@ -295,3 +295,5 @@
 .ep-pv-sheethd b { font-size:15px; }
 .ep-pv-sheethd .ep-circle { min-height:36px; padding:0; justify-content:center; }
 @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+/* menu ⋯ do preview aberto: esconde a pílula flutuante da IA que ficaria por cima dele */
+html[data-pv-menu] .ep-aibadge-slot { visibility:hidden; }

@@ -17,7 +17,8 @@ export interface EpEvents {
   'ep:start-ai-edit': { brief: string };
   'ep:generate-captions': { language?: string };
   'ep:attach-files': { files: File[]; role?: MediaRole };
-  'ep:toast': { text: string; kind?: 'info' | 'ok' | 'error' };
+  /** action opcional: botão no toast (ex.: "Desfazer") */
+  'ep:toast': { text: string; kind?: 'info' | 'ok' | 'error'; action?: { label: string; run: () => void } };
   'ep:open-ai-popup': { prompt?: string };
   'ep:open-tool': { tool: string };
 }
