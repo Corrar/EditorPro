@@ -178,17 +178,22 @@ export default function Preview() {
 
   /* ---------- desenho ---------- */
   /** desenha o quadro t; false = vídeo nativo ainda sem quadro (mantém o que está na tela) */
-  const draw = useCallback((t: number): boolean => {
+  const draw = useCallback((t: number, force = false): boolean => {
     const cv = canvasRef.current;
     const pool = poolRef.current;
     if (!cv || !pool) return true;
     const st = useEditor.getState();
     // modo híbrido: <video> nativo como base + canvas transparente por cima (ou composição total)
     const cmp = viewRef.current.compare;
-    const plan = cmp ? ({ native: false, reason: 'antes/depois' } as const)
+    let plan: ReturnType<typeof nativePlan> = cmp ? ({ native: false, reason: 'antes/depois' } as const)
       : nativeAllowed() ? nativePlan(st.project, t) : ({ native: false, reason: 'desligado' } as const);
     const { w: fw, h: fh } = fitRef.current;
-    if (!pool.present(plan, t, fw, fh)) return false;
+    const pr = pool.present(plan, t, fw, fh);
+    if (pr === 'canvas' || (pr === false && force)) {
+      // nativo sem mídia utilizável (ou esperando demais): composição completa no canvas, sem o vídeo
+      plan = { native: false, reason: pr === 'canvas' ? 'mídia indisponível' : 'esperando quadro' };
+      pool.present(plan, t, fw, fh);
+    } else if (!pr) return false;
     // troca de qualidade pendente: redimensiona e desenha no MESMO quadro
     if (wantQRef.current !== qualityRef.current) { qualityRef.current = wantQRef.current; applySize(); }
     const ctx = cv.getContext('2d');
@@ -247,7 +252,9 @@ export default function Preview() {
         if (!waitSinceRef.current) waitSinceRef.current = now;
         if (now - waitSinceRef.current < 2500) { showTime(st.playhead); window.setTimeout(requestStill, 120); return; }
       }
-      if (!draw(tv) && now - (waitSinceRef.current || now) < 2500) {
+      const late = !!waitSinceRef.current && now - waitSinceRef.current >= 2500;
+      // passou do limite: desenha assim mesmo (força o canvas) — antes desistia sem desenhar (r2 #3)
+      if (!draw(tv, late) && !late) {
         if (!waitSinceRef.current) waitSinceRef.current = now;
         window.setTimeout(requestStill, 120);
         return;
@@ -368,6 +375,7 @@ export default function Preview() {
     govRef.current.reset();
     let raf = 0;
     let lastDraw = -Infinity;
+    let holdSince = 0;
     let lead: ReturnType<LiveMediaPool['sync']>['lead'] = null;
     const tick = () => {
       const st = useEditor.getState();
@@ -400,7 +408,11 @@ export default function Preview() {
       const s = pool.sync(st.project, st.assets, t, true, st.project.fps, viewRef.current.playRate);
       lead = s.lead;
       // falta o quadro do vídeo (corte/seek ainda decodificando): mantém o último quadro bom
-      if (s.pending || !draw(t)) { STATS.held++; showTime(t); }
+      // rede de segurança na reprodução: um vídeo que não entrega quadro não congela o canvas inteiro
+      // (textos/legendas/PiP) por mais de 1,5 s (r2 #1/#2)
+      const lateP = holdSince > 0 && now - holdSince > 1500;
+      if ((s.pending && !lateP) || !draw(t, lateP)) { if (!holdSince) holdSince = now; STATS.held++; showTime(t); }
+      else holdSince = 0;
       lastSetRef.current = t;
       st.setPlayhead(t);
     };
@@ -456,14 +468,12 @@ export default function Preview() {
     poolRef.current?.unlock(st.project, st.assets);
   }, []);
   useEffect(() => {
-    const h = () => {
-      unlock();
-      window.removeEventListener('pointerdown', h, true);
-      window.removeEventListener('keydown', h, true);
-    };
-    window.addEventListener('pointerdown', h, true);
-    window.addEventListener('keydown', h, true);
-    return () => { window.removeEventListener('pointerdown', h, true); window.removeEventListener('keydown', h, true); };
+    // a cada gesto (não só o 1º): no iOS cada elemento novo precisa de um play dentro de um gesto (r2 #4)
+    const h = () => unlock();
+    // no toque, pointerdown NÃO libera mídia (Chrome/iOS só contam pointerup/touchend/click como gesto)
+    const evs = ['pointerdown', 'pointerup', 'click', 'keydown'] as const;
+    evs.forEach((e) => window.addEventListener(e, h, true));
+    return () => evs.forEach((e) => window.removeEventListener(e, h, true));
   }, [unlock]);
 
   /* sai da tela cheia CSS com Esc (só enquanto ativa) e trava a rolagem da página */

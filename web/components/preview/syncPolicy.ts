@@ -124,11 +124,15 @@ export class QualityGovernor {
     return QUALITY_STEPS[this.level];
   }
 
+  /** volta ao estado inicial (nível 1,0): o Preview força a qualidade cheia ao pausar — o governador
+   *  precisa acompanhar, senão compara o custo a 1,0 com o limite do degrau antigo (r2 #8) */
   reset() {
     this.ema = 0;
     this.n = 0;
     this.overSince = -1;
     this.underSince = -1;
+    this.level = 0;
+    this.lastChange = -Infinity;
   }
 
   /** registra o custo de um quadro (ms); devolve o novo fator se mudou, senão null */

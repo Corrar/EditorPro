@@ -234,3 +234,17 @@ describe('neighborPlan (vizinhos do corte com o vídeo parado)', () => {
     expect(neighborPlan(p, 7.5)).toEqual([]);
   });
 });
+
+describe('QualityGovernor.reset (r2 #8)', () => {
+  it('depois de cair e pausar (reset), volta a 1 e cai de novo com custo alto', () => {
+    const g = new QualityGovernor();
+    let i = 0;
+    for (; i < 200; i++) g.push(45, i * 33);
+    expect(g.factor).toBe(0.75);
+    g.reset();
+    expect(g.factor).toBe(1);
+    const changes: number[] = [];
+    for (let k = 0; k < 600; k++, i++) { const q = g.push(40, i * 33); if (q !== null) changes.push(q); }
+    expect(changes).toEqual([0.75]);
+  });
+});

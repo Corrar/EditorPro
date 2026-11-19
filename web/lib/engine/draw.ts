@@ -24,6 +24,19 @@ import { getSegMask, requestSegMask } from './segment';
 import { hash, scratch, type AnyCanvas, type Ctx } from './surface';
 import { gradeLayer } from '../color';
 import { animateClip } from './animate';
+
+/* donos de scratch por clip.id, LRU pequeno (canvases liberados ao sair) */
+const OWNERS = new Map<string, object>();
+const MAX_OWNERS = 24;
+export function scratchOwner(id: string): object {
+  let o = OWNERS.get(id);
+  if (o) { OWNERS.delete(id); OWNERS.set(id, o); return o; }
+  o = { id };
+  OWNERS.set(id, o);
+  while (OWNERS.size > MAX_OWNERS) OWNERS.delete(OWNERS.keys().next().value as string);
+  return o;
+}
+export const scratchOwnerCount = () => OWNERS.size;
 import type { MediaElement } from './index';
 
 export type { Ctx } from './surface';
@@ -84,7 +97,9 @@ export interface LayerOpts {
 /** desenha um item visual (vídeo/imagem/sticker/forma) no quadro */
 export function drawLayer(ctx: Ctx, layer: LayerItem, t: Seconds, el: MediaElement | undefined, W: number, H: number, opts: LayerOpts = {}): void {
   // keyframes universais (props animadas: efeitos, filtros, cor, máscara, chroma, forma…)
-  const owner = layer.clip; // dono estável dos caches (scratch), mesmo com o clipe animado mudando a cada quadro
+  // dono estável dos canvases auxiliares: por clip.id (não pelo objeto imutável do clipe — cada versão
+  // no histórico de desfazer prendia seus canvases de vários MB; r2 #6)
+  const owner = scratchOwner(layer.clip.id);
   const clip = animateClip(layer.clip, t - layer.clip.start);
   const local = Math.min(Math.max(0, t - clip.start), clip.duration);
   const tf = interpolateTransform(clip.transform ?? DEFAULT_TRANSFORM, clip.keyframes, local);
