@@ -6,11 +6,11 @@
    ===================================================================== */
 import type { CaptionStyle, Project, Seconds, TextClip, TextStyle } from '../types';
 import { interpolateTransform, easeOutBack, easeOutBounce, ease, clamp01 } from './easing';
-import { layoutWords, splitText, textAnimState, fontPx, type AnimState } from './text';
-import { captionLook, chunkAt, chunkCaptions, wordStates, type CaptionChunk } from './captions';
+import { balanceLines, layoutWords, splitText, textAnimState, fontPx, type AnimState } from './text';
+import { captionLook, chunkAt, chunkCaptions, clampToSafeZone, isEmphasisWord, wordStates, type CaptionChunk } from './captions';
 import { charOffsets, unitFx, unitKindOf, UNIT_NEUTRAL, type UnitFx, type UnitKind } from './textUnits';
 import { basePresetFor, emojiForWord, requestFont } from './fonts';
-import { hash, type Ctx } from './surface';
+import { hash, makeCanvas, type AnyCanvas, type Ctx } from './surface';
 
 /* ---------- texto ---------- */
 
@@ -82,7 +82,7 @@ function drawBlock(ctx: Ctx, P: BlockParams, H: number) {
     strokeW = strokeOf(px);
     const gap = strokeW * 0.6 + px * 0.04;
     const measure = (s: string) => (s === ' ' ? ctx.measureText(' ').width + gap : ctx.measureText(s).width * reserve);
-    lines = layoutWords(P.words, measure, P.maxWidth, P.breaks);
+    lines = (P.style.balance ? balanceLines : layoutWords)(P.words, measure, P.maxWidth, P.breaks);
     if (!P.maxLines || lines.length <= P.maxLines) break;
     px *= 0.88;
   }
@@ -123,6 +123,18 @@ function drawBlock(ctx: Ctx, P: BlockParams, H: number) {
       if (w < 1) return;
       ctx.beginPath();
       ctx.roundRect(x0 - pad, y - padY + lh * 0.02, w, lh + padY * 2 - lh * 0.04, Math.max(0, Math.min(radius, w / 2)));
+      if (P.style.backgroundBlur && P.style.backgroundBlur > 0) {
+        // "vidro": redesenha o quadro já composto, desfocado, só dentro da caixa
+        ctx.save();
+        ctx.clip();
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.filter = `blur(${(P.style.backgroundBlur * k).toFixed(1)}px)`;
+        ctx.globalAlpha = 1;
+        try { ctx.drawImage(ctx.canvas as CanvasImageSource, 0, 0); } catch { /* canvas sem leitura */ }
+        ctx.restore();
+        ctx.restore();
+      }
       ctx.fill();
     });
     ctx.restore();
@@ -165,11 +177,56 @@ function drawBlock(ctx: Ctx, P: BlockParams, H: number) {
   const shadow = shadowOf();
   const glow = P.style.glow ? { color: P.style.glow.color, blur: P.style.glow.blur * k } : P.glow ? { color: P.glow, blur: px * 0.45 } : null;
   const offsets = P.unit?.kind === 'char' ? charOffsets(P.words) : null;
+  const curveRad = Math.abs(P.style.curve ?? 0) >= 1 ? (Math.max(-360, Math.min(360, P.style.curve!)) * Math.PI) / 180 : 0;
   let charsLeft = P.anim.visibleChars;
 
   /** desenha um pedaço de texto já posicionado em (0,0) com contorno/sombra/brilho/preenchimento */
+  const depth = (spec: { color: string; length: number; angle?: number } | undefined, cap: number) => {
+    if (!spec || spec.length <= 0) return null;
+    const len = spec.length * k;
+    const a = (((spec.angle ?? 45) % 360) * Math.PI) / 180;
+    const steps = Math.max(1, Math.min(cap, Math.round(len)));
+    return { color: spec.color, steps, dx: (Math.cos(a) * len) / steps, dy: (Math.sin(a) * len) / steps };
+  };
+  const longShadow = depth(P.style.longShadow, 48);
+  const extrude = depth(P.style.extrude ? { color: P.style.extrude.color, length: P.style.extrude.depth, angle: P.style.extrude.angle ?? 60 } : undefined, 32);
+  const extraStrokes = (P.stroke || P.style.strokes?.length) && P.style.strokes?.length
+    ? P.style.strokes.reduce<{ color: string; lw: number }[]>((acc, st) => {
+        const prev = acc.length ? acc[acc.length - 1].lw : strokeW;
+        acc.push({ color: st.color, lw: prev + Math.max(0, st.width) * k * 2 });
+        return acc;
+      }, [])
+    : [];
+  /** camadas empilhadas atrás do texto (sombra longa / extrusão), sem sombra borrada */
+  const paintDepth = (text: string, tx: number, d: NonNullable<ReturnType<typeof depth>>, withStroke: number) => {
+    ctx.save();
+    ctx.shadowColor = 'transparent';
+    ctx.fillStyle = d.color;
+    ctx.strokeStyle = d.color;
+    ctx.lineWidth = withStroke;
+    for (let i = d.steps; i >= 1; i--) {
+      if (withStroke > 0) ctx.strokeText(text, tx + d.dx * i, d.dy * i);
+      ctx.fillText(text, tx + d.dx * i, d.dy * i);
+    }
+    ctx.restore();
+  };
+
   const paintText = (text: string, tx: number, fill: string | CanvasGradient) => {
-    if (shadow) { ctx.shadowColor = shadow.color; ctx.shadowBlur = shadow.blur; ctx.shadowOffsetX = shadow.x; ctx.shadowOffsetY = shadow.y; }
+    const outer = extraStrokes.length ? extraStrokes[extraStrokes.length - 1].lw : strokeW;
+    if (longShadow) paintDepth(text, tx, longShadow, outer);
+    if (extrude) paintDepth(text, tx, extrude, outer);
+    if (extraStrokes.length) {
+      ctx.save();
+      if (shadow && !longShadow && !extrude) { ctx.shadowColor = shadow.color; ctx.shadowBlur = shadow.blur; ctx.shadowOffsetX = shadow.x; ctx.shadowOffsetY = shadow.y; }
+      for (let i = extraStrokes.length - 1; i >= 0; i--) {
+        ctx.strokeStyle = extraStrokes[i].color;
+        ctx.lineWidth = extraStrokes[i].lw;
+        ctx.strokeText(text, tx, 0);
+        ctx.shadowColor = 'transparent';
+      }
+      ctx.restore();
+    }
+    if (shadow && !extraStrokes.length && !longShadow && !extrude) { ctx.shadowColor = shadow.color; ctx.shadowBlur = shadow.blur; ctx.shadowOffsetX = shadow.x; ctx.shadowOffsetY = shadow.y; }
     if (P.anim.glitch > 0.02) {
       const o = px * 0.08 * P.anim.glitch;
       ctx.save();
@@ -212,6 +269,28 @@ function drawBlock(ctx: Ctx, P: BlockParams, H: number) {
       const ufx = P.unit?.kind === 'word' ? P.unit.fx(w.index) : UNIT_NEUTRAL;
       const wordAlpha = (paint.alpha ?? 1) * ufx.opacity;
       if (wordAlpha <= 0.001) continue;
+      if (curveRad) {
+        // texto curvo: cada letra posicionada e girada sobre o arco da linha
+        const L = Math.max(1, l.width);
+        const Rr = L / curveRad;
+        const cxLine = x0 + L / 2;
+        const fillC = gradient && paint.color === P.style.color ? gradient : paint.color;
+        ctx.save();
+        ctx.globalAlpha *= wordAlpha;
+        let acc = 0;
+        for (const ch of [...text]) {
+          const cw = ctx.measureText(ch).width;
+          const phi = (x0 + w.x + acc + cw / 2 - cxLine) / Rr;
+          ctx.save();
+          ctx.translate(cxLine + Rr * Math.sin(phi), y + ufx.dy * px - Rr * (1 - Math.cos(phi)));
+          ctx.rotate(-phi);
+          paintText(ch, -cw / 2, fillC);
+          ctx.restore();
+          acc += cw;
+        }
+        ctx.restore();
+        continue;
+      }
       ctx.save();
       ctx.globalAlpha *= wordAlpha;
       const wy = y + (P.anim.wave ? Math.sin(P.anim.wavePhase + w.index * 0.9) * P.anim.wave * px : 0) + ufx.dy * px;
@@ -309,9 +388,21 @@ function textUnits(clip: TextClip, words: string[], local: number): BlockParams[
   };
 }
 
+/* cache de texto rasterizado (preview no celular: sombra/brilho/contorno custam caro) */
+const TEXT_CACHE_SIZE = 10;
+const TEXT_CACHE_MAX_PX = 1_600_000; // ~ prévia; no export (1080×1920) desenha direto
+const textCache = new Map<string, AnyCanvas>();
+export const textCacheStats = { hits: 0, clear: () => { textCache.clear(); textCacheStats.hits = 0; } };
+
+function isStaticAnim(a: AnimState): boolean {
+  const done = (v: number) => v < 0 || v >= 0.999;
+  return a.opacity >= 0.999 && !a.dx && !a.dy && a.scale === 1 && !a.rotation && a.blur <= 0.02 && !a.wave && a.glitch <= 0.02
+    && !Number.isFinite(a.visibleChars) && done(a.sweep) && done(a.underlineDraw) && done(a.boxReveal);
+}
+
 export function drawTextClip(ctx: Ctx, clip: TextClip, t: Seconds, W: number, H: number) {
   const style = clip.style;
-  requestFont(style.fontFamily, style.fontWeight || 700, !!style.italic);
+  const fontReady = requestFont(style.fontFamily, style.fontWeight || 700, !!style.italic);
   const raw = style.uppercase ? clip.text.toLocaleUpperCase('pt-BR') : clip.text;
   const { words, breaks } = splitText(raw);
   const local = t - clip.start;
@@ -325,12 +416,35 @@ export function drawTextClip(ctx: Ctx, clip: TextClip, t: Seconds, W: number, H:
   const paints = clip.animation === 'karaoke'
     ? (i: number) => ({ color: i < Math.ceil(anim.progress * words.length + 0.0001) ? hl : style.color, scale: 1 })
     : undefined;
-  drawBlock(ctx, {
+  const unit = textUnits(clip, words, local);
+  const params: BlockParams = {
     words, breaks, style, px: fontPx(style.fontSize, H), cx: (clip.position.x + tf.x) * W, cy: (clip.position.y + tf.y) * H,
-    maxWidth: W * 0.86, anim, paints, unit: textUnits(clip, words, local), box: style.background || undefined, stroke: true,
+    maxWidth: W * 0.86, anim, paints, unit, box: style.background || undefined, stroke: true,
     shadow: style.shadow ? 'soft' : 'none', weight: style.fontWeight || 700,
     rotation: tf.rotation, scale: tf.scale, opacity: tf.opacity,
-  }, H);
+  };
+  // texto parado (fora da entrada/saída, sem loop/unidade): desenha 1x num bitmap e reaproveita
+  if (fontReady && !unit && !paints && !style.backgroundBlur && isStaticAnim(anim) && W * H <= TEXT_CACHE_MAX_PX) {
+    const key = JSON.stringify([raw, style, W, H, anim.sweep > 0, anim.underlineDraw > 0, anim.boxReveal]);
+    let bmp = textCache.get(key);
+    if (bmp) { textCache.delete(key); textCache.set(key, bmp); } else {
+      bmp = makeCanvas(W, H);
+      const bctx = bmp.getContext('2d') as Ctx | null;
+      if (bctx) drawBlock(bctx, { ...params, cx: W / 2, cy: H / 2, rotation: 0, scale: 1, opacity: 1 }, H);
+      textCache.set(key, bmp);
+      while (textCache.size > TEXT_CACHE_SIZE) textCache.delete(textCache.keys().next().value as string);
+    }
+    ctx.save();
+    ctx.translate(params.cx, params.cy);
+    if (tf.rotation) ctx.rotate((tf.rotation * Math.PI) / 180);
+    if (tf.scale !== 1) ctx.scale(tf.scale, tf.scale);
+    ctx.globalAlpha *= Math.max(0, Math.min(1, tf.opacity));
+    ctx.drawImage(bmp as CanvasImageSource, -W / 2, -H / 2);
+    ctx.restore();
+    textCacheStats.hits++;
+    return;
+  }
+  drawBlock(ctx, params, H);
 }
 
 /* ---------- legendas ---------- */
@@ -412,17 +526,26 @@ export function drawCaptions(ctx: Ctx, p: Project, t: Seconds, W: number, H: num
     }
   }
   const jitter = style.jitter ? (hash(Math.round(chunk.start * 1000) % 100000 + 7) - 0.5) * 2 * style.jitter : 0;
+  const px0 = fontPx(style.fontSize, H);
+  const estLines = style.lines ?? Math.min(2, Math.max(1, Math.ceil(words.join(' ').length / 18)));
+  const lhK = style.lineHeight && style.lineHeight > 0.5 ? style.lineHeight : 1.2;
+  const safe = clampToSafeZone(style.safeZone, style.position.x, style.position.y, 0.84, (px0 * lhK * estLines + px0 * 0.6) / H, H > W);
+  const emph = style.emphasis?.auto ? chunk.words.map((w) => isEmphasisWord(w.text)) : null;
+  const emphScale = style.emphasis?.scale ?? 1.15;
+  // legendas: linhas equilibradas por padrão (evita palavra órfã)
+  const capStyle = style.balance === undefined ? { ...style, balance: true } : style;
   drawBlock(ctx, {
-    words, style, px: fontPx(style.fontSize, H), cx: style.position.x * W, cy: style.position.y * H,
-    maxWidth: W * 0.84, anim, unit, emoji, rotation: jitter, maxLines: style.lines,
+    words, style: capStyle, px: px0, cx: safe.x * W, cy: safe.y * H,
+    maxWidth: W * Math.min(0.84, safe.maxW), anim, unit, emoji, rotation: jitter, maxLines: style.lines,
     paints: (i) => {
       const st = states[i];
       const w = chunk.words[i];
       const pop = st.active && activeScale !== 1 ? 1 + (activeScale - 1) * easeOutBack(clamp01((t - w.start) / 0.12), 2) : 1;
       const spoken = t >= w.start;
+      const isEmph = !!emph?.[i];
       return {
-        color: st.highlighted ? hl : style.color,
-        scale: pop,
+        color: isEmph ? style.emphasis?.color ?? hl : st.highlighted ? hl : style.color,
+        scale: pop * (isEmph ? emphScale : 1),
         alpha: style.inactiveOpacity !== undefined && !spoken ? Math.max(0, Math.min(1, style.inactiveOpacity)) : 1,
         box: style.wordBox && st.active
           ? { color: style.wordBox.color, radius: style.wordBox.radius * k, padding: style.wordBox.padding * k }
@@ -432,7 +555,7 @@ export function drawCaptions(ctx: Ctx, p: Project, t: Seconds, W: number, H: num
     box: look.box ? style.background || 'rgba(0,0,0,0.72)' : style.background || undefined,
     glow: look.glow ? hl : undefined,
     stroke: look.stroke,
-    reserve: Math.max(activeScale, style.wordBox ? 1.08 : 1),
+    reserve: Math.max(activeScale * (emph?.some(Boolean) ? emphScale : 1), style.wordBox ? 1.08 : 1),
     shadow: look.shadow === 'none' ? 'none' : style.shadow === false ? 'none' : look.shadow,
     weight,
   }, H);
