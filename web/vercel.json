@@ -11,7 +11,9 @@
       "claude/ai-video-editor-r0tr67-qa": false,
       "claude/ai-video-editor-r0tr67-fx": false,
       "claude/ai-video-editor-r0tr67-cor": false,
-      "claude/ai-video-editor-r0tr67-musica": false
+      "claude/ai-video-editor-r0tr67-musica": false,
+      "claude/ai-video-editor-r0tr67-modelo": false,
+      "claude/ai-video-editor-r0tr67-legendas": false
     }
   }
 }
