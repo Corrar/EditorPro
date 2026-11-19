@@ -9,14 +9,14 @@
 import type { Transition, TransitionKind } from '../types';
 import { runCustomTransition } from '../fx/customRender';
 import type { AnyCanvas } from './surface';
-import { fxGLAvailable, runFx } from '../fx/glcore';
+import { fxGLAvailable, runFx, GLSL_PRECISION } from '../fx/glcore';
 import { FX_SHADER_TRANSITION_KINDS, fxTransitionFragment } from '../fx/transitionShaders';
 import { FX_TRANSITION_LABELS } from '../fx/catalog';
 
 const VERT = 'attribute vec2 a_pos; varying vec2 v_uv; void main(){v_uv=a_pos*0.5+0.5; v_uv.y=1.0-v_uv.y; gl_Position=vec4(a_pos,0,1);}';
 
 const H =
-  'precision mediump float;varying vec2 v_uv;uniform sampler2D u_from, u_to;uniform float u_progress;' +
+  GLSL_PRECISION + 'varying vec2 v_uv;uniform sampler2D u_from, u_to;uniform float u_progress;' +
   'uniform vec2 u_resolution;uniform vec3 u_accent;uniform vec3 u_accent_dark;uniform vec3 u_accent_bright;\n';
 
 const NQ =
@@ -142,6 +142,11 @@ export function shaderTransitionsAvailable(): boolean {
   return fxGLAvailable();
 }
 
+/** fonte do fragment shader de uma transição (testes/diagnóstico) */
+export function shaderTransitionFragment(kind: ShaderTransitionKind): string | null {
+  return fragmentOf(kind);
+}
+
 function fragmentOf(kind: ShaderTransitionKind): string | null {
   if (Object.prototype.hasOwnProperty.call(FRAG, kind)) return FRAG[kind as LegacyShaderKind];
   return fxTransitionFragment(kind);
@@ -156,7 +161,9 @@ export function runShaderTransition(kind: ShaderTransitionKind, from: TexImageSo
   const frag = fragmentOf(kind);
   if (!frag) return null;
   const p = Number.isFinite(progress) ? Math.min(1, Math.max(0, progress)) : 0;
-  return runFx('tr:' + kind, frag, [['u_from', from], ['u_to', to]], W, H, {
+  const out = runFx('tr:' + kind, frag, [['u_from', from], ['u_to', to]], W, H, {
     u_progress: p, u_resolution: [W, H], u_accent: ACCENT, u_accent_dark: ACCENT_DARK, u_accent_bright: ACCENT_BRIGHT,
   });
+  // shader que não compila nesta GPU / quadro sem textura: dissolver em vez de corte seco
+  return out ?? runCustomTransition(undefined, from, to, p, W, H);
 }

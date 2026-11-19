@@ -37,8 +37,13 @@ const CUSTOM_MAX = 24;
 /** só p/ testes/diagnóstico */
 export const glStats = { inits: 0, programs: 0, lost: 0, runs: 0 };
 
+/** última perda de contexto: espera ~1 s antes de recriar (getContext pode nascer perdido) */
+let lastLost = -Infinity;
+const nowMs = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+
 function init(): State | null {
   if (st !== undefined) return st;
+  if (nowMs() - lastLost < 1000) return null;
   st = null;
   if (failures > 2) return null; // não insiste em aparelho sem WebGL
   try {
@@ -69,6 +74,7 @@ function init(): State | null {
       glStats.lost++;
       // a perda chega assíncrona: culpa o último shader da IA rodado nos últimos 3 s (pesado/infinito)
       if (lastCustom && Date.now() - lastCustom.at < 3000) blacklist.add(lastCustom.key);
+      lastLost = nowMs();
       st = undefined; // recria na próxima chamada (programas antigos morreram com o contexto)
     };
     (canvas as HTMLCanvasElement).addEventListener?.('webglcontextlost', lost as EventListener, false);
@@ -141,7 +147,7 @@ export function runFx(
   if (!S) return null;
   if (W > S.maxTex || H > S.maxTex) return null;
   const { gl, canvas } = S;
-  if (gl.isContextLost()) { st = undefined; return null; }
+  if (gl.isContextLost()) { st = undefined; lastLost = nowMs(); return null; }
   const P = program(S, key, frag);
   if (!P) return null;
   if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
@@ -223,4 +229,9 @@ export function hexToRgb01(hex: string | undefined, fallback: [number, number, n
   if (!m) return fallback;
   const h = m[1].length === 3 ? [...m[1]].map((x) => x + x).join('') : m[1];
   return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255) as [number, number, number];
+}
+
+/** só p/ testes (/dev/fx): contexto compartilhado atual */
+export function fxContextForTests(): WebGLRenderingContext | null {
+  return init()?.gl ?? null;
 }

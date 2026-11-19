@@ -9,10 +9,14 @@ import { EFFECT_CATALOG, TRANSITION_CATALOG, EFFECT_CATEGORIES, type EffectEntry
 import { applySurfaceEffects, effectGeometry } from '@/lib/engine/effects';
 import { isShaderTransition, runShaderTransition } from '@/lib/engine/shaderTransitions';
 import { transitionVisual } from '@/lib/engine/transitions';
-import { glStats } from '@/lib/fx/glcore';
+import { glStats, fxContextForTests } from '@/lib/fx/glcore';
+import { glContextForTests, processPixels } from '@/lib/engine/gl';
+import { shapeCanvas, shapeCacheStats } from '@/lib/engine/shapes';
+import { canvasFilterSupported, resetCanvasFilterSupport } from '@/lib/fx/sprites';
+import type { ShapeClip } from '@/lib/types';
 import { checkShader, SHADER_EXAMPLES } from '@/lib/fx/customShader';
 import { applyCustomEffect, runCustomTransition } from '@/lib/fx/customRender';
-import type { Ctx } from '@/lib/engine/surface';
+import type { AnyCanvas, Ctx } from '@/lib/engine/surface';
 
 /** cena de teste: gradiente, formas e texto que se movem (dá p/ ver distorção/cor/borda) */
 function scene(ctx: Ctx, W: number, H: number, t: number, hue = 20) {
@@ -241,7 +245,75 @@ export default function FxHarness() {
       }
       return out;
     };
-    (window as unknown as { __epFx: unknown }).__epFx = { benchEffects, benchTransitions, compileAll, drawAllAt, checkExamples, exampleDiffs, benchCustom };
+    /** regressão r2: casos que precisam de navegador/WebGL */
+    const r2 = async () => {
+      const out: Record<string, unknown> = {};
+      const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+      const W = 200, H = 200;
+      // #7 efeito em camada pequena (40×40) não pinta fora dela
+      const leak: Record<string, number> = {};
+      for (const kind of ['light-sweep', 'film-grain', 'vhs', 'disco', 'vignette-pulse', 'invert', 'strobe-color', 'freeze-flash'] as const) {
+        const c = offscreen('leak', W, H); const ctx = c.getContext('2d')!;
+        ctx.clearRect(0, 0, W, H); ctx.fillStyle = '#3080ff'; ctx.fillRect(80, 80, 40, 40);
+        applySurfaceEffects(ctx, W, H, [{ kind, intensity: 1 }], 0.37, { local: 0.05, duration: 2 });
+        const d = ctx.getImageData(0, 0, W, H).data; let n = 0;
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { if (x >= 80 && x < 120 && y >= 80 && y < 120) continue; if (d[(y * W + x) * 4 + 3] > 2) n++; }
+        leak[kind] = n;
+      }
+      out.leakOutside = leak;
+      // #3 coração: fração do quadro que já mostra B (verde) ao longo do progresso
+      const A = offscreen('hA', 120, 120), Bc = offscreen('hB', 120, 120);
+      A.getContext('2d')!.fillStyle = '#f00'; A.getContext('2d')!.fillRect(0, 0, 120, 120);
+      Bc.getContext('2d')!.fillStyle = '#0f0'; Bc.getContext('2d')!.fillRect(0, 0, 120, 120);
+      const heart: number[] = [];
+      for (const pr of [0.25, 0.5, 0.75, 0.99]) {
+        const o = runShaderTransition('luma-heart', A, Bc, pr, 120, 120)!;
+        const t = offscreen('hO', 120, 120); const tc = t.getContext('2d')!; tc.drawImage(o as CanvasImageSource, 0, 0);
+        const d = tc.getImageData(0, 0, 120, 120).data; let g = 0; for (let i = 0; i < d.length; i += 4) if (d[i + 1] > 128 && d[i] < 128) g++;
+        heart.push(+((100 * g) / (120 * 120)).toFixed(1));
+      }
+      out.heartPctB = heart;
+      // #5 forma com escala animada: cache limitado
+      const clip = { id: 's', type: 'shape', shape: 'rounded-rect', fill: '#F2681F', start: 0, duration: 5, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 } } as ShapeClip;
+      for (let i = 0; i <= 120; i++) shapeCanvas(clip, 1296 * (1 + i / 120));
+      out.shapeCache = shapeCacheStats();
+      // #6 detecção de ctx.filter: real aqui; falsa sem o atributo no protótipo
+      resetCanvasFilterSupport();
+      const real = canvasFilterSupported();
+      const proto = Object.getPrototypeOf(document.createElement('canvas').getContext('2d')!);
+      const protoOff = typeof OffscreenCanvasRenderingContext2D !== 'undefined' ? OffscreenCanvasRenderingContext2D.prototype : null;
+      const desc = Object.getOwnPropertyDescriptor(proto, 'filter'), descOff = protoOff && Object.getOwnPropertyDescriptor(protoOff, 'filter');
+      delete (proto as { filter?: unknown }).filter; if (protoOff) delete (protoOff as { filter?: unknown }).filter;
+      resetCanvasFilterSupport();
+      const without = canvasFilterSupported();
+      if (desc) Object.defineProperty(proto, 'filter', desc); if (protoOff && descOff) Object.defineProperty(protoOff, 'filter', descOff);
+      resetCanvasFilterSupport();
+      out.filterDetect = { real, withoutAttr: without, restored: canvasFilterSupported() };
+      // #1 perda de contexto no gl.ts (recorte): o clipe não pode sumir
+      const src = offscreen('glsrc', 64, 64); const sc = src.getContext('2d')!; sc.fillStyle = '#ff8800'; sc.fillRect(0, 0, 64, 64);
+      const alphaOf = (cv: AnyCanvas | null) => { if (!cv) return -1; const t = offscreen('gla', 32, 32); const tc = t.getContext('2d')!; tc.clearRect(0, 0, 32, 32); tc.drawImage(cv as CanvasImageSource, 0, 0, 32, 32); return tc.getImageData(16, 16, 1, 1).data[3]; };
+      const crop = { x: 0.1, y: 0.1, w: 0.5, h: 0.5 };
+      const before = alphaOf(processPixels(src, 64, 64, 32, 32, { crop }));
+      const gl = glContextForTests();
+      const ext = gl?.getExtension('WEBGL_lose_context');
+      ext?.loseContext(); await sleep(50);
+      const during = alphaOf(processPixels(src, 64, 64, 32, 32, { crop }));
+      await sleep(1100);
+      const after = alphaOf(processPixels(src, 64, 64, 32, 32, { crop, sharpen: 0.2 }));
+      out.glLoss = { before, during, after, newContext: glContextForTests() !== gl };
+      // perda no contexto compartilhado do fx: efeito não quebra e volta a funcionar
+      const fgl = fxContextForTests();
+      fgl?.getExtension('WEBGL_lose_context')?.loseContext(); await sleep(50);
+      const e1 = offscreen('fxl', 64, 64); const ec = e1.getContext('2d')!; ec.fillStyle = '#336699'; ec.fillRect(0, 0, 64, 64);
+      let threw = false; try { applySurfaceEffects(ec, 64, 64, [{ kind: 'invert', intensity: 1 }], 0); } catch { threw = true; }
+      const duringFx = Array.from(ec.getImageData(32, 32, 1, 1).data);
+      await sleep(1100);
+      ec.fillStyle = '#336699'; ec.fillRect(0, 0, 64, 64);
+      applySurfaceEffects(ec, 64, 64, [{ kind: 'invert', intensity: 1 }], 0);
+      out.fxLoss = { threw, duringFx, afterFx: Array.from(ec.getImageData(32, 32, 1, 1).data), newContext: fxContextForTests() !== fgl };
+      return out;
+    };
+    (window as unknown as { __epFx: unknown }).__epFx = { r2, benchEffects, benchTransitions, compileAll, drawAllAt, checkExamples, exampleDiffs, benchCustom };
   }, []);
 
   const cats = tab === 'efeitos' ? ['Todos', ...EFFECT_CATEGORIES] : ['Todos', ...new Set(TRANSITION_CATALOG.map((t) => t.category))];

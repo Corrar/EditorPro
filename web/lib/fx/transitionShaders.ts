@@ -77,7 +77,7 @@ const F: Record<string, string> = {
     'float e=smoothstep(s*R,s*R+.01,r);gl_FragColor=mix(B(v_uv),A(v_uv),e);}',
   'luma-heart':
     'void main(){vec2 p=(v_uv-vec2(.5,.47))*ASP()*vec2(1.,-1.);float s=max(u_progress*2.4,1e-3);vec2 q=p/s*2.6;' +
-    'float x2=q.x*q.x,y=q.y+.15*abs(q.x);float f=pow(x2+y*y-1.,3.)-x2*y*y*y;gl_FragColor=f<0.?B(v_uv):A(v_uv);}',
+    'float x2=q.x*q.x,y=q.y+.15*abs(q.x);float b=x2+y*y-1.;float f=b*b*b-x2*y*y*y;gl_FragColor=f<0.?B(v_uv):A(v_uv);}',
   'luma-diagonal':
     'void main(){float d=(v_uv.x+v_uv.y)*.5;float m=smoothstep(u_progress*1.2-.1,u_progress*1.2,d);gl_FragColor=mix(B(v_uv),A(v_uv),m);}',
   'luma-clock':
@@ -109,7 +109,7 @@ const F: Record<string, string> = {
     'float m=smoothstep(p*1.3-.2,p*1.3,n);vec4 c=mix(B(v_uv+w*.05*(1.-p)),A(v_uv+w*.08*p),m);' +
     'float smk=smoothstep(.35,0.,abs(n-(p*1.3-.1)))*bell(p);gl_FragColor=vec4(mix(c.rgb,vec3(.85),smk*.8),1.);}',
   mosaic:
-    'void main(){float p=u_progress;float cs=mix(1.,48.,bell(p))*max(1.,u_res.y/1080.);vec2 cell=floor(v_uv*u_res/cs);' +
+    'void main(){float p=u_progress;float cs=max(1.,mix(1.,48.,bell(p))*(u_res.y/1080.));vec2 cell=floor(v_uv*u_res/cs);' +
     'vec2 uv=(cell+.5)*cs/u_res;float h=hash(cell+3.);gl_FragColor=h<p?B(uv):A(uv);}',
   'pixel-sort':
     'void main(){float p=u_progress;float k=bell(p);vec4 c=vec4(0.);vec4 a=A(v_uv),b=B(v_uv);float la=dot(a.rgb,vec3(.3,.59,.11)),lb=dot(b.rgb,vec3(.3,.59,.11));' +

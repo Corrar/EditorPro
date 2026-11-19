@@ -242,6 +242,7 @@ export function applySurfaceEffects(ctx: Ctx, W: number, H: number, effects: Vis
         break;
       case 'vhs': {
         rgbSplitInPlace(ctx, W, H, W * 0.006 * v + 1);
+        ctx.globalCompositeOperation = 'source-atop'; // scanlines e grão só sobre o conteúdo da camada
         ctx.globalAlpha = 0.18 * v;
         ctx.fillStyle = '#000';
         const step = Math.max(2, Math.round(H / 240));
@@ -255,7 +256,7 @@ export function applySurfaceEffects(ctx: Ctx, W: number, H: number, effects: Vis
         grain(ctx, W, H, 0.5 * v, t);
         break;
       }
-      case 'film-grain': grain(ctx, W, H, v, t); break;
+      case 'film-grain': ctx.globalCompositeOperation = 'source-atop'; grain(ctx, W, H, v, t); break;
       case 'light-leak': lightLeak(ctx, W, H, v, t, sp); break;
       case 'pixelate': pixelateInPlace(ctx, W, H, 2 + v * Math.min(W, H) / 22); break;
       case 'mirror': {

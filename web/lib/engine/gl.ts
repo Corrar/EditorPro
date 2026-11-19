@@ -36,8 +36,13 @@ interface GLState {
 
 let state: GLState | null | undefined;
 
+/** última perda/falha: não recria o contexto a cada quadro enquanto a GPU está indisponível */
+let lastFail = -Infinity;
+const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+
 function init(): GLState | null {
   if (state !== undefined) return state;
+  if (now() - lastFail < 1000) return null; // usa o fallback de CPU por ~1 s
   state = null;
   try {
     if (typeof document === 'undefined' && typeof OffscreenCanvas === 'undefined') return null;
@@ -71,6 +76,11 @@ function init(): GLState | null {
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
     const u: GLState['u'] = {};
     for (const n of ['r', 't', 'px', 'hl', 'sh', 'sp', 'ck', 'kc', 'th', 'sm']) u[n] = gl.getUniformLocation(prog, n);
+    (canvas as HTMLCanvasElement).addEventListener?.('webglcontextlost', (e: Event) => {
+      e.preventDefault();
+      lastFail = now();
+      state = undefined; // recria o contexto depois do intervalo (o antigo morreu)
+    }, false);
     state = { canvas, gl, prog, tex, u };
   } catch (e) {
     console.warn('[engine] WebGL indisponível, usando fallback', e);
@@ -102,7 +112,9 @@ export function chromaThresholds(k: ChromaKey) {
  */
 export function processPixels(src: TexImageSource, sw: number, sh: number, w: number, h: number, p: PixelParams): AnyCanvas | null {
   const crop = p.crop ?? { x: 0, y: 0, w: 1, h: 1 };
-  const S = init();
+  let S = init();
+  if (S && S.gl.isContextLost()) { state = undefined; lastFail = now(); S = null; }
+  // sem GPU (ou contexto perdido): recorte + chroma em CPU — o clipe nunca some
   if (!S) return cpuFallback(src, sw, sh, w, h, p, crop);
   const { gl, u, canvas } = S;
   w = Math.max(1, Math.round(w)); h = Math.max(1, Math.round(h));
@@ -131,6 +143,7 @@ export function processPixels(src: TexImageSource, sw: number, sh: number, w: nu
   gl.clearColor(0, 0, 0, 0);
   gl.clear(gl.COLOR_BUFFER_BIT);
   gl.drawArrays(gl.TRIANGLES, 0, 6);
+  if (gl.isContextLost()) { state = undefined; lastFail = now(); return cpuFallback(src, sw, sh, w, h, p, crop); }
   return canvas;
 }
 
@@ -156,4 +169,9 @@ function cpuFallback(src: TexImageSource, sw: number, sh: number, w: number, h: 
     ctx.putImageData(img, 0, 0);
   }
   return c;
+}
+
+/** só p/ testes (/dev/fx): contexto atual, p/ simular perda com WEBGL_lose_context */
+export function glContextForTests(): WebGLRenderingContext | null {
+  return init()?.gl ?? null;
 }

@@ -260,12 +260,13 @@ function lightSweep(ctx: Ctx, W: number, H: number, v: number, t: number, sp: nu
   g.addColorStop(0, 'rgba(255,255,255,0)');
   g.addColorStop(0.5, `rgba(255,255,255,${0.55 * v})`);
   g.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.globalCompositeOperation = 'lighter';
+  // fica em source-atop: clareia só o conteúdo da camada (sticker/PiP não vaza p/ o quadro)
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
 }
 
 function disco(ctx: Ctx, W: number, H: number, v: number, t: number, sp: number) {
+  const alpha = copyOf(ctx, W, H, S_TMP);
   ctx.globalCompositeOperation = 'source-atop';
   ctx.fillStyle = `rgba(0,0,0,${0.3 * v})`;
   ctx.fillRect(0, 0, W, H);
@@ -281,6 +282,8 @@ function disco(ctx: Ctx, W: number, H: number, v: number, t: number, sp: number)
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
   }
+  ctx.globalCompositeOperation = 'destination-in'; // corta o que saiu da camada
+  ctx.drawImage(alpha as CanvasImageSource, 0, 0);
 }
 
 /* ---------------- estrobo ---------------- */
@@ -538,8 +541,12 @@ function echoTrail(ctx: Ctx, W: number, H: number, v: number, t: number, key: ob
     ac.clearRect(0, 0, W, H);
   } else {
     // esmaece o acumulado (destination-out com alfa = 1 - decaimento)
+    // decaimento por TEMPO (não por quadro): o rastro é igual no preview a 60 fps e no export a 30 fps
+    const dt = Math.max(0, t - prev!.t);
+    const keepPerFrame30 = 1 - (0.55 - 0.4 * v);
+    const keep = Math.pow(keepPerFrame30, dt * 30);
     ac.globalCompositeOperation = 'destination-out';
-    ac.fillStyle = `rgba(0,0,0,${0.55 - 0.4 * v})`;
+    ac.fillStyle = `rgba(0,0,0,${(1 - keep).toFixed(4)})`;
     ac.fillRect(0, 0, W, H);
     ac.globalCompositeOperation = 'source-over';
   }

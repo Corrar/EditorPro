@@ -60,7 +60,7 @@ const EFFECTS: E[] = [
   ['handheld', 'Câmera na mão', 'Básico', 'none', 1, 'geometry', 'css', ['s']],
   ['shake-3d', 'Tremor 3D', 'Básico', 'contrast(1.1)', 1, 'geometry', 'css', ['s']],
   ['beat-pulse', 'Batida', 'Básico', 'saturate(1.2)', 1, 'geometry', 'css', ['s']],
-  ['invert', 'Inverter', 'Básico', 'invert(1)', 1, 'gl', 'css'],
+  ['invert', 'Inverter', 'Básico', 'invert(1)', 1, 'gl', 'canvas'],
   ['vignette', 'Vinheta', 'Básico', 'brightness(.85) contrast(1.15)', 1, '2d', 'canvas', ['c'], '#000000'],
   ['black-bars', 'Barras de cinema', 'Moldura', 'contrast(1.1)', 1, '2d', 'overlay'],
   /* lente */
@@ -71,7 +71,7 @@ const EFFECTS: E[] = [
   ['tilt-shift', 'Miniatura (tilt-shift)', 'Lente', 'saturate(1.35) contrast(1.1)', 2, 'gl', 'canvas'],
   ['focus-center', 'Foco central', 'Lente', 'blur(.6px)', 2, 'gl', 'canvas'],
   /* desfoque */
-  ['blur-gauss', 'Desfoque', 'Desfoque', 'blur(2px)', 2, 'gl', 'css'],
+  ['blur-gauss', 'Desfoque', 'Desfoque', 'blur(2px)', 2, 'gl', 'canvas'],
   ['blur-motion', 'Desfoque de movimento', 'Desfoque', 'blur(1px)', 1, '2d', 'canvas'],
   ['blur-directional', 'Desfoque direcional', 'Desfoque', 'blur(1.2px)', 2, 'gl', 'canvas', ['a'], undefined, 0],
   ['blur-radial', 'Desfoque giratório', 'Desfoque', 'blur(1.2px)', 2, 'gl', 'canvas'],
@@ -121,7 +121,7 @@ const EFFECTS: E[] = [
   ['pixel-art', 'Pixel art', 'Estilizar', 'contrast(1.3) saturate(1.3)', 1, 'gl', 'canvas'],
   ['outline', 'Contorno', 'Estilizar', 'contrast(1.4)', 2, 'gl', 'canvas', ['c'], '#FFFFFF'],
   ['thermal', 'Câmera térmica', 'Estilizar', 'invert(1) hue-rotate(180deg) saturate(3)', 1, 'gl', 'canvas'],
-  ['rainbow', 'Arco-íris', 'Estilizar', 'hue-rotate(120deg) saturate(1.8)', 1, 'gl', 'css', ['s']],
+  ['rainbow', 'Arco-íris', 'Estilizar', 'hue-rotate(120deg) saturate(1.8)', 1, 'gl', 'canvas', ['s']],
   /* split / clone */
   ['mirror', 'Espelho', 'Split/Clone', 'none', 1, '2d', 'canvas'],
   ['mirror-vertical', 'Espelho vertical', 'Split/Clone', 'none', 1, '2d', 'canvas'],
