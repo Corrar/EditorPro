@@ -53,7 +53,10 @@
   quando houver salvar na nuvem (projetos em Neon, mídia/efeitos em R2) — hoje tudo fica no navegador.
 
 ## Branches
-- Integração: `claude/ai-video-editor-r0tr67`. Sessões de módulo: `claude/ai-video-editor-r0tr67-<módulo>`.
+- Integração: `claude/ai-video-editor-r0tr67` (branch padrão do repo e produção na Vercel). Sessões de módulo: `claude/ai-video-editor-r0tr67-<módulo>`.
+- **Autorização do Bruno (2026-11-19): abrir PR e fazer merge sem perguntar.** Fluxo: merge local de teste das branches de
+  módulo → tsc + vitest + build + E2E (Playwright) → PR por módulo (rascunho → pronto) → merge pelo GitHub (método merge).
+  Se o GitHub acusar conflito que o git local não tem, mesclar localmente na integração e pushar (o PR fecha como mesclado).
 
 ## Estado (2026-11-18, 1ª integração)
 - As 4 sessões de módulo foram integradas na `claude/ai-video-editor-r0tr67` e publicadas: 181 testes, build ok,
