@@ -8,7 +8,7 @@ import { animateClip } from './animate';
 import type { CaptionStyle, Project, Seconds, TextClip, TextStyle } from '../types';
 import { interpolateTransform, easeOutBack, easeOutBounce, ease, clamp01 } from './easing';
 import { balanceLines, layoutWords, splitText, textAnimState, fontPx, type AnimState } from './text';
-import { captionHighlight, captionLook, chunkAt, chunkCaptions, clampToSafeZone, isEmphasisWord, wordStates, type CaptionChunk } from './captions';
+import { captionCutPoints, captionHighlight, captionLook, chunkAt, chunkCaptionsFor, clampToSafeZone, isEmphasisWord, wordStates, type CaptionChunk } from './captions';
 import { charOffsets, graphemes, unitFx, unitKindOf, UNIT_NEUTRAL, type UnitFx, type UnitKind } from './textUnits';
 import { basePresetFor, captionPresetColors, emojiForWord, fontEpoch, fontLoaded, requestFont } from './fonts';
 import { hash, makeCanvas, type AnyCanvas, type Ctx } from './surface';
@@ -457,14 +457,15 @@ export function drawTextClip(ctx: Ctx, clip0: TextClip, t: Seconds, W: number, H
 
 /* ---------- legendas ---------- */
 
-const chunkCache = new WeakMap<object, { maxWords: number; chunks: CaptionChunk[] }>();
+const chunkCache = new WeakMap<object, { maxWords: number; rhythm?: string; tracks: unknown; chunks: CaptionChunk[] }>();
 function cachedChunks(p: Project): CaptionChunk[] {
   const key = p.captions.segments;
-  const max = p.captions.style.maxWords;
+  const { maxWords: max, rhythm } = p.captions.style;
   const hit = chunkCache.get(key);
-  if (hit && hit.maxWords === max) return hit.chunks;
-  const chunks = chunkCaptions(key, max);
-  chunkCache.set(key, { maxWords: max, chunks });
+  if (hit && hit.maxWords === max && hit.rhythm === rhythm && hit.tracks === p.tracks) return hit.chunks;
+  // blocos no ritmo da fala (pausas, pontuação, cortes de edição) — lib/engine/captions.ts §2.6
+  const chunks = chunkCaptionsFor(key, p.captions.style, captionCutPoints(p.tracks));
+  chunkCache.set(key, { maxWords: max, rhythm, tracks: p.tracks, chunks });
   return chunks;
 }
 
