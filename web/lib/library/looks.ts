@@ -125,6 +125,15 @@ export function lookAdjustmentOps(p: Project, id: string, intensity = 1, range?:
   const start = range?.start ?? 0;
   const duration = range?.duration ?? Math.max(1, projectDuration(p) - start);
   const ops: EditOp[] = [];
+  // já existe uma camada de look da biblioteca neste intervalo? troca o look nela (não empilha)
+  for (const t of p.tracks) {
+    if (t.kind !== 'effect' || t.locked) continue;
+    const prev = t.clips.find((c) => c.type === 'adjustment' && c.label?.startsWith('Look · ')
+      && Math.abs(c.start - start) < 0.05 && Math.abs(c.duration - duration) < 0.05);
+    if (prev) {
+      return [{ op: 'update_clip', clipId: prev.id, patch: { filters: lookFilters(id, intensity), label: `Look · ${def.name}` }, explain: `Look “${def.name}” na camada de ajuste` }];
+    }
+  }
   let lastVisual = -1;
   p.tracks.forEach((t, i) => { if (t.kind === 'video' || t.kind === 'overlay') lastVisual = i; });
   // reaproveita trilha de efeito livre logo acima do vídeo
