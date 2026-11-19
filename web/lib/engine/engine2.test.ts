@@ -126,7 +126,7 @@ describe('texto e efeitos', () => {
 import { SHADER_TRANSITIONS, isShaderTransition } from './shaderTransitions';
 describe('transições em shader (HyperFrames)', () => {
   it('14 shaders, todos reconhecidos e com fallback de dissolver', () => {
-    expect(SHADER_TRANSITIONS).toHaveLength(14);
+    expect(SHADER_TRANSITIONS.length).toBeGreaterThanOrEqual(14); // 14 do HyperFrames + os da sessão fx
     expect(isShaderTransition('sdf-iris')).toBe(true);
     expect(isShaderTransition('glitch')).toBe(false);
     expect(transitionVisual('ridged-burn', 0.5, 'in').opacity).toBeCloseTo(0.5);
