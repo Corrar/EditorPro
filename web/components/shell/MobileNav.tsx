@@ -8,7 +8,7 @@ import { usePendingComments } from '@/components/panels/ReviewTab';
 import { IconChat, IconChevRight, IconClose, IconCog, IconDownload, IconFolder, IconGrid, IconHome, IconLogout, IconMoon, IconSearch, IconSpark, IconSun } from './icons';
 import type { NavProps } from './Sidebar';
 import { logout } from './session';
-import { TOOLS, toolDef, type ToolId } from './tools';
+import { TOOLS, toolAttr, toolDef, type ToolId } from './tools';
 
 export default function MobileNav({ chatOpen, onChat, menuOpen, onMenuOpen, focusSearch, ...p }: NavProps & {
   chatOpen: boolean; onChat: (open: boolean) => void; menuOpen?: boolean; onMenuOpen?: (open: boolean) => void; focusSearch?: boolean;
@@ -83,7 +83,7 @@ export default function MobileNav({ chatOpen, onChat, menuOpen, onMenuOpen, focu
             {tools.length > 0 && <h3 className="ep-h-section ep-menu-h">Acesso rápido</h3>}
             <div className="ep-tiles ep-menu-tiles">
               {tools.map(({ id, label, Icon }) => (
-                <button key={id} type="button" className={`ep-tile${isTool(id) ? ' on' : ''}`} onClick={() => go(() => { onChat(false); p.onTool(id); })}>
+                <button key={id} type="button" data-ep-tool={toolAttr(id)} className={`ep-tile${isTool(id) ? ' on' : ''}`} onClick={() => go(() => { onChat(false); p.onTool(id); })}>
                   <span className="ic"><Icon size={24} /></span>
                   <span className="lb">{label}{id === 'review' && pendingCm ? <span className="ep-tag accent ep-menu-count">{pendingCm}</span> : null}</span>
                 </button>

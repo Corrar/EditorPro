@@ -69,7 +69,7 @@ export default function Inspector({ tool, title }: { tool?: InspectorTool; title
       {!tool && (
         <div className="ep-insp-tabs">
           {INSPECTOR_TABS.map((t) => (
-            <button key={t.id} type="button" className={t.id === active ? 'on' : ''} onClick={() => setInner(t.id)}>{t.label}</button>
+            <button key={t.id} type="button" data-ep-tool={t.id === 'canvas' ? 'formats' : t.id} className={t.id === active ? 'on' : ''} onClick={() => setInner(t.id)}>{t.label}</button>
           ))}
         </div>
       )}

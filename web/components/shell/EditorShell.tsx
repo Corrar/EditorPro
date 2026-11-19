@@ -20,6 +20,7 @@ import type { AspectRatio } from '@/lib/types';
 import Home, { type WizardInput } from './Home';
 import MobileNav from './MobileNav';
 import MobileToolbar from './MobileToolbar';
+import AiCursor from './AiCursor';
 import AiPopupHost, { type AiPopupMode } from './AiPopupHost';
 import SettingsModal from './SettingsModal';
 import Sidebar from './Sidebar';
@@ -47,6 +48,7 @@ export default function EditorShell() {
   const [aiAutoMin, setAiAutoMin] = useState(false);
   const [aiMode, setAiModeRaw] = useState<AiPopupMode>('closed');
   const [aiPrompt, setAiPrompt] = useState<string | undefined>();
+  useEffect(() => { if (aiMode !== 'open') setAiPrompt(undefined); }, [aiMode]); // o texto sugerido vale só para essa abertura
   const setAiMode = (m: AiPopupMode) => { if (m === 'open') setSideOpen(false); setAiModeRaw(m); };
   const [sbMin, setSbMin] = useState(false);
   const [settings, setSettings] = useState(false);
@@ -269,11 +271,12 @@ export default function EditorShell() {
             )}
             {view === 'editor' && <Workspace tool={tool} sideOpen={sideOpen} onCloseSide={() => setSideOpen(false)} chatOpen={chatOpen} onChat={openChat} onHome={goHome} onSearch={() => { setMenuSearch(true); setMenuOpen(true); }} />}
           </div>
+          {view === 'editor' && <AiCursor />}
           <MobileNav {...nav} chatOpen={chatOpen} onChat={openChat} menuOpen={menuOpen} onMenuOpen={(o) => { setMenuOpen(o); if (!o) setMenuSearch(false); }} focusSearch={menuSearch} />
           {view === 'editor' && !chatOpen && (
             <>
               <MobileToolbar tool={tool} toolOpen={sideOpen} onTool={(t) => { if (aiMode === 'open') setAiModeRaw('min'); pickTool(t); }} onAi={() => setAiMode('open')} onMenu={() => setMenuOpen(true)} />
-              <AiPopupHost autoMinimize={aiAutoMin} onAutoMinimized={() => setAiAutoMin(false)} fabHidden={sideOpen} focus={!!aiPrompt} mode={aiMode} setMode={setAiMode} onOpenChat={() => openChat(true)} />
+              <AiPopupHost autoMinimize={aiAutoMin} onAutoMinimized={() => setAiAutoMin(false)} fabHidden={sideOpen} focus={!!aiPrompt} prompt={aiPrompt} mode={aiMode} setMode={setAiMode} onOpenChat={() => openChat(true)} />
             </>
           )}
         </div>

@@ -16,8 +16,8 @@ import { useEditor } from '@/lib/store';
 
 export type AiPopupMode = 'closed' | 'open' | 'min';
 
-export default function AiPopupHost({ mode, setMode, onOpenChat, fabHidden, focus, autoMinimize, onAutoMinimized }: {
-  mode: AiPopupMode; setMode: (m: AiPopupMode) => void; onOpenChat: () => void; fabHidden?: boolean; focus?: boolean;
+export default function AiPopupHost({ mode, setMode, onOpenChat, fabHidden, focus, prompt, autoMinimize, onAutoMinimized }: {
+  prompt?: string; mode: AiPopupMode; setMode: (m: AiPopupMode) => void; onOpenChat: () => void; fabHidden?: boolean; focus?: boolean;
   /** 1ª edição (wizard): ao terminar ("Pronto!"), vira a pílula sobre o preview */
   autoMinimize?: boolean; onAutoMinimized?: () => void;
 }) {
@@ -52,7 +52,7 @@ export default function AiPopupHost({ mode, setMode, onOpenChat, fabHidden, focu
       )}
       {mode === 'open' && (
         <div className="ep-aipop" role="dialog" aria-modal="false" aria-label="Editar com IA">
-          <AiPopup autoFocus={focus} onMinimize={() => setMode('min')} onExpand={() => { setMode('closed'); onOpenChat(); }} />
+          <AiPopup initialText={prompt} autoFocus={focus} onMinimize={() => setMode('min')} onExpand={() => { setMode('closed'); onOpenChat(); }} />
         </div>
       )}
     </>
