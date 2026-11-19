@@ -65,7 +65,7 @@ describe('combinar cor com o modelo (ColorGrade)', () => {
   });
   it('sem o motor de cor: filtros equivalentes, sem zerar o colorPreset', () => {
     const p = applyOps(base(), [{ op: 'update_clip', clipId: 'c1', patch: { colorPreset: 'warm', filters: [{ kind: 'vignette', value: 0.3 }] } }]).project;
-    const ops = colorGradeOps(p, { a1: matchColorGrade(model, material) });
+    const ops = colorGradeOps(p, { a1: matchColorGrade(model, material) }, 'x', false);
     const s = sanitizeOps(ops, p, { a1: src });
     const c = s.project.tracks[0].clips[0] as VideoClip;
     expect(c.colorPreset).toBe('warm');
@@ -75,18 +75,21 @@ describe('combinar cor com o modelo (ColorGrade)', () => {
     expect(c.filters.find((f) => f.kind === 'saturation')!.value).toBeGreaterThan(0);
     expect(JSON.stringify(ops)).not.toContain('colorPreset');
   });
-  it('colorGrade pedido pela IA vira filtros enquanto o motor não renderiza; null remove', () => {
-    const p = base();
-    const ops = colorGradeOps(p, { a1: matchColorGrade(model, material) }, 'x', true);
-    expect((ops[0] as { patch: { colorGrade?: unknown } }).patch.colorGrade).toBeTruthy();
+  it('motor ligado: match vira colorGrade direto (sem filtros, sem zerar preset); null remove; looks no catálogo', async () => {
+    const p = applyOps(base(), [{ op: 'update_clip', clipId: 'c1', patch: { colorPreset: 'warm' } }]).project;
+    const ops = colorGradeOps(p, { a1: matchColorGrade(model, material) });
     const s = sanitizeOps(ops, p, { a1: src });
     expect(s.dropped).toEqual([]);
     const c = s.project.tracks[0].clips[0] as VideoClip;
-    expect(c.colorGrade).toBeUndefined();
-    expect(c.filters.some((f) => f.kind === 'temperature')).toBe(true);
-    const withGrade = applyOps(p, [{ op: 'update_clip', clipId: 'c1', patch: { colorGrade: { exposure: 0.2 } } }]).project;
-    const s2 = sanitizeOps([{ op: 'update_clip', clipId: 'c1', patch: { colorGrade: null } }], withGrade, { a1: src });
+    expect(c.colorGrade?.offset?.r).toBeGreaterThan(0);
+    expect(c.colorPreset).toBe('warm');
+    expect(c.filters.some((f) => f.kind === 'temperature')).toBe(false);
+    const s1 = sanitizeOps([{ op: 'update_clip', clipId: 'c1', patch: { colorGrade: { lut: { id: 'look:teal-orange', intensity: 0.8 }, contrast: 0.1 } } }], s.project, { a1: src });
+    expect((s1.project.tracks[0].clips[0] as VideoClip).colorGrade).toEqual({ lut: { id: 'look:teal-orange', intensity: 0.8 }, contrast: 0.1 });
+    const s2 = sanitizeOps([{ op: 'update_clip', clipId: 'c1', patch: { colorGrade: null } }], s.project, { a1: src });
     expect((s2.project.tracks[0].clips[0] as VideoClip).colorGrade).toBeUndefined();
+    const { engineCatalogForAI } = await import('./catalogs');
+    expect(engineCatalogForAI()).toMatch(/look:teal-orange \(Teal & Laranja\)/);
   });
   it('sanitizeColorGrade limita valores e ignora lixo', () => {
     expect(sanitizeColorGrade({ exposure: 9, lift: { r: 2, g: 0, b: 0, y: 0 }, foo: 1, lut: { id: '../x', intensity: 1 }, curves: { master: [{ x: 0, y: 0 }, { x: 1, y: 2 }] } }))

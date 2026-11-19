@@ -19,7 +19,7 @@ const clamp = (v: number, lo = -1, hi = 1) => Math.max(lo, Math.min(hi, v));
  * como `filters` equivalentes (que já renderizam). A principal avisa quando virar para true —
  * aí usamos colorGrade e paramos de mandar os filtros (para não aplicar duas vezes).
  */
-export const COLOR_GRADE_LIVE = false;
+export const COLOR_GRADE_LIVE = true; // motor de cor ligado (integração f5375ce: preview + export)
 
 const GRADE_FILTER_KINDS: FilterKind[] = ['temperature', 'tint', 'exposure', 'contrast', 'saturation'];
 

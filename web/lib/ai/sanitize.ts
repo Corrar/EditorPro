@@ -553,6 +553,6 @@ export function sanitizeColorGrade(v: unknown): ColorGrade | null | undefined {
     }
     if (Object.keys(h).length) out.hsl = h;
   }
-  if (isObj(v.lut)) { const id = str(v.lut.id, 60); if (id && /^[\w.-]+$/.test(id)) out.lut = { id, intensity: clampNum(v.lut.intensity, 0, 1) ?? 1 }; }
+  if (isObj(v.lut)) { const id = str(v.lut.id, 80); if (id && /^[\w.:-]+$/.test(id) && !id.includes('..')) out.lut = { id, intensity: clampNum(v.lut.intensity, 0, 1) ?? 1 }; }
   return Object.keys(out).length ? out : undefined;
 }
