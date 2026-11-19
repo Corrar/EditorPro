@@ -155,6 +155,8 @@ export default function TimelineHarness() {
     setReady(true);
     (window as unknown as { __ep: typeof useEditor }).__ep = useEditor;
     (window as unknown as { __tlui: typeof useTimelineUi }).__tlui = useTimelineUi;
+    // testes: API de música do catálogo (carregada sob demanda)
+    (window as unknown as { __music: () => Promise<unknown> }).__music = async () => ({ ...(await import('@/lib/music/insert')), ...(await import('@/lib/music/catalog')) });
     return on('ep:toast', (d) => {
       setToast(d.text);
       setTimeout(() => setToast(''), 2200);

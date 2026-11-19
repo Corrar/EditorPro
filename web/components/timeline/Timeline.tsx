@@ -73,6 +73,31 @@ type Gesture =
   /** trims profissionais (ripple/roll/slip/slide) */
   | { kind: 'pro'; x0: number; moved: boolean; s: ProSession; ops: EditOp[] };
 
+/** durações dos clipes de ÁUDIO antes de um aparo (p/ refazer a música do catálogo depois) */
+function durationsOf(p: Project, ids: Id[]): Map<Id, Seconds> {
+  const m = new Map<Id, Seconds>();
+  for (const id of ids) {
+    const c = findClip(p, id)?.clip;
+    if (c?.type === 'audio') m.set(id, c.duration);
+  }
+  return m;
+}
+
+/** música do catálogo aparada: re-renderiza no tamanho novo (termina no compasso, com final), no mesmo desfazer */
+function refitMusic(before: Map<Id, Seconds>) {
+  if (!before.size) return;
+  const p = useEditor.getState().project;
+  const changed: [Id, Seconds][] = [];
+  for (const [id, d0] of before) {
+    const c = findClip(p, id)?.clip;
+    if (c && Math.abs(c.duration - d0) > 1e-3) changed.push([id, c.duration]);
+  }
+  if (!changed.length) return;
+  void import('@/lib/music/insert')
+    .then(({ refitMusicClip }) => Promise.all(changed.map(([id, d]) => refitMusicClip(id, d, { history: false }))))
+    .catch(() => {});
+}
+
 function trackLabel(kind: TrackKind, p: Project): string {
   const n = p.tracks.filter((t) => t.kind === kind).length + 1;
   return `${kind === 'video' ? 'Vídeo' : kind === 'audio' ? 'Áudio' : 'Texto'} ${n}`;
@@ -822,6 +847,7 @@ export default function Timeline() {
       const c = g.clip;
       // pontas vinculadas (áudio do vídeo) acompanham; Alt no início do arraste = J/L-cut
       const ids = [c, ...g.partners];
+      const before = durationsOf(st.project, ids.map((x) => x.id));
       if (drag.mode === 'trim-start' && Math.abs(drag.start - c.start) > 1e-6) {
         const d = drag.start - c.start;
         commitOps(ids.map((x) => ({ op: 'trim_clip', clipId: x.id, start: x.start + d }) as EditOp));
@@ -830,8 +856,13 @@ export default function Timeline() {
         const d = drag.end - clipEnd(c);
         commitOps(ids.map((x) => ({ op: 'trim_clip', clipId: x.id, end: clipEnd(x) + d }) as EditOp));
       }
+      refitMusic(before);
     } else if (g.kind === 'pro') {
-      if (g.moved && g.ops.length) commitOps(g.ops);
+      if (g.moved && g.ops.length) {
+        const before = durationsOf(st.project, g.s.touched);
+        commitOps(g.ops);
+        refitMusic(before);
+      }
     } else if (g.kind === 'cap') {
       if (!g.moved || !drag || !drag.mode.startsWith('cap')) return;
       const d = drag as { start: number; end: number };
