@@ -77,6 +77,9 @@ export default function MusicCatalog({ query: extQuery, onInserted }: { query?: 
     setLoading(null);
   };
   useEffect(() => () => stop(), []); // eslint-disable-line react-hooks/exhaustive-deps
+  // o vídeo começou a tocar → a prévia do catálogo para (não tocam por cima)
+  const editorPlaying = useEditor((s) => s.playing);
+  useEffect(() => { if (editorPlaying) stop(); }, [editorPlaying]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const play = async (id: string) => {
     if (playing === id || loading === id) { stop(); return; }

@@ -6,6 +6,7 @@ import { clipEnd, type EditOp } from '../ops';
 import { makeAudioClip } from '../defaults';
 import { uid } from '../util';
 import { MAX_DURATION } from './engine';
+import { MUSIC_CATALOG, type MusicTrack } from './catalog';
 
 const isMusicTrack = (name: string) => /m[uú]sica|music|trilha/i.test(name);
 
@@ -83,4 +84,24 @@ export function beatMarkerOps(p: Project, beats: Seconds[], at: Seconds, opts: {
     out.push({ op: 'add_marker', marker: { id: `beat_${Math.round(t * 1000)}`, t, kind: 'beat', color: opts.color ?? '#E0A32E' }, explain: out.length === 0 ? 'Marcando as batidas da música' : undefined });
   });
   return out;
+}
+
+/** faixa do catálogo que gerou o asset (assets da biblioteca se chamam "<Nome>.wav") */
+export function musicTrackForAsset(a: MediaAsset | undefined): MusicTrack | undefined {
+  if (!a?.library || a.kind !== 'audio') return undefined;
+  const base = a.name.replace(/\.wav$/i, '');
+  return MUSIC_CATALOG.find((t) => t.name === base);
+}
+
+/**
+ * Troca a música do clipe por uma versão renderizada no tamanho novo (termina
+ * no compasso, com final). `in` volta a 0. Puro: o asset novo já deve existir.
+ */
+export function musicRefitOps(p: Project, clipId: Id, asset: MediaAsset): EditOp[] {
+  for (const t of p.tracks) {
+    const c = t.clips.find((x) => x.id === clipId);
+    if (!c || c.type !== 'audio') continue;
+    return [{ op: 'update_clip', clipId, patch: { assetId: asset.id, in: 0, duration: asset.duration }, explain: 'Ajustando a música ao novo tamanho' }];
+  }
+  return [];
 }
