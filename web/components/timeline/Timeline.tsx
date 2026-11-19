@@ -66,7 +66,7 @@ type Gesture =
   | { kind: 'marquee'; x0: number; y0: number; moved: boolean; additive: boolean; base: Id[] }
   | { kind: 'scrub' }
   /** toque: decide no soltar (tocar = selecionar / mover playhead); se o dedo andar, o navegador rola */
-  | { kind: 'tap'; x0: number; y0: number; moved: boolean; clipId?: Id; capId?: Id }
+  | { kind: 'tap'; x0: number; y0: number; moved: boolean; clipId?: Id; capId?: Id; blade?: { clipId: Id; t: Seconds; alt: boolean } }
   | { kind: 'marker'; x0: number; moved: boolean; id: Id; t0: Seconds; end0?: Seconds; points: Seconds[] }
   | { kind: 'range'; x0: number; moved: boolean; t0: Seconds; points: Seconds[] }
   | { kind: 'kf'; x0: number; moved: boolean; clipId: Id; index: number; start: Seconds; dur: Seconds; t0: Seconds; points: Seconds[] }
@@ -123,6 +123,7 @@ export default function Timeline() {
   const showMinimap = useTimelineUi((s) => s.showMinimap);
   const setUi = useTimelineUi((s) => s.set);
   const tool = useTimelineUi((s) => s.tool);
+  const rangeMode = useTimelineUi((s) => s.rangeMode);
   const dims = useDims();
   const dimsRef = useRef(dims);
   dimsRef.current = dims;
@@ -130,13 +131,24 @@ export default function Timeline() {
   const cancelLongPress = () => {
     if (longPress.current) {
       clearTimeout(longPress.current.timer);
+      longPress.current.off?.();
       longPress.current = null;
     }
+  };
+  /** o timer do toque longo some sozinho no soltar/cancelar, mesmo quando nenhum gesto foi criado */
+  const releaseGuard = () => {
+    const stop = () => cancelLongPress();
+    window.addEventListener('pointerup', stop, true);
+    window.addEventListener('pointercancel', stop, true);
+    return () => {
+      window.removeEventListener('pointerup', stop, true);
+      window.removeEventListener('pointercancel', stop, true);
+    };
   };
 
   const rootRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const longPress = useRef<{ timer: number; x: number; y: number } | null>(null);
+  const longPress = useRef<{ timer: number; x: number; y: number; off?: () => void } | null>(null);
   const tracksRef = useRef<HTMLDivElement>(null);
   const gesture = useRef<Gesture | null>(null);
   const lastPointer = useRef<{ x: number; y: number; shift: boolean } | null>(null);
@@ -280,6 +292,7 @@ export default function Timeline() {
   const userScrolling = useRef(false);
   const dragLock = useRef(false);
   const centerScrollFor = (el: HTMLElement, t: Seconds) => Math.max(0, hw() + t * zoomRef.current - el.clientWidth / 2);
+  const placeCenterRef = useRef<(t: Seconds) => void>(() => {});
   const placeCenter = (t: Seconds) => {
     const el = scrollRef.current;
     if (!el) return;
@@ -290,6 +303,7 @@ export default function Timeline() {
     // virtualização acompanha já (sem esperar o rAF do evento de rolagem)
     setUi({ scrollLeft: el.scrollLeft });
   };
+  placeCenterRef.current = placeCenter;
   useEffect(() => {
     if (!dims.center) return;
     const el = scrollRef.current;
@@ -416,7 +430,9 @@ export default function Timeline() {
     if (!el) return;
     const d = projectDuration(useEditor.getState().project);
     useEditor.getState().setZoom(fitZoom(d, el.clientWidth - hw() - 24, ZMIN, ZMAX));
-    requestAnimationFrame(() => (el.scrollLeft = 0));
+    // modo centro: o playhead fica onde está (zerar a rolagem o jogaria para 0 e pausaria)
+    if (dimsRef.current.center) requestAnimationFrame(() => placeCenterRef.current(useEditor.getState().playhead));
+    else requestAnimationFrame(() => (el.scrollLeft = 0));
   }, []);
 
   // Ctrl/Cmd + roda (inclui pinça do trackpad) => zoom; roda vertical sem estouro vertical => rolagem horizontal
@@ -911,8 +927,12 @@ export default function Timeline() {
       if (target >= 0) st.dispatch({ op: 'move_track', trackId: g.trackId, index: target, explain: 'Reordenando trilhas' });
     } else if (g.kind === 'tap') {
       if (g.moved) return;
+      if (g.blade) {
+        bladeCutRef.current(g.blade.clipId, g.blade.t, g.blade.alt);
+        return;
+      }
       if (g.clipId) {
-        st.select(expandGroups(st.project, [g.clipId]));
+        st.select(expandLinks(st.project, expandGroups(st.project, [g.clipId])));
         ui.set({ captionSel: null });
       } else if (g.capId) {
         st.select([]);
@@ -984,13 +1004,15 @@ export default function Timeline() {
     longPress.current = {
       x,
       y,
+      off: releaseGuard(),
       timer: window.setTimeout(() => {
+        longPress.current?.off?.();
         longPress.current = null;
         const g = gesture.current;
         if (g && g.kind !== 'scrub' && g.moved) return;
         endGestureRef.current(false);
         const st = useEditor.getState();
-        if (target.clipId && !st.selection.includes(target.clipId)) st.select(expandGroups(st.project, [target.clipId]));
+        if (target.clipId && !st.selection.includes(target.clipId)) st.select(expandLinks(st.project, expandGroups(st.project, [target.clipId])));
         if (target.capId) setUi({ captionSel: target.capId });
         try { navigator.vibrate?.(12); } catch {}
         setUi({ menu: { x: x + 10, y: y + 10, ...target, touch: true } });
@@ -1006,7 +1028,9 @@ export default function Timeline() {
     longPress.current = {
       x: cx,
       y: cy,
+      off: releaseGuard(),
       timer: window.setTimeout(() => {
+        longPress.current?.off?.();
         longPress.current = null;
         const g0 = gesture.current;
         if (g0 && g0.kind !== 'scrub' && g0.moved) return;
@@ -1047,6 +1071,7 @@ export default function Timeline() {
     const r = snapTime(t, snapPts(useEditor.getState().project, []), snapThreshold(zoomRef.current));
     return r.point != null ? r.t : t;
   };
+  const bladeCutRef = useRef<(clipId: Id, t0: Seconds, alt: boolean) => void>(() => {});
   const bladeCut = (clipId: Id, t0: Seconds, alt: boolean) => {
     const st = useEditor.getState();
     const p = st.project;
@@ -1061,6 +1086,7 @@ export default function Timeline() {
     }
     if (ops.length) commitOps(ops);
   };
+  bladeCutRef.current = bladeCut;
   const onTracksHover = (e: React.PointerEvent) => {
     if (e.pointerType !== 'mouse' || gesture.current) return;
     const ui = useTimelineUi.getState();
@@ -1110,6 +1136,11 @@ export default function Timeline() {
     const center = dimsRef.current.center;
     const tool = useTimelineUi.getState().tool;
     if (clipEl && tool === 'blade') {
+      // toque: corta só ao soltar sem ter andado (arrastar o dedo rola a timeline, não corta)
+      if (touch) {
+        beginGesture({ kind: 'tap', x0: x, y0: y, moved: false, blade: { clipId: clipEl.dataset.clipId!, t, alt: e.altKey } }, e);
+        return;
+      }
       e.preventDefault();
       bladeCut(clipEl.dataset.clipId!, t, e.altKey);
       return;
@@ -1250,7 +1281,7 @@ export default function Timeline() {
   const onScrubStart = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
     // modo centro no toque: arrastar a régua também navega (rolagem nativa)
-    if (dimsRef.current.center && e.pointerType !== 'mouse' && !(e.target as HTMLElement).closest('[data-marker-id]')) return;
+    if (dimsRef.current.center && e.pointerType !== 'mouse' && !useTimelineUi.getState().rangeMode && !(e.target as HTMLElement).closest('[data-marker-id]')) return;
     e.preventDefault();
     const st = useEditor.getState();
     const { x: lx, t: lt } = toLocal(e.clientX, e.clientY);
@@ -1286,7 +1317,7 @@ export default function Timeline() {
     e.preventDefault();
     const id = clipEl.dataset.clipId!;
     const st = useEditor.getState();
-    if (!st.selection.includes(id)) st.select(e.altKey ? [id] : expandGroups(st.project, [id]));
+    if (!st.selection.includes(id)) st.select(e.altKey ? [id] : expandLinks(st.project, expandGroups(st.project, [id])));
     setUi({ menu: { x: e.clientX, y: e.clientY, clipId: id } });
   };
 
@@ -1372,7 +1403,7 @@ export default function Timeline() {
     <div
       ref={rootRef}
       data-tool={tool}
-      className={`ep-tl${dims.compact ? ' compact' : ''}${dims.center ? ' center' : ''}${dims.short ? ' short' : ''}${dims.coarse ? ' coarse' : ''}`}
+      className={`ep-tl${rangeMode ? ' rangemode' : ''}${dims.compact ? ' compact' : ''}${dims.center ? ' center' : ''}${dims.short ? ' short' : ''}${dims.coarse ? ' coarse' : ''}`}
       style={{ ['--tl-head' as string]: `${dims.headerW}px`, ['--tl-ruler' as string]: `${dims.rulerH}px` }}
     >
       {!dims.center && <Toolbar actions={toolbarActions} />}

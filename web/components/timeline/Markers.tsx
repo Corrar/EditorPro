@@ -128,7 +128,8 @@ export function MarkerPop() {
     save();
     setUi({ markerPop: null });
   };
-  useOutsideClose(!!pop, ref, close, '[data-marker-id]');
+  // só o marcador ABERTO é ignorado: tocar em outro salva o texto deste antes de trocar
+  useOutsideClose(!!pop, ref, close, pop ? `[data-marker-id="${pop.id}"]` : undefined);
   const floatStyle = useFloatAt(ref, !!pop && !!marker, pop?.x ?? 0, pop?.y ?? 0, -16, [pop, marker?.kind]);
   if (!pop || !marker) return null;
   const kind = marker.kind ?? 'user';

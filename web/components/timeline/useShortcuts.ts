@@ -32,7 +32,9 @@ export function isNavControl(el: EventTarget | null): boolean {
   if (el.tagName === 'SELECT') return true;
   if (el.tagName === 'INPUT' && (el as HTMLInputElement).type === 'range') return true;
   const role = el.getAttribute('role');
-  return role === 'slider' || role === 'spinbutton' || role === 'listbox' || role === 'option' || role === 'tab' || role === 'radio' || role === 'menuitem' || role === 'menuitemcheckbox';
+  // radio/tab de botões (ex.: ferramentas da barra) não usam setas: as setas continuam navegando no tempo
+  if (el.closest('[data-arrow-nav]')) return true;
+  return role === 'slider' || role === 'spinbutton' || role === 'listbox' || role === 'option' || role === 'menuitem' || role === 'menuitemcheckbox';
 }
 
 export function isTypingTarget(el: EventTarget | null): boolean {
