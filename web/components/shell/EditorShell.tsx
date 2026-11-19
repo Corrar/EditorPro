@@ -185,6 +185,11 @@ export default function EditorShell() {
     setAiModeRaw((m) => (m === 'open' ? 'min' : m));
     setTool(id); setSideOpen(true);
   }), []);
+  // legendas pela IA podem perguntar algo (ex.: baixar o Whisper): mostra o pop-up/chat junto (B8)
+  useEffect(() => on('ep:generate-captions', () => {
+    if (mq('(max-width: 899px)') && !mq('(max-height: 520px)')) { setChatOpen(false); setSideOpen(false); setAiModeRaw('open'); }
+    else { if (mq('(max-width: 1099px)')) setSideOpen(false); setChatOpen(true); }
+  }), []);
   useEffect(() => on('ep:open-ai-popup', ({ prompt }) => {
     setAiPrompt(prompt);
     if (mq('(max-width: 899px) and (orientation: portrait)') || (mq('(max-width: 899px)') && !mq('(max-height: 520px)'))) {

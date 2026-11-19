@@ -11,6 +11,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { aiTargetFor, resolveAiTarget, type AiTarget, type ScreenPoint } from '@/lib/aiCursor';
 import { useEditor } from '@/lib/store';
+import { bubbleOffset } from './cursorPure';
 
 const MOVE_MS = 420;
 const HOP_MS = 340;
@@ -141,7 +142,9 @@ export default function AiCursor() {
   }, [done]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!shown) return null;
-  const flip = pos.x > innerWidth - (Math.min(240, innerWidth * 0.62) + 28); // balão cabe à direita?
+  const bw = Math.min(240, innerWidth * 0.62);
+  const flip = pos.x > innerWidth - (bw + 28); // etiqueta vira para a esquerda perto da borda direita
+  const dx = bubbleOffset(pos.x, innerWidth, bw); // balão preso dentro da tela dos dois lados
   const up = pos.y > innerHeight - 120;
   const style = { transform: `translate3d(${Math.round(pos.x)}px, ${Math.round(pos.y)}px, 0)` };
   return (
@@ -151,7 +154,7 @@ export default function AiCursor() {
       <div className={`ep-aicursor${instant ? ' instant' : ''}${flip ? ' flip' : ''}${up ? ' up' : ''}`} style={style}>
         <svg width="22" height="24" viewBox="0 0 22 24" className="ep-aicursor-arrow"><path d="M2 2 L19 11.5 L11.2 13.4 L7.6 21.5 Z" /></svg>
         <span className="ep-aicursor-tag">✦ IA</span>
-        {label && <span className="ep-aicursor-bubble" role="status">{label}</span>}
+        {label && <span className="ep-aicursor-bubble" role="status" style={{ left: dx, right: 'auto', maxWidth: bw }}>{label}</span>}
       </div>
     </div>
   );

@@ -15,7 +15,7 @@ import { useEditor } from '../store';
 import type { MediaAsset, MediaRole } from '../types';
 import { uid } from '../util';
 import { startPreviewProxy } from './proxy';
-import { defaultRoleFor, mediaKindOf, peakCountFor, reducePeaks, thumbCountFor, thumbSize, thumbTimes } from './pure';
+import { UNDECODABLE_MSG, looksUndecodable, defaultRoleFor, mediaKindOf, peakCountFor, reducePeaks, thumbCountFor, thumbSize, thumbTimes } from './pure';
 
 /* ---------- fila de importação (p/ a UI mostrar progresso) ---------- */
 
@@ -168,6 +168,10 @@ export async function ingestFile(file: File, role?: MediaRole): Promise<MediaAss
         setJob({ id, name: file.name, stage: 'Gerando miniaturas…' });
         const thumbnails = await videoThumbnails(el as HTMLVideoElement, duration);
         if (thumbnails.length) { asset = { ...asset, thumbnails }; updateAsset(id, { thumbnails }); }
+        // HEVC/HDR que o aparelho não decodifica: avisa já na importação (mesmo texto do preview/export)
+        if (looksUndecodable({ width: asset.width, height: asset.height, thumbCount: thumbnails.length, duration })) {
+          emit('ep:toast', { text: UNDECODABLE_MSG(file.name), kind: 'error' });
+        }
       }
       el.removeAttribute('src');
       el.load();

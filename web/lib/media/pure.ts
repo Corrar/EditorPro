@@ -94,3 +94,12 @@ export function formatBytes(n: number): string {
   if (n < 1024 ** 3) return `${(n / 1024 ** 2).toFixed(1)} MB`;
   return `${(n / 1024 ** 3).toFixed(2)} GB`;
 }
+
+/** vídeo que o navegador abriu mas não decodifica (HEVC/HDR sem suporte): sem dimensões ou sem nenhum quadro */
+export function looksUndecodable(v: { width?: number; height?: number; thumbCount: number; duration: number }): boolean {
+  if (!v.width || !v.height) return true;
+  return v.duration > 0 && v.thumbCount === 0;
+}
+
+export const UNDECODABLE_MSG = (name: string) =>
+  `Este aparelho não consegue ler "${name}" (formato como HEVC/HDR). Grave em H.264 ("Mais compatível" na câmera) ou converta antes de enviar.`;

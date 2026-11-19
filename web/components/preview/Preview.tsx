@@ -5,6 +5,7 @@
    <video>/<audio> sincronizados (LiveMediaPool) e o mesmo renderFrame do export.
    ===================================================================== */
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useEditor } from '@/lib/store';
 import { projectDuration } from '@/lib/ops';
 import { assetEvents, renderFrame, segEvents } from '@/lib/engine';
@@ -110,6 +111,15 @@ export default function Preview() {
   /* "apontar para qualquer coisa": marca um ponto do quadro como contexto do chat */
   const [pointMode, setPointMode] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  /** raiz .ep-root (tokens de cor/tema) onde o bottom-sheet do menu ⋯ é montado */
+  const [sheetHost, setSheetHost] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!moreOpen) return;
+    setSheetHost((boxRef.current?.closest('.ep-root') as HTMLElement | null) ?? document.body);
+    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') setMoreOpen(false); };
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  }, [moreOpen]);
   const canUndo = useEditor((s) => s.past.length > 0);
   const canRedo = useEditor((s) => s.future.length > 0);
   const chatPoint = useEditor((s) => s.chatContext?.point);
@@ -719,13 +729,20 @@ export default function Preview() {
             <button className="ep-pv-mbtn" onClick={toggleFull} aria-label="Tela cheia" title="Tela cheia"><Icon name="fullscreen" size={22} /></button>
             <div className="ep-pv-more">
               <button className={`ep-pv-mbtn${moreOpen || pointMode || safe || grid || loop || compare || zoom !== 'fit' || playRate !== 1 ? ' on' : ''}`} onClick={() => setMoreOpen(!moreOpen)} aria-label="Mais opções" aria-expanded={moreOpen}><Icon name="more" size={22} /></button>
-              {moreOpen && (
-                <div className="ep-pv-menu" role="menu">
-                  <button role="menuitemcheckbox" aria-checked={pointMode} className={pointMode ? 'on' : ''} onClick={() => { setPointMode(!pointMode); setMoreOpen(false); }}>
-                    <Icon name="point" size={18} /> Apontar no vídeo <small>ou toque longo</small>
-                  </button>
-                  {viewItems}
-                </div>
+              {moreOpen && sheetHost && createPortal(
+                // bottom-sheet fixo (portal na raiz .ep-root): nunca sai da tela nem fica sob a pílula da IA
+                <div className="ep-pv-sheetbg" onPointerDown={(e) => { if (e.target === e.currentTarget) setMoreOpen(false); }}>
+                  <div className="ep-pv-menu ep-pv-sheet" role="menu" aria-label="Opções do preview">
+                    <div className="ep-pv-sheethd"><b>Opções do preview</b>
+                      <button className="ep-circle sm" onClick={() => setMoreOpen(false)} aria-label="Fechar"><Icon name="close" size={16} /></button>
+                    </div>
+                    <button role="menuitemcheckbox" aria-checked={pointMode} className={pointMode ? 'on' : ''} onClick={() => { setPointMode(!pointMode); setMoreOpen(false); }}>
+                      <Icon name="point" size={18} /> Apontar no vídeo <small>ou toque longo</small>
+                    </button>
+                    {viewItems}
+                  </div>
+                </div>,
+                sheetHost,
               )}
             </div>
           </div>
