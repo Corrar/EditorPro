@@ -315,6 +315,19 @@ export interface TextStyle {
   glow?: { color: string; blur: number };
   /** padding da caixa de fundo (px, base 1920) */
   backgroundPadding?: number;
+  /* ---- (aditivo, biblioteca) texto avançado ---- */
+  /** contornos extras por fora do principal (px base 1920), do mais interno ao mais externo */
+  strokes?: { color: string; width: number }[];
+  /** sombra longa sólida (estilo flat), comprimento em px base 1920, ângulo em graus (45 = baixo-direita) */
+  longShadow?: { color: string; length: number; angle?: number };
+  /** extrusão 3D (camadas empilhadas), profundidade em px base 1920 */
+  extrude?: { color: string; depth: number; angle?: number };
+  /** texto curvo: graus de arco da linha (−360..360; >0 = sorriso, <0 = arco p/ cima) */
+  curve?: number;
+  /** desfoque do vídeo atrás da caixa de fundo (px base 1920; efeito "vidro") */
+  backgroundBlur?: number;
+  /** linhas equilibradas (evita palavra órfã na última linha) */
+  balance?: boolean;
 }
 
 export interface TextClip extends BaseClip {
@@ -427,6 +440,10 @@ export interface CaptionStyle extends TextStyle {
   lines?: 1 | 2;
   /** rotação leve aleatória por bloco (estilo dinâmico), em graus */
   jitter?: number;
+  /** (aditivo, biblioteca) ênfase automática de palavras-chave (números, valores, palavras fortes) */
+  emphasis?: { auto: boolean; color?: string; scale?: number };
+  /** (aditivo, biblioteca) mantém a legenda fora da interface do app (TikTok/Reels/Shorts/YouTube) */
+  safeZone?: 'none' | 'tiktok' | 'reels' | 'shorts' | 'youtube';
 }
 
 export interface Captions {

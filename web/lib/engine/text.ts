@@ -31,6 +31,29 @@ export function layoutWords(
   return lines;
 }
 
+/**
+ * Linhas equilibradas: mantém o número de linhas do layout guloso, mas usa a
+ * menor largura possível (busca binária) — evita palavra órfã na última linha
+ * ("isso vai mudar / tudo" → "isso vai / mudar tudo").
+ */
+export function balanceLines(
+  words: string[],
+  measure: (s: string) => number,
+  maxWidth: number,
+  breaks: Set<number> = new Set(),
+): LaidLine[] {
+  const greedy = layoutWords(words, measure, maxWidth, breaks);
+  if (greedy.length <= 1) return greedy;
+  const widest = Math.max(...words.map((w) => measure(w)));
+  let lo = Math.max(widest, maxWidth * 0.3), hi = maxWidth;
+  for (let i = 0; i < 14 && hi - lo > 0.5; i++) {
+    const mid = (lo + hi) / 2;
+    if (layoutWords(words, measure, mid, breaks).length <= greedy.length) hi = mid; else lo = mid;
+  }
+  const out = layoutWords(words, measure, hi, breaks);
+  return out.length <= greedy.length ? out : greedy;
+}
+
 /** separa texto em palavras e marca quebras manuais (\n) */
 export function splitText(text: string): { words: string[]; breaks: Set<number> } {
   const words: string[] = [];

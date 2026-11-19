@@ -71,6 +71,8 @@ export interface EditorState {
 }
 
 let liveToken = 0;
+/** projeto de antes do lote ao vivo em andamento (p/ fechar o lote como 1 passo de desfazer) */
+let liveBefore: Project | null = null;
 
 export const useEditor = create<EditorState>((set, get) => ({
   project: createProject(),
@@ -86,6 +88,9 @@ export const useEditor = create<EditorState>((set, get) => ({
 
   dispatch: (opOrOps, opts = {}) => {
     const ops = Array.isArray(opOrOps) ? opOrOps : [opOrOps];
+    const history = opts.history !== false;
+    // edição manual no meio da IA: para a IA e fecha o lote dela como 1 passo antes desta edição
+    if (history && get().live.running) get().cancelLive();
     const before = get().project;
     let p = before;
     for (const op of ops) {
@@ -96,7 +101,6 @@ export const useEditor = create<EditorState>((set, get) => ({
       }
     }
     if (p === before) return;
-    const history = opts.history !== false;
     set((s) => ({
       project: p,
       past: history ? [...s.past, before].slice(-HISTORY_LIMIT) : s.past,
@@ -105,19 +109,31 @@ export const useEditor = create<EditorState>((set, get) => ({
   },
 
   undo: () => {
+    // desfazer no meio da IA: para e desfaz o lote inteiro dela
+    if (get().live.running) get().cancelLive();
     const { past, project, future } = get();
     if (!past.length) return;
     set({ project: past[past.length - 1], past: past.slice(0, -1), future: [project, ...future] });
   },
 
   redo: () => {
+    if (get().live.running) get().cancelLive();
     const { past, project, future } = get();
     if (!future.length) return;
     set({ project: future[0], future: future.slice(1), past: [...past, project] });
   },
 
-  loadProject: (p) => set({ project: p, past: [], future: [], playhead: 0, selection: [] }),
-  newProject: (opts) => set({ project: createProject(opts), past: [], future: [], playhead: 0, selection: [], messages: [] }),
+  // trocar de projeto para qualquer edição ao vivo (as ops restantes eram do projeto anterior)
+  loadProject: (p) => {
+    liveToken++;
+    liveBefore = null;
+    set({ project: p, past: [], future: [], playhead: 0, selection: [], chatContext: undefined, live: { running: false, done: 0, total: 0 } });
+  },
+  newProject: (opts) => {
+    liveToken++;
+    liveBefore = null;
+    set({ project: createProject(opts), past: [], future: [], playhead: 0, selection: [], messages: [], chatContext: undefined, live: { running: false, done: 0, total: 0 } });
+  },
 
   addAsset: (a) => set((s) => ({ assets: { ...s.assets, [a.id]: a } })),
   updateAsset: (id, patch) =>
@@ -142,14 +158,17 @@ export const useEditor = create<EditorState>((set, get) => ({
   setChatContext: (c) => set({ chatContext: c }),
 
   applyLive: async (rawOps, opts = {}) => {
+    // um lote novo fecha o anterior (se ainda estiver rodando)
+    if (get().live.running) get().cancelLive();
     const token = ++liveToken;
     const ops = rawOps.map(normalizeOp);
     const delayOf = () => (typeof opts.delayMs === 'function' ? opts.delayMs() : opts.delayMs ?? 450);
     const before = get().project;
+    liveBefore = before;
     const applied: Id[] = [];
     set({ live: { running: true, done: 0, total: ops.length }, playing: false });
     for (let i = 0; i < ops.length; i++) {
-      if (token !== liveToken) break; // cancelado
+      if (token !== liveToken) break; // cancelado / projeto trocado / desfazer
       const op = ops[i];
       const cur = get().project;
       const focus = opFocus(cur, op);
@@ -159,6 +178,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       }));
       opts.onStep?.(op, i);
       await sleep(delayOf() / 2);
+      if (token !== liveToken) break; // "Parar" durante a espera: não aplica a op pendente
       try {
         const next = applyOp(get().project, op);
         const f2 = opFocus(next, op);
@@ -169,14 +189,22 @@ export const useEditor = create<EditorState>((set, get) => ({
       }
       await sleep(delayOf() / 2);
     }
-    // um único passo de desfazer para o lote inteiro
-    if (get().project !== before) set((s) => ({ past: [...s.past, before].slice(-HISTORY_LIMIT), future: [] }));
-    set({ live: { running: false, done: applied.length, total: ops.length } });
+    // ainda é o dono do lote: fecha como UM passo de desfazer (se foi cancelado, cancelLive já fechou)
+    if (token === liveToken) {
+      if (get().project !== before && get().project.id === before.id) set((s) => ({ past: [...s.past, before].slice(-HISTORY_LIMIT), future: [] }));
+      liveBefore = null;
+      set({ live: { running: false, done: applied.length, total: ops.length } });
+    }
     return applied;
   },
 
   cancelLive: () => {
     liveToken++;
+    const before = liveBefore;
+    liveBefore = null;
+    const { project } = get();
+    // fecha o lote parcial como 1 passo de desfazer (só se ainda for o mesmo projeto)
+    if (before && project !== before && project.id === before.id) set((s) => ({ past: [...s.past, before].slice(-HISTORY_LIMIT), future: [] }));
     set((s) => ({ live: { ...s.live, running: false, current: undefined, highlightClipId: undefined } }));
   },
 }));
