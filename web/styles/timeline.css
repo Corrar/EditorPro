@@ -698,3 +698,70 @@
   font-size: 10px; font-weight: 700; line-height: 16px; white-space: nowrap;
 }
 .ep-tl.zooming .ep-tl-group { visibility: hidden; }
+
+/* =====================================================================
+   Design v2.3 — modo celular estilo CapCut (.ep-tl.center)
+   playhead FIXO no centro; a timeline rola por baixo (arrastar = navegar no tempo)
+   ===================================================================== */
+.ep-tl-scrollwrap { position: relative; flex: 1; min-height: 0; display: flex; }
+.ep-tl-scrollwrap > .ep-tl-scroll { flex: 1; min-width: 0; }
+.ep-tl.center .ep-tl-pline, .ep-tl.center .ep-tl-phead { display: none; }
+.ep-tl.center .ep-tl-scroll { scrollbar-width: none; }
+.ep-tl.center .ep-tl-scroll::-webkit-scrollbar { display: none; }
+
+/* linha do playhead fixa no meio */
+.ep-tl-cline { position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; margin-left: -1px; z-index: 9; pointer-events: none; background: var(--ink); box-shadow: 0 0 0 1px color-mix(in srgb, var(--bg) 60%, transparent); border-radius: 2px; }
+.ep-tl-cline i { position: absolute; top: calc(var(--tl-ruler) - 9px); left: -4px; width: 10px; height: 10px; border-radius: 50%; background: var(--ink); }
+.ep-tl-cline.live { background: var(--green); box-shadow: 0 0 10px color-mix(in srgb, var(--green) 60%, transparent); transition: none; }
+.ep-tl-cline.live i { background: var(--green); }
+
+/* tempo à esquerda da régua e "⋯" à direita */
+.ep-tl-ctime {
+  position: absolute; top: 0; left: 0; z-index: 10; height: var(--tl-ruler); display: flex; align-items: center; gap: 5px;
+  padding: 0 18px 0 12px; font-size: 12px; pointer-events: none;
+  background: linear-gradient(90deg, var(--tl-bg) 75%, transparent);
+}
+.ep-tl-ctime b { font-weight: 600; color: var(--ink); }
+.ep-tl-ctime i { font-style: normal; color: var(--faint); }
+.ep-tl-ctime span { color: var(--muted); }
+.ep-tl-cmore { position: absolute; top: 2px; right: 6px; z-index: 10; width: 30px; height: 30px; border-radius: 50%; border: 0; display: grid; place-items: center; background: var(--tile); color: var(--ink); touch-action: manipulation; }
+.ep-tl-cmore.on { background: var(--tintG); color: var(--tintGInk); }
+
+/* régua e faixas no modo centro */
+.ep-tl.center .ep-tl-corner { position: static; background: transparent; }
+.ep-tl.center .ep-tl-scale { touch-action: pan-x pan-y; cursor: grab; }
+.ep-tl.center .ep-tl-tick { font-size: 10.5px; }
+.ep-tl.center .ep-tl-clip.sel, .ep-tl.center .ep-tl-cap.sel { touch-action: pan-x pan-y; }
+.ep-tl.center .ep-tl-lane { border-radius: 12px; }
+.ep-tl.center .ep-tl-lane.main { background: transparent; }
+.ep-tl-lead { flex: none; position: relative; }
+
+/* "Capa" e "Editar com IA" antes do início da trilha principal */
+.ep-tl-mainlead { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); display: flex; gap: 6px; }
+.ep-tl-leadbtn {
+  position: relative; width: 62px; border: 0; border-radius: 12px; overflow: hidden; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  font: inherit; font-size: 10.5px; font-weight: 700; line-height: 1.15; text-align: center; padding: 4px;
+  background: var(--tile); color: var(--ink); touch-action: manipulation;
+}
+.ep-tl-leadbtn.ai { background: var(--ai); color: var(--aiInk); }
+.ep-tl-leadbtn.ai svg { color: #FFB27A; }
+.ep-tl-leadbtn.cover { background-size: cover; background-position: center; justify-content: flex-end; padding: 0; }
+.ep-tl-leadbtn.cover span { width: 100%; padding: 3px 0 4px; background: linear-gradient(0deg, rgba(0, 0, 0, .65), rgba(0, 0, 0, .15)); color: #fff; }
+.ep-tl-leadbtn:active { transform: scale(.96); }
+
+/* trilhas vazias: "+ Adicionar …" com ícone; "+" branco no fim da principal */
+.ep-tl-addline {
+  position: absolute; left: 6px; top: 50%; transform: translateY(-50%); z-index: 2;
+  display: inline-flex; align-items: center; gap: 8px; height: calc(100% - 8px); max-height: 34px; padding: 0 14px;
+  border: 0; border-radius: 10px; background: transparent; color: var(--muted); font: inherit; font-size: 13px; font-weight: 600;
+  white-space: nowrap; touch-action: manipulation; cursor: pointer;
+}
+.ep-tl-addline:active { background: var(--tileHover); }
+.ep-tl-lane.main .ep-tl-addline { background: var(--tile); color: var(--ink); }
+.ep-tl-addend {
+  position: absolute; left: 0; top: 50%; z-index: 3; width: 40px; height: 40px; border-radius: 12px; border: 0;
+  display: grid; place-items: center; background: #FFFFFF; color: #141414; cursor: pointer; touch-action: manipulation;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .18), 0 0 0 1px rgba(0, 0, 0, .06);
+}
+.ep-tl-addend:active { transform: translate(var(--tx, 0), -50%) scale(.94); }

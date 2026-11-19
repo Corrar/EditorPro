@@ -27,7 +27,7 @@ import {
   addMarker, commit as commitOps, copyClips, cutClips, duplicateClips, pasteClips, removeClips, splitAtPlayhead, toggleKeyframe,
 } from '@/lib/timeline/actions';
 import { type RowInfo, dimsFor, fillRowHeights, rowAtY, rowLayout, rowsHeight, useDims, useTimelineUi } from '@/lib/timeline/ui';
-import { Toolbar, ZMAX, ZMIN } from './Toolbar';
+import { CenterOverlay, Toolbar, ZMAX, ZMIN } from './Toolbar';
 import { Ruler } from './Ruler';
 import { DragLayer, GroupOutlines, Guides, KeyframeLayer, PlayheadLine, Rows, TouchHandles } from './Rows';
 import { ClipMenu, LiveBanner, TrackPop } from './Overlays';
@@ -114,7 +114,7 @@ export default function Timeline() {
 
   const viewH = useTimelineUi((s) => s.viewH);
   const rowH = useMemo(
-    () => (dims.compact ? fillRowHeights(dims.rowH, project, viewH - dims.rulerH - 4) : dims.rowH),
+    () => (dims.compact ? fillRowHeights(dims.rowH, project, viewH - dims.rulerH - 4, dims.center ? 1.25 : 1.6) : dims.rowH),
     // só a estrutura de trilhas importa para as alturas
     [dims.compact, dims.rowH, dims.rulerH, viewH, project.tracks.length], // eslint-disable-line react-hooks/exhaustive-deps
   );
@@ -125,7 +125,9 @@ export default function Timeline() {
   zoomRef.current = zoom;
 
   const duration = projectDuration(project);
-  const laneW = Math.max((duration + Math.max(10, duration * 0.25)) * zoom, viewW - hw());
+  const laneW = dims.center
+    ? duration * zoom + Math.max(viewW / 2, 120) + 72 // até o fim chegar ao centro (+ botão "+")
+    : Math.max((duration + Math.max(10, duration * 0.25)) * zoom, viewW - hw());
   const rowsH = rowsHeight(rows);
 
   // desfazer/refazer/IA podem remover clipes selecionados: poda a seleção
@@ -146,7 +148,7 @@ export default function Timeline() {
       const r = el.getBoundingClientRect();
       const next = dimsFor(r.width, r.height, !!mq?.matches);
       const cur = useTimelineUi.getState().dims;
-      if (next.compact !== cur.compact || next.barCompact !== cur.barCompact || next.short !== cur.short || next.coarse !== cur.coarse) setUi({ dims: next });
+      if (next.compact !== cur.compact || next.barCompact !== cur.barCompact || next.short !== cur.short || next.coarse !== cur.coarse || next.headerW !== cur.headerW) setUi({ dims: next });
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -178,6 +180,46 @@ export default function Timeline() {
       ro.disconnect();
     };
   }, [setUi]);
+
+  /* ---------------- modo celular (CapCut): playhead fixo no centro ----------------
+     playhead -> rolagem (reprodução, IA, teclado) e rolagem nativa (com inércia) -> playhead. */
+  const progScroll = useRef<number | null>(null);
+  const userScrolling = useRef(false);
+  const dragLock = useRef(false);
+  const centerScrollFor = (el: HTMLElement, t: Seconds) => Math.max(0, hw() + t * zoomRef.current - el.clientWidth / 2);
+  const placeCenter = (t: Seconds) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const target = centerScrollFor(el, t);
+    if (Math.abs(el.scrollLeft - target) < 0.5) return;
+    progScroll.current = target;
+    el.scrollLeft = target;
+  };
+  useEffect(() => {
+    if (!dims.center) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    placeCenter(useEditor.getState().playhead);
+    const unsub = useEditor.subscribe((s, prev) => {
+      if (s.playhead !== prev.playhead && !userScrolling.current) placeCenter(s.playhead);
+    });
+    const onScroll = () => {
+      if (progScroll.current != null && Math.abs(el.scrollLeft - progScroll.current) < 1.5) return;
+      progScroll.current = null;
+      if (dragLock.current || zoomGesture.current) return;
+      const st = useEditor.getState();
+      const t = Math.max(0, Math.min(projectDuration(st.project), (el.scrollLeft + el.clientWidth / 2 - hw()) / zoomRef.current));
+      userScrolling.current = true;
+      if (st.playing) st.setPlaying(false); // o dedo assumiu: pausa (como no CapCut)
+      st.setPlayhead(t);
+      userScrolling.current = false;
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      unsub();
+      el.removeEventListener('scroll', onScroll);
+    };
+  }, [dims.center, dims.headerW]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ---------------- zoom ancorado ---------------- */
 
@@ -259,7 +301,14 @@ export default function Timeline() {
   useLayoutEffect(() => {
     const el = scrollRef.current;
     const a = anchor.current;
-    if (!el || !a) return;
+    if (!el) return;
+    if (dimsRef.current.center) {
+      anchor.current = null;
+      progScroll.current = null;
+      placeCenter(useEditor.getState().playhead);
+      return;
+    }
+    if (!a) return;
     anchor.current = null;
     el.scrollLeft = Math.max(0, hw() + a.t * zoom - a.px);
   }, [zoom]);
@@ -283,11 +332,17 @@ export default function Timeline() {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
         const factor = Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0025) * 2);
-        previewZoomRef.current(targetZoom() * factor, e.clientX);
+        previewZoomRef.current(targetZoom() * factor, anchorX(e.clientX));
       } else if (!e.shiftKey && Math.abs(e.deltaY) > Math.abs(e.deltaX) && el.scrollHeight <= el.clientHeight + 1) {
         e.preventDefault();
         el.scrollLeft += e.deltaY;
       }
+    };
+    /** no modo centro o zoom sempre ancora no playhead central */
+    const anchorX = (x: number) => {
+      if (!dimsRef.current.center) return x;
+      const r = el.getBoundingClientRect();
+      return r.left + el.clientWidth / 2;
     };
     // Safari: gesto de pinça
     let gz = 0;
@@ -295,7 +350,7 @@ export default function Timeline() {
     const onGChange = (e: Event) => {
       e.preventDefault();
       const ge = e as Event & { scale: number; clientX: number };
-      previewZoomRef.current(gz * ge.scale, ge.clientX);
+      previewZoomRef.current(gz * ge.scale, anchorX(ge.clientX));
     };
     // pinça por toque (2 dedos) — Touch Events seguem chegando mesmo quando o navegador rola
     let pinch0 = 0;
@@ -310,10 +365,11 @@ export default function Timeline() {
       }
     };
     const onTMove = (e: TouchEvent) => {
+      if (dragLock.current) { e.preventDefault(); return; } // arrastando clipe (toque longo): não rola
       if (e.touches.length !== 2 || pinch0 < 10) return;
       e.preventDefault();
       const mid = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-      previewZoomRef.current(pinchZ * (dist(e.touches) / pinch0), mid);
+      previewZoomRef.current(pinchZ * (dist(e.touches) / pinch0), anchorX(mid));
     };
     const onTEnd = (e: TouchEvent) => {
       if (e.touches.length < 2) pinch0 = 0;
@@ -582,7 +638,9 @@ export default function Timeline() {
     }
     const r = el.getBoundingClientRect();
     let dx = 0;
-    if (lp.x < r.left + hw() + EDGE) dx = -Math.ceil((r.left + hw() + EDGE - lp.x) / 4);
+    // no modo centro o "cabeçalho" é meia tela de espaço: a borda é só a borda real
+    const leftEdge = r.left + (dimsRef.current.center ? 0 : hw()) + EDGE;
+    if (lp.x < leftEdge) dx = -Math.ceil((leftEdge - lp.x) / 4);
     else if (lp.x > r.right - EDGE) dx = Math.ceil((lp.x - (r.right - EDGE)) / 4);
     let dy = 0;
     const top = r.top + dimsRef.current.rulerH;
@@ -601,6 +659,15 @@ export default function Timeline() {
   const endGesture = useCallback((commit: boolean) => {
     const g = gesture.current;
     gesture.current = null;
+    if (dragLock.current && dimsRef.current.center) {
+      // a rolagem de borda pode ter andado durante o arraste: o tempo sob o centro passa a ser o playhead
+      const el = scrollRef.current;
+      if (el) {
+        const st0 = useEditor.getState();
+        st0.setPlayhead(Math.max(0, (el.scrollLeft + el.clientWidth / 2 - hw()) / zoomRef.current));
+      }
+    }
+    dragLock.current = false;
     cancelLongPress();
     cancelAnimationFrame(edgeRaf.current);
     window.removeEventListener('pointermove', onWinMove);
@@ -713,7 +780,7 @@ export default function Timeline() {
         st.select([]);
         ui.set({ captionSel: null });
         const lp = lastPointer.current;
-        if (lp) {
+        if (lp && !dimsRef.current.center) {
           const { t } = toLocal(lp.x, lp.y);
           st.setPlayhead(toFrame(Math.max(0, t), st.project.fps));
         }
@@ -790,12 +857,53 @@ export default function Timeline() {
     };
   };
 
+  /** modo centro: toque longo no clipe = pegar e arrastar (o arraste comum navega no tempo) */
+  const startLongDrag = (e: React.PointerEvent, clipId: Id) => {
+    cancelLongPress();
+    const cx = e.clientX;
+    const cy = e.clientY;
+    longPress.current = {
+      x: cx,
+      y: cy,
+      timer: window.setTimeout(() => {
+        longPress.current = null;
+        const g0 = gesture.current;
+        if (g0 && g0.kind !== 'scrub' && g0.moved) return;
+        endGestureRef.current(false);
+        const st = useEditor.getState();
+        const p = st.project;
+        if (!st.selection.includes(clipId)) st.select(expandGroups(p, [clipId]));
+        const ids = useEditor.getState().selection.filter((sid) => {
+          const ff = findClip(p, sid);
+          return ff && !ff.track.locked && !ff.clip.locked;
+        });
+        if (!ids.includes(clipId)) return;
+        const origin = new Map<Id, { start: Seconds; duration: Seconds; trackId: Id }>();
+        for (const sid of ids) {
+          const ff = findClip(p, sid)!;
+          origin.set(sid, { start: ff.clip.start, duration: ff.clip.duration, trackId: ff.track.id });
+        }
+        const { x, y } = toLocal(cx, cy);
+        dragLock.current = true;
+        try { navigator.vibrate?.(15); } catch {}
+        gesture.current = { kind: 'move', x0: x, y0: y, moved: false, primary: clipId, ids, origin, points: snapPts(p, ids), clickReduce: false, lastDelta: 0 };
+        lastPointer.current = { x: cx, y: cy, shift: false };
+        window.addEventListener('pointermove', onWinMove);
+        window.addEventListener('pointerup', onWinUp);
+        window.addEventListener('pointercancel', onWinCancel);
+        window.addEventListener('keydown', onWinKey, true);
+        edgeRaf.current = requestAnimationFrame(edgeLoop);
+      }, LONG_PRESS_MS),
+    };
+  };
+
   useEffect(() => () => endGestureRef.current(false), []);
 
   const onTracksPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0 || gesture.current) return;
     if (e.pointerType === 'touch' && !e.isPrimary) return;
     const target = e.target as HTMLElement;
+    if (target.closest('button, .ep-tl-lead')) return; // botões dentro das trilhas ("+ Adicionar…", Capa, IA)
     const headEl = target.closest<HTMLElement>('.ep-tl-head');
     if (headEl) {
       // arrastar o cabeçalho (fora dos botões) reordena as trilhas
@@ -827,12 +935,14 @@ export default function Timeline() {
       }
     }
 
-    if (clipEl && touch && !handle && !st.selection.includes(clipEl.dataset.clipId!)) {
+    const center = dimsRef.current.center;
+    if (clipEl && touch && !handle && (center || !st.selection.includes(clipEl.dataset.clipId!))) {
       beginGesture({ kind: 'tap', x0: x, y0: y, moved: false, clipId: clipEl.dataset.clipId! }, e);
-      startLongPress(e, { clipId: clipEl.dataset.clipId! });
+      if (center) startLongDrag(e, clipEl.dataset.clipId!);
+      else startLongPress(e, { clipId: clipEl.dataset.clipId! });
       return;
     }
-    if (capEl && touch && !handle && useTimelineUi.getState().captionSel !== capEl.dataset.capId) {
+    if (capEl && touch && !handle && (center || useTimelineUi.getState().captionSel !== capEl.dataset.capId)) {
       beginGesture({ kind: 'tap', x0: x, y0: y, moved: false, capId: capEl.dataset.capId! }, e);
       startLongPress(e, { capId: capEl.dataset.capId! });
       return;
@@ -931,6 +1041,8 @@ export default function Timeline() {
 
   const onScrubStart = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
+    // modo centro no toque: arrastar a régua também navega (rolagem nativa)
+    if (dimsRef.current.center && e.pointerType !== 'mouse' && !(e.target as HTMLElement).closest('[data-marker-id]')) return;
     e.preventDefault();
     const st = useEditor.getState();
     const { x: lx, t: lt } = toLocal(e.clientX, e.clientY);
@@ -1050,12 +1162,14 @@ export default function Timeline() {
   return (
     <div
       ref={rootRef}
-      className={`ep-tl${dims.compact ? ' compact' : ''}${dims.short ? ' short' : ''}${dims.coarse ? ' coarse' : ''}`}
-      style={{ ['--tl-head' as string]: `${dims.headerW}px` }}
+      className={`ep-tl${dims.compact ? ' compact' : ''}${dims.center ? ' center' : ''}${dims.short ? ' short' : ''}${dims.coarse ? ' coarse' : ''}`}
+      style={{ ['--tl-head' as string]: `${dims.headerW}px`, ['--tl-ruler' as string]: `${dims.rulerH}px` }}
     >
-      <Toolbar actions={toolbarActions} />
+      {!dims.center && <Toolbar actions={toolbarActions} />}
       <LiveBanner />
-      {showMinimap && !dims.short && <Minimap scrollRef={scrollRef} />}
+      {showMinimap && !dims.short && !dims.center && <Minimap scrollRef={scrollRef} />}
+      <div className="ep-tl-scrollwrap">
+      {dims.center && <CenterOverlay actions={toolbarActions} />}
       <div className="ep-tl-scroll" ref={scrollRef} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
         <div className="ep-tl-content" style={{ width: contentW, height: dimsRef.current.rulerH + rowsH }}>
           <Ruler zoom={zoom} width={laneW} onScrubStart={onScrubStart} />
@@ -1074,9 +1188,10 @@ export default function Timeline() {
             <KeyframeLayer project={project} rows={rows} zoom={zoom} />
             <GroupOutlines project={project} rows={rows} zoom={zoom} />
             <MarkerLines zoom={zoom} height={rowsH} headerW={dims.headerW} />
-            {empty && <EmptyHint compact={dims.compact} headerW={dims.headerW} />}
+            {empty && !dims.center && <EmptyHint compact={dims.compact} headerW={dims.headerW} />}
           </div>
         </div>
+      </div>
       </div>
       <ClipMenu actions={menuActions} />
       <MarkerPop />

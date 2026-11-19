@@ -182,7 +182,8 @@ describe('responsivo', () => {
     expect(desk.headerW).toBe(204);
     const phone = dimsFor(390, 300, true);
     expect(phone.compact).toBe(true);
-    expect(phone.headerW).toBeLessThan(64);
+    expect(phone.center).toBe(true);
+    expect(phone.headerW).toBe(195); // metade da largura (espaço antes do t=0)
     expect(phone.rowH.video).toBeLessThan(desk.rowH.video);
     const low = dimsFor(1200, 150, false);
     expect(low.short).toBe(true);
