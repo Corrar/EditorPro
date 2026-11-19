@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { applyOps, findClip } from '../ops';
 import { createProject, makeVideoClip } from '../defaults';
 import type { MediaAsset, Project } from '../types';
-import { clipRangeAt, editPointNear, editPoints, nudgeOps, shuttleNext } from './nav';
+import { clipsAt, nextClipAt, clipRangeAt, editPointNear, editPoints, nudgeOps, shuttleNext } from './nav';
 
 const A: MediaAsset = { id: 'a', kind: 'video', role: 'source', name: 'a.mp4', mime: 'video/mp4', size: 1, duration: 30 };
 function proj(): Project {
@@ -42,5 +42,19 @@ describe('navegação', () => {
     expect(clipRangeAt(p, 6, [])).toEqual({ start: 5, end: 8 });
     expect(clipRangeAt(p, 6, ['v1'])).toEqual({ start: 0, end: 4 });
     expect(clipRangeAt(p, 4.5, [])).toBeNull();
+  });
+});
+
+describe('selecionar clipe sob o cursor (V)', () => {
+  it('pega o clipe no cursor e alterna entre empilhados', () => {
+    let p = proj();
+    p = applyOps(p, [{ op: 'add_clip', trackId: 'track_text_1', clip: { ...makeVideoClip(A, 0), id: 'x', duration: 2 } }]).project;
+    const ids = clipsAt(p, 1);
+    expect(ids.sort()).toEqual(['v1', 'x']);
+    const first = nextClipAt(p, 1, [])!;
+    const second = nextClipAt(p, 1, [first])!;
+    expect(second).not.toBe(first);
+    expect(nextClipAt(p, 1, [second])).toBe(first);
+    expect(nextClipAt(p, 4.5, [])).toBeNull();
   });
 });
