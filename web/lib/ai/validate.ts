@@ -13,7 +13,7 @@ import { TRACK_NAMES, allWords, applyOp, clipEnd, findClip, projectDuration, tra
 import { DEFAULT_TEXT_STYLE } from '../defaults';
 import { uid } from '../util';
 import {
-  ASPECTS, COLOR_PRESETS, MARKER_KINDS, SHAPE_KINDS, TEXT_ANIMATIONS, bool, clampNum, color, isObj, num, oneOf, r3,
+  ASPECTS, COLOR_PRESETS, sanitizeColorGrade, MARKER_KINDS, SHAPE_KINDS, TEXT_ANIMATIONS, bool, clampNum, color, isObj, num, oneOf, r3,
   sanitizeAudioExtras, sanitizeCaptionStyle, sanitizeEffects, sanitizeFilters, sanitizeKeyframes, sanitizePosition,
   sanitizeStyleProfile, sanitizeTextStyle, sanitizeTransform, sanitizeTransition, sanitizeTranscript, sanitizeVisualExtras, str,
 } from './sanitize';
@@ -130,8 +130,9 @@ function buildClip(raw: Record<string, unknown>, p: Project, assets: Record<Id, 
     const cp = oneOf(raw.colorPreset, COLOR_PRESETS);
     const fx = sanitizeEffects(raw.effects);
     const filters = sanitizeFilters(raw.filters) ?? [];
-    if (!cp && !fx?.length && !filters.length) fail('camada de ajuste vazia');
-    return { id, type, start, duration, filters, ...(cp ? { colorPreset: cp } : {}), ...(fx?.length ? { effects: fx } : {}), ...lbl };
+    const cg = sanitizeColorGrade(raw.colorGrade) ?? undefined;
+    if (!cp && !fx?.length && !filters.length && !cg) fail('camada de ajuste vazia');
+    return { id, type, start, duration, filters, ...(cp ? { colorPreset: cp } : {}), ...(cg ? { colorGrade: cg } : {}), ...(fx?.length ? { effects: fx } : {}), ...lbl };
   }
 
   if (type === 'shape') {
@@ -224,6 +225,7 @@ function buildClip(raw: Record<string, unknown>, p: Project, assets: Record<Id, 
     ...(kf?.length ? { keyframes: kf } : {}),
     ...(tr ? { transitionIn: tr } : {}),
     ...(cp ? { colorPreset: cp } : {}),
+    ...(sanitizeColorGrade(raw.colorGrade) ? { colorGrade: sanitizeColorGrade(raw.colorGrade)! } : {}),
     ...(muted !== undefined ? { muted } : {}),
     ...(fadeIn ? { fadeIn } : {}), ...(fadeOut ? { fadeOut } : {}),
     ...sanitizeVisualExtras(raw, duration),
@@ -275,8 +277,9 @@ function buildClipPatch(raw: Record<string, unknown>, clip: Clip, assets: Record
     if (raw.transitionIn === null || ('transitionIn' in raw && raw.transitionIn === undefined)) out.transitionIn = undefined;
     else { const tr = sanitizeTransition(raw.transitionIn, d); if (tr) out.transitionIn = tr; }
   }
-  if (clip.type === 'video' || clip.type === 'adjustment') {
+  if (clip.type === 'video' || clip.type === 'adjustment' || clip.type === 'image') {
     const cp = oneOf(raw.colorPreset, COLOR_PRESETS); if (cp) out.colorPreset = cp;
+    if ('colorGrade' in raw) { const cg = sanitizeColorGrade(raw.colorGrade); if (cg === null) out.colorGrade = undefined; else if (cg) out.colorGrade = cg; }
   }
   if (clip.type === 'adjustment') {
     const fl = sanitizeFilters(raw.filters); if (fl) out.filters = fl;

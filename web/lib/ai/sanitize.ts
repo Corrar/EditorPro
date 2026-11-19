@@ -7,6 +7,7 @@ import type {
   AspectRatio, AudioEffect, AudioEffectKind, BlendMode, CaptionPreset, CaptionSegment, CaptionStyle, CaptionWord, ChromaKey,
   ClipAnimation, ColorPreset, Crop, Easing, Filter, FilterKind, FitMode, Keyframe, Mask, MaskShape, ShapeKind, SpeedPoint,
   SpeedPreset, StyleProfile, TextAnimation, TextStyle, Transform, Transition, TransitionKind, VisualEffect, VisualEffectKind,
+  ColorGrade, ColorWheel, CurvePoint, HslBand,
 } from '../types';
 import { uid } from '../util';
 
@@ -497,4 +498,50 @@ export function sanitizeAudioExtras(v: Record<string, unknown>): Record<string, 
   if (v.speedPreset === null) out.speedPreset = undefined;
   else { const sp = oneOf(v.speedPreset, SPEED_PRESETS); if (sp) out.speedPreset = sp; }
   return out;
+}
+
+/* ---------- correção de cor (ColorGrade, estilo DaVinci) ---------- */
+const HSL_BANDS: HslBand[] = ['red', 'orange', 'yellow', 'green', 'aqua', 'blue', 'purple', 'magenta'];
+const n11 = (v: unknown) => clampNum(v, -1, 1);
+
+function sanitizeWheel(v: unknown): ColorWheel | undefined {
+  if (!isObj(v)) return undefined;
+  const w = { r: n11(v.r) ?? 0, g: n11(v.g) ?? 0, b: n11(v.b) ?? 0, y: n11(v.y) ?? 0 };
+  return w.r || w.g || w.b || w.y ? { r: r3(w.r), g: r3(w.g), b: r3(w.b), y: r3(w.y) } : undefined;
+}
+
+function sanitizeCurve(v: unknown): CurvePoint[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const pts = v.filter(isObj).map((p) => ({ x: clampNum(p.x, 0, 1), y: clampNum(p.y, 0, 1) }))
+    .filter((p): p is CurvePoint => p.x !== undefined && p.y !== undefined)
+    .sort((a, b) => a.x - b.x).slice(0, 16).map((p) => ({ x: r3(p.x), y: r3(p.y) }));
+  return pts.length >= 2 ? pts : undefined;
+}
+
+/** ColorGrade parcial e válido (null = remover a correção). Só campos conhecidos, valores limitados. */
+export function sanitizeColorGrade(v: unknown): ColorGrade | null | undefined {
+  if (v === null) return null;
+  if (!isObj(v)) return undefined;
+  const out: ColorGrade = {};
+  for (const k of ['lift', 'gamma', 'gain', 'offset'] as const) { const w = sanitizeWheel(v[k]); if (w) out[k] = w; }
+  for (const k of ['exposure', 'contrast', 'saturation', 'vibrance', 'temperature', 'tint', 'highlights', 'shadows'] as const) {
+    const x = n11(v[k]); if (x !== undefined && x !== 0) out[k] = r3(x);
+  }
+  const pivot = clampNum(v.pivot, 0, 1); if (pivot !== undefined) out.pivot = r3(pivot);
+  const mix = clampNum(v.mix, 0, 1); if (mix !== undefined) out.mix = r3(mix);
+  if (isObj(v.curves)) {
+    const c: NonNullable<ColorGrade['curves']> = {};
+    for (const k of ['master', 'r', 'g', 'b'] as const) { const cv = sanitizeCurve((v.curves as Record<string, unknown>)[k]); if (cv) c[k] = cv; }
+    if (Object.keys(c).length) out.curves = c;
+  }
+  if (isObj(v.hsl)) {
+    const h: NonNullable<ColorGrade['hsl']> = {};
+    for (const b of HSL_BANDS) {
+      const a = (v.hsl as Record<string, unknown>)[b];
+      if (isObj(a)) { const adj = { hue: r3(n11(a.hue) ?? 0), sat: r3(n11(a.sat) ?? 0), lum: r3(n11(a.lum) ?? 0) }; if (adj.hue || adj.sat || adj.lum) h[b] = adj; }
+    }
+    if (Object.keys(h).length) out.hsl = h;
+  }
+  if (isObj(v.lut)) { const id = str(v.lut.id, 60); if (id && /^[\w.-]+$/.test(id)) out.lut = { id, intensity: clampNum(v.lut.intensity, 0, 1) ?? 1 }; }
+  return Object.keys(out).length ? out : undefined;
 }
