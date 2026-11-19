@@ -8,7 +8,7 @@ import { IconChev, IconCog, IconCollapse, IconDownload, IconFolder, IconLogout, 
 import Logo from './Logo';
 import { logout } from './session';
 import { usePendingComments } from '@/components/panels/ReviewTab';
-import { TOOLS, toolAttr, type ToolId } from './tools';
+import { useVisibleTools, toolAttr, type ToolId } from './tools';
 
 export interface NavProps {
   view: 'home' | 'editor';
@@ -62,7 +62,8 @@ export default function Sidebar({ min, onToggleMin, ...p }: NavProps & { min: bo
   }, [menu]);
 
   const ql = q.trim().toLowerCase();
-  const tools = TOOLS.filter((t) => (t.id !== 'edit' || hasSel || p.tool === 'edit') && (!ql || t.label.toLowerCase().includes(ql)));
+  const visibleTools = useVisibleTools();
+  const tools = visibleTools.filter((t) => (t.id !== 'edit' || hasSel || p.tool === 'edit') && (!ql || t.label.toLowerCase().includes(ql)));
   const account = [
     { id: 'projects', label: 'Meus projetos', Icon: IconFolder, on: p.view === 'home', go: p.onHome },
     { id: 'settings', label: 'Configurações', Icon: IconCog, on: false, go: p.onSettings },
