@@ -21,10 +21,12 @@ export function aiConfig() {
 }
 
 let client: Anthropic | null = null;
+export const AI_TIMEOUT_MS = 240_000;
 function anthropic(): Anthropic {
   if (!aiConfig().configured) throw new AIError('IA não configurada (ANTHROPIC_API_KEY ausente no servidor).', 503, 'not_configured');
   // lê ANTHROPIC_API_KEY (e ANTHROPIC_BASE_URL, útil p/ mock em testes) do ambiente
-  client ??= new Anthropic();
+  // timeout abaixo do maxDuration (300 s) da função, para responder com erro útil em vez de ser cortada
+  client ??= new Anthropic({ timeout: AI_TIMEOUT_MS, maxRetries: 2 });
   return client;
 }
 
@@ -36,6 +38,8 @@ export function friendlyError(e: unknown): AIError {
     return new AIError('A chave da Anthropic foi recusada. Confira ANTHROPIC_API_KEY no servidor.', 401, 'bad_key');
   if (e instanceof Anthropic.BadRequestError) return new AIError(`Pedido recusado pela IA: ${e.message.slice(0, 300)}`, 400, 'bad_request');
   if (e instanceof Anthropic.InternalServerError) return new AIError('A IA está sobrecarregada agora. Tente novamente em instantes.', 503, 'unavailable');
+  if (e instanceof Anthropic.APIConnectionTimeoutError) return new AIError('A IA demorou demais para responder. Tente um pedido menor ou de novo em instantes.', 504, 'timeout');
+  if (e instanceof Anthropic.APIUserAbortError || (e instanceof Error && e.name === 'AbortError')) return new AIError('Pedido cancelado.', 499, 'aborted');
   if (e instanceof Anthropic.APIConnectionError) return new AIError('Sem conexão com a IA. Tente de novo.', 502, 'network');
   if (e instanceof Anthropic.APIError) return new AIError(`Falha na IA (${e.status ?? '?'}): ${e.message.slice(0, 300)}`, e.status && e.status >= 400 ? e.status : 500);
   return new AIError(`Falha na IA: ${(e instanceof Error ? e.message : String(e)).slice(0, 300)}`, 500);
@@ -66,6 +70,8 @@ export interface StructuredOptions<S extends z.ZodType> {
   schema: S;
   effort: Effort;
   maxTokens?: number;
+  /** cancela a chamada se o navegador desistir (req.signal) */
+  signal?: AbortSignal;
 }
 
 /**
@@ -88,7 +94,7 @@ export async function generateStructured<S extends z.ZodType>(opts: StructuredOp
     const stream = ai.beta.messages.stream({
       ...base,
       output_config: structured ? { effort: opts.effort, format: betaZodOutputFormat(opts.schema) } : { effort: opts.effort },
-    });
+    }, opts.signal ? { signal: opts.signal } : undefined);
     let msg: Awaited<ReturnType<typeof stream.finalMessage>>;
     try {
       msg = await stream.finalMessage();
