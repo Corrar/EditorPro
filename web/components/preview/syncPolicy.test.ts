@@ -216,3 +216,12 @@ describe('stillTime', () => {
     expect(stillTime(0, 0, 30)).toBe(0);
   });
 });
+
+describe('QualityGovernor: 3º degrau só com custo muito alto', () => {
+  it('custo de 80 ms sustentado desce 1 → 0,75 → 0,5 (sem oscilar)', () => {
+    const g = new QualityGovernor();
+    const changes: number[] = [];
+    for (let i = 0; i < 1200; i++) { const q = g.push(80, i * 33); if (q !== null) changes.push(q); }
+    expect(changes).toEqual([0.75, 0.5]);
+  });
+});
