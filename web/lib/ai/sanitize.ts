@@ -7,7 +7,7 @@ import type {
   AspectRatio, AudioEffect, AudioEffectKind, BlendMode, CaptionPreset, CaptionSegment, CaptionStyle, CaptionWord, ChromaKey,
   ClipAnimation, ColorPreset, Crop, Easing, Filter, FilterKind, FitMode, Keyframe, Mask, MaskShape, ShapeKind, SpeedPoint,
   SpeedPreset, StyleProfile, TextAnimation, TextStyle, Transform, Transition, TransitionKind, VisualEffect, VisualEffectKind,
-  ColorGrade, ColorWheel, CurvePoint, HslBand,
+  ColorGrade, ColorWheel, CurvePoint, HslBand, MaskKeyframe,
 } from '../types';
 import { uid } from '../util';
 // listas derivadas dos catálogos dos donos (engine/biblioteca) — ver catalogs.ts
@@ -19,7 +19,7 @@ export const TRANSITIONS: TransitionKind[] = CATALOG.transitions;
 export const FILTER_KINDS: FilterKind[] = CATALOG.filters;
 export const TEXT_ANIMATIONS: TextAnimation[] = CATALOG.textAnimations;
 export const EFFECT_KINDS: VisualEffectKind[] = CATALOG.effects;
-export const BLEND_MODES: BlendMode[] = ['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 'add', 'difference'];
+export const BLEND_MODES: BlendMode[] = CATALOG.blendModes;
 export const MASK_SHAPES: MaskShape[] = CATALOG.masks;
 export const FIT_MODES: FitMode[] = ['cover', 'contain', 'fill'];
 export const SPEED_PRESETS: SpeedPreset[] = CATALOG.speedPresets;
@@ -129,7 +129,8 @@ export function sanitizeTransition(v: unknown, clipDuration = Infinity): Transit
   if (!kind) return undefined;
   const maxD = Math.max(0.05, Math.min(1.5, clipDuration / 2));
   const duration = clampNum(v.duration, 0.05, maxD) ?? Math.min(0.4, maxD);
-  return { kind, duration: r3(duration) };
+  const easing = oneOf(v.easing, EASINGS);
+  return { kind, duration: r3(duration), ...(easing ? { easing } : {}) };
 }
 
 /** TextStyle parcial (só campos válidos) */
@@ -385,7 +386,12 @@ export function sanitizeEffects(v: unknown): VisualEffect[] | undefined {
     if (!kind || seen.has(kind)) continue;
     seen.add(kind);
     const speed = clampNum(e.speed, 0, 2);
-    out.push({ kind, intensity: clampNum(e.intensity, 0, 1) ?? 0.6, ...(speed !== undefined ? { speed } : {}) });
+    const c = color(e.color);
+    const angle = clampNum(e.angle, -360, 360);
+    out.push({
+      kind, intensity: clampNum(e.intensity, 0, 1) ?? 0.6,
+      ...(speed !== undefined ? { speed } : {}), ...(c ? { color: c } : {}), ...(angle !== undefined ? { angle: r3(angle) } : {}),
+    });
   }
   return out.slice(0, 8);
 }
@@ -404,6 +410,26 @@ export function sanitizeAudioEffects(v: unknown): AudioEffect[] | undefined {
   return out.slice(0, 6);
 }
 
+/** keyframes da máscara (Power Window animada): até 32, tempos crescentes, valores limitados */
+function maskKeyframes(v: unknown): MaskKeyframe[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const out: MaskKeyframe[] = [];
+  for (const k of v.slice(0, 32)) {
+    if (!isObj(k)) continue;
+    const t = clampNum(k.t, 0, 24 * 3600);
+    if (t === undefined) continue;
+    const kf: MaskKeyframe = { t: r3(t) };
+    for (const [key, lo, hi] of [['x', 0, 1], ['y', 0, 1], ['w', 0.02, 2], ['h', 0.02, 2], ['rotation', -360, 360], ['feather', 0, 1]] as const) {
+      const x = clampNum(k[key], lo, hi); if (x !== undefined) kf[key] = r3(x);
+    }
+    const e = oneOf(k.easing, EASINGS); if (e) kf.easing = e;
+    out.push(kf);
+  }
+  out.sort((a, b) => a.t - b.t);
+  const dedup = out.filter((k, i) => i === 0 || k.t > out[i - 1].t);
+  return dedup.length ? dedup : undefined;
+}
+
 export function sanitizeMask(v: unknown): Mask | undefined {
   if (!isObj(v)) return undefined;
   const shape = oneOf(v.shape, MASK_SHAPES);
@@ -415,6 +441,9 @@ export function sanitizeMask(v: unknown): Mask | undefined {
     rotation: clampNum(v.rotation, -360, 360) ?? 0,
     feather: clampNum(v.feather, 0, 1) ?? 0.1,
     ...(bool(v.invert) ? { invert: true } : {}),
+    ...(clampNum(v.radius, 0, 1) !== undefined ? { radius: clampNum(v.radius, 0, 1)! } : {}),
+    ...(shape === 'text' && str(v.text, 60) ? { text: str(v.text, 60)! } : {}),
+    ...(maskKeyframes(v.keyframes) ? { keyframes: maskKeyframes(v.keyframes)! } : {}),
   };
 }
 
