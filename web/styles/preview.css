@@ -13,7 +13,7 @@
 .ep-pv-canvas.pointing { cursor:crosshair; }
 /* camada de vídeo NATIVA (modo híbrido): os <video> tocam visíveis sob o canvas transparente */
 .ep-pv-host { position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:0; }
-.ep-pv-host video { position:absolute; left:0; top:0; width:2px; height:2px; opacity:0; transform-origin:50% 50%; object-fit:fill; will-change:transform, opacity; }
+.ep-pv-host video { position:absolute; left:0; top:0; width:2px; height:2px; opacity:.001; transform-origin:50% 50%; object-fit:fill; will-change:transform, opacity; }
 .ep-pv-host audio { display:none; }
 
 /* tela cheia (API nativa) e tela cheia por CSS (iPhone) */

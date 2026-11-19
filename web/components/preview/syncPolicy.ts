@@ -200,10 +200,29 @@ export function warmPosition(at: Seconds, until: Seconds, rate: number, reverse:
 }
 
 /** quadro do elemento é desenhável para o alvo? (sem dados ou buscando longe → não) */
-export function frameReady(el: { readyState: number; seeking: boolean; currentTime: number }, target: Seconds): boolean {
+/** confirmação de quadro pelo requestVideoFrameCallback (quando o navegador tem a API) */
+export interface FrameProof {
+  /** mediaTime do último quadro realmente apresentado (rVFC); undefined = nenhum ainda */
+  presented?: number;
+  /** ms desde o último 'seeked'/'loadeddata' (rede de segurança se o rVFC não vier) */
+  sinceSettleMs: number;
+}
+
+/** espera máxima pelo rVFC depois de um seek antes de confiar só no readyState */
+export const RVFC_GRACE_MS = 400;
+
+/**
+ * Quadro do elemento é desenhável/exibível para o alvo?
+ * - sem dados ou buscando longe → não
+ * - com rVFC (Android: 'seeked' chega ANTES do quadro estar pronto p/ o canvas): só depois
+ *   que um quadro perto do alvo foi apresentado, ou passada a carência pós-seek
+ */
+export function frameReady(el: { readyState: number; seeking: boolean; currentTime: number }, target: Seconds, proof?: FrameProof): boolean {
   if (el.readyState < 2) return false;
   if (el.seeking && Math.abs(el.currentTime - target) > 0.3) return false;
-  return true;
+  if (!proof) return true;
+  if (proof.presented !== undefined && Math.abs(proof.presented - target) <= 0.35) return true;
+  return proof.sinceSettleMs >= RVFC_GRACE_MS;
 }
 
 /** intervalo mínimo entre quadros desenhados p/ o fps do projeto (com folga de vsync) */

@@ -154,3 +154,28 @@ describe('warmPosition (partida a quente do próximo clipe)', () => {
     expect(warmPosition(5, 0.2, 1, true)).toEqual({ at: 5, play: false });
   });
 });
+
+describe('frameReady com prova de quadro (rVFC) — Android: seeked antes do quadro', () => {
+  const el = { readyState: 4, seeking: false, currentTime: 6.5 };
+  it('sem rVFC confia no readyState', () => {
+    expect(frameReady(el, 6.5)).toBe(true);
+  });
+  it('seeked chegou mas nenhum quadro apresentado ainda → espera', () => {
+    expect(frameReady(el, 6.5, { presented: undefined, sinceSettleMs: 50 })).toBe(false);
+  });
+  it('quadro perto do alvo apresentado → pronto', () => {
+    expect(frameReady(el, 6.5, { presented: 6.48, sinceSettleMs: 10 })).toBe(true);
+  });
+  it('quadro apresentado é de outro ponto (seek anterior) → espera', () => {
+    expect(frameReady(el, 6.5, { presented: 2, sinceSettleMs: 100 })).toBe(false);
+  });
+  it('rede de segurança: sem rVFC por muito tempo, segue com o readyState', () => {
+    expect(frameReady(el, 6.5, { presented: undefined, sinceSettleMs: 500 })).toBe(true);
+  });
+  it('seek pedido e ainda sem seeked (sinceSettle negativo) → espera', () => {
+    expect(frameReady(el, 6.5, { presented: undefined, sinceSettleMs: -1900 })).toBe(false);
+  });
+  it('não regride: readyState baixo depois do seek continua bloqueando', () => {
+    expect(frameReady({ readyState: 1, seeking: true, currentTime: 0 }, 6.5, { presented: 6.5, sinceSettleMs: 9999 })).toBe(false);
+  });
+});
