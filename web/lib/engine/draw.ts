@@ -233,11 +233,11 @@ export function drawLayer(ctx: Ctx, layer: LayerItem, t: Seconds, el: MediaEleme
     paint(lc, 1);
     if (surfaceWork) {
       applyGrade(lc, f, W, H, t);
-      applySurfaceEffects(lc, W, H, effects, t);
+      applySurfaceEffects(lc, W, H, effects, t, { local: t - clip.start, duration: clip.duration });
       if (tv.pixelate > 0.01) pixelateInPlace(lc, W, H, 2 + tv.pixelate * short / 14);
       if (tv.rgbSplit > 0.01) rgbSplitInPlace(lc, W, H, W * 0.04 * tv.rgbSplit);
       if (tv.glitch > 0.01) glitchInPlace(lc, W, H, tv.glitch, t);
-      if ('mask' in clip && clip.mask) applyMask(lc, clip.mask, W, H);
+      if ('mask' in clip && clip.mask) applyMask(lc, clip.mask, W, H, t - clip.start);
     }
     ctx.save();
     ctx.globalAlpha = opacity;
@@ -288,7 +288,7 @@ export function applyAdjustment(ctx: Ctx, clip: AdjustmentClip, t: Seconds, W: n
   wc.drawImage(base, 0, 0);
   wc.filter = 'none';
   applyGrade(wc, f, W, H, t);
-  applySurfaceEffects(wc, W, H, clip.effects, t);
+  applySurfaceEffects(wc, W, H, clip.effects, t, { local, duration: clip.duration, geometry: true });
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalAlpha = Math.max(0, amt);
