@@ -167,6 +167,10 @@ describe('1.8 / 2.4 réplica estrita do modelo (R1 no planejador)', () => {
     expect(p.tracks.flatMap((t) => t.clips).some((c) => c.type === 'text' && /OFERTA/.test(c.text))).toBe(false);
     expect(videoClips(p).every((c) => !c.transitionIn)).toBe(true); // molde medido = só cortes secos
   });
+  it('"Reels/TikTok" no brief é plataforma: a legenda continua a do modelo; "legenda karaokê" explícita vale', () => {
+    expect(run(refStyle(), { brief: 'Reels dinâmico para TikTok' }).p.captions.style).toMatchObject({ color: '#F3D205', background: '#110E0D' });
+    expect(run(refStyle(), { brief: 'Vídeo com legenda karaokê' }).p.captions.style.preset).toBe('karaoke');
+  });
   it('punch.mp4 como modelo: zoom em pancada', () => {
     const t: ReferenceTemplate = { ...refTemplate, motion: { mode: 'punch', avgZoomPerShot: 1.15, easing: 'easeOut', direction: 'in', punchFrequency: 1, perShot: [] } };
     const { p } = run(styleFromCuts([], 12, {}, refTemplate.color, t));
@@ -211,5 +215,50 @@ describe('2.2 contrato StyleProfile.template/motion (sanitize)', () => {
     expect(st.template?.captions).toBeUndefined(); // cor inválida: faixa descartada
     expect(st.motion?.kind).toBe('smooth-push');
     expect(sanitizeStyleProfile({ summary: 'x', template: { shots: [] } })?.template).toBeUndefined();
+  });
+});
+
+describe('2.5 fidelidade ao modelo', () => {
+  const graded = (p: Project) => applyOps(p, videoClips(p).map((c) => ({ op: 'update_clip', clipId: c.id, patch: { colorGrade: { exposure: 0.1 } } }) as EditOp)).project;
+  it('réplica do planejador: ≥0,8 em todos os aspectos (R2)', async () => {
+    const { fidelityOf, fidelityLine } = await import('./fidelity');
+    let p = applyOps(base(15), [{ op: 'set_captions', segments: speech(15), language: 'pt-BR' } as EditOp]).project;
+    p = graded(p);
+    const plan = planFirstEdit({ project: p, assets, brief: 'vídeo', silencesByAsset: { a1: [] }, style: refStyle(), colorGraded: true });
+    const after = sanitizeOps(plan.ops, p, assets, MAX_AI_OPS).project;
+    const f = fidelityOf(after, refStyle(), { r: 0.6, g: 0.47, b: 0.35 })!;
+    expect(f.min).toBeGreaterThanOrEqual(0.8);
+    expect(fidelityLine(f)).toMatch(/^Fidelidade ao modelo: ritmo \d+%, movimento \d+%, transições \d+%, legenda \d+%, cor \d+%$/);
+  });
+  it('edição antiga (1 clipe, pancada, transição inventada, look vibrante): nota baixa e o conserto sobe', async () => {
+    const { fidelityOf, failing, repairOps } = await import('./fidelity');
+    let p = applyOps(base(15), [{ op: 'set_captions', segments: speech(15), language: 'pt-BR' } as EditOp]).project;
+    p = applyOps(p, [...zoomOps(p, true, undefined, 'punch'), { op: 'update_clip', clipId: 'c1', patch: { colorPreset: 'vibrant' } }]).project;
+    const f = fidelityOf(p, refStyle())!;
+    const bad = failing(f);
+    expect(bad).toEqual(expect.arrayContaining(['ritmo', 'movimento', 'legenda', 'cor']));
+    const fixed = sanitizeOps(repairOps(p, refStyle(), bad), p, assets, MAX_AI_OPS).project;
+    const g = fidelityOf(graded(fixed), refStyle())!;
+    expect(g.scores.ritmo).toBeGreaterThanOrEqual(0.8);
+    expect(g.scores.movimento).toBeGreaterThanOrEqual(0.8);
+    expect(g.scores.legenda).toBeGreaterThanOrEqual(0.8);
+    expect(g.scores.cor).toBeGreaterThanOrEqual(0.8);
+  });
+  it('punch.mp4 (9 pancadas em 8 s, 1 tomada): réplica com a mesma frequência e nota de movimento ≥0,8', async () => {
+    const { fidelityOf } = await import('./fidelity');
+    const t: ReferenceTemplate = { ...refTemplate, captions: undefined, shots: [{ start: 0, end: 8 }], shotStats: { median: 8, p10: 8, p90: 8 },
+      motion: { mode: 'punch', avgZoomPerShot: 1.17, easing: 'easeOut', direction: 'in', punchFrequency: 1, perShot: [{ start: 0, end: 8, zoomTotal: 1.17, panX: 0, panY: 0, peakOverMean: 14.6, easing: 'easeInOut', punches: 9 }] } };
+    const st = styleFromCuts([], 8, {}, refTemplate.color, t);
+    let p = applyOps(base(15), [{ op: 'set_captions', segments: speech(15), language: 'pt-BR' } as EditOp]).project;
+    p = sanitizeOps(templateOps(p, st).ops, p, assets, MAX_AI_OPS).project;
+    expect(fidelityOf(p, st)!.scores.movimento).toBeGreaterThanOrEqual(0.8);
+  });
+  it('transição a mais num modelo de cortes secos derruba "transições"', async () => {
+    const { fidelityOf } = await import('./fidelity');
+    let p = applyOps(base(15), [{ op: 'set_captions', segments: speech(15), language: 'pt-BR' } as EditOp]).project;
+    const r = templateOps(p, refStyle());
+    p = applyOps(p, r.ops).project;
+    p = applyOps(p, videoClips(p).slice(1).map((c) => ({ op: 'update_clip', clipId: c.id, patch: { transitionIn: { kind: 'zoom-in', duration: 0.3 } } }) as EditOp)).project;
+    expect(fidelityOf(p, refStyle())!.scores.transicoes).toBeLessThan(0.5);
   });
 });

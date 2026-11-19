@@ -21,6 +21,7 @@ import { trackSubject } from './reframe';
 import { distributeWords } from './sanitize';
 import { describeStyle, modelRequestText, styleOps, styleScopeFromText, type StyleScope } from './model';
 import { smoothMotionOps, wantsPunchMotion } from './template';
+import { failing, fidelityLine, fidelityOf, renderedColor, repairOps } from './fidelity';
 import { materializeSfx, sanitizeSfxRequests, type SfxRequest } from './library';
 import { asOwn, isAbort as isRunAbort } from './runGuard';
 import { MAX_AI_OPS, finalizeClaude, type FinalizeDeps, type Finalized } from './finalize';
@@ -451,7 +452,9 @@ export async function runFirstEdit(opts: PipelineOptions & { brief: string }): P
 
     if (status.configured) {
       opts.onStatus?.('Planejando a edição…');
-      const frames = await sourceFrames(sources, true, 10);
+      // o Claude VÊ o modelo (3–4 quadros, rotulados "Quadro do MODELO" pela rota) além do material
+      const refFrames = ref && store().project.style ? await sourceFrames([ref], true, 4).catch(() => []) : [];
+      const frames = [...(await sourceFrames(sources, true, refFrames.length ? 8 : 10)), ...refFrames.slice(0, 4)];
       const res = await requestEdit({
         project: store().project, assets: store().assets, messages: store().messages, mode: 'first', frames, signal: opts.signal,
         userText: brief || 'Edite este vídeo de forma profissional.',
@@ -475,6 +478,7 @@ export async function runFirstEdit(opts: PipelineOptions & { brief: string }): P
       opts.onStatus?.('Editando…');
       const appliedIds = ops.length ? await apply(ops) : [];
       reply += await afterClaude(fin, before, userText, apply, opts, warnings);
+      reply += await checkFidelity(apply, opts);
       return { reply: reply + capNote(), ops, appliedIds, provider: 'anthropic' as const, warnings, actions: capActions() };
     }
 
@@ -522,6 +526,7 @@ export async function runFirstEdit(opts: PipelineOptions & { brief: string }): P
     }
     opts.onStatus?.('Editando…');
     const appliedIds = ops.length ? await apply(ops) : [];
+    reply += await checkFidelity(apply, opts);
     return { reply: reply + capNote(), ops, appliedIds, provider: 'demo' as const, warnings, actions: capActions() };
   });
 }
@@ -568,7 +573,8 @@ async function demoChat(text: string, apply: NonNullable<PipelineOptions['apply'
     const { ops } = sanitizeOps(raw, store().project, store().assets, MAX_AI_OPS);
     const appliedIds = ops.length ? await apply(ops) : [];
     const msg = said.length ? said.join(', ') : 'nada a mudar';
-    return { reply: ops.length ? `Feito, no estilo do modelo: ${msg}.` : `${msg.charAt(0).toUpperCase()}${msg.slice(1)}.`, ops, appliedIds, provider: 'demo', warnings: [] };
+    const fid = scope === 'all' && ops.length ? await checkFidelity(apply, opts) : '';
+    return { reply: `${ops.length ? `Feito, no estilo do modelo: ${msg}.` : `${msg.charAt(0).toUpperCase()}${msg.slice(1)}.`}${fid}`, ops, appliedIds, provider: 'demo', warnings: [] };
   }
   let silences: Record<Id, Range[]> | undefined;
   if (demoNeeds(text).silences) {
@@ -890,6 +896,41 @@ export function timelineDuration(): number {
 
 /* ---------- vídeo modelo anexado no chat ---------- */
 
+/**
+ * Confere a fidelidade do resultado ao modelo medido (ritmo, movimento, transições, legenda, cor);
+ * abaixo de 0,8 num aspecto faz UMA rodada de conserto só daquele aspecto. Devolve a linha do chat.
+ */
+async function checkFidelity(apply: NonNullable<PipelineOptions['apply']>, opts: PipelineOptions): Promise<string> {
+  const style = store().project.style;
+  if (!style?.template) return '';
+  try {
+    opts.onStatus?.('Conferindo a fidelidade ao modelo…');
+    const times = (p: Project) => {
+      const d = projectDuration(p);
+      return [0.15, 0.4, 0.65, 0.9].map((f) => Math.round(d * f * 100) / 100);
+    };
+    let p = store().project;
+    let f = fidelityOf(p, style, await renderedColor(p, store().assets, times(p)));
+    if (!f) return '';
+    const bad = failing(f);
+    if (bad.length) {
+      opts.onLog?.(`Fidelidade baixa (${bad.join(', ')}): ${bad.map((k) => f!.deltas[k]).filter(Boolean).join('; ')}`);
+      const fix = sanitizeOps(repairOps(p, style, bad), p, store().assets, MAX_AI_OPS).ops;
+      if (fix.length) {
+        opts.onStatus?.('Ajustando para ficar igual ao modelo…');
+        await apply(fix, { delayMs: 120 });
+        p = store().project;
+        f = fidelityOf(p, style, bad.includes('cor') ? await renderedColor(p, store().assets, times(p)) : undefined) ?? f;
+      }
+    }
+    opts.onLog?.(fidelityLine(f));
+    return `\n${fidelityLine(f)}.`;
+  } catch (e) {
+    if (isRunAbort(e)) throw e;
+    return '';
+  }
+}
+
 /** ops de colorGrade que aproximam as cores do material às do vídeo modelo ativo */
 async function matchColorOps(opts: PipelineOptions): Promise<{ ops: EditOp[]; name: string } | null> {
   const ref = referenceAsset(store().assets, store().project);
@@ -954,6 +995,7 @@ export async function applyModelStyle(scope: StyleScope, opts: PipelineOptions =
       return { reply: colorMsg || 'As cores do seu vídeo já estão parecidas com as do modelo.', ops: clean, appliedIds: ids, provider: status.provider, warnings: [] };
     }
     const res = await chatEdit(`${modelRequestText('all')}${clean.length ? ' (as cores JÁ foram combinadas com o modelo via colorGrade — não mexa em cor/filtros/looks)' : ''}`, opts);
-    return { ...res, ops: [...clean, ...res.ops], appliedIds: [...ids, ...res.appliedIds], reply: colorMsg ? `${colorMsg} ${res.reply}` : res.reply };
+    const fid = await checkFidelity(apply, opts);
+    return { ...res, ops: [...clean, ...res.ops], appliedIds: [...ids, ...res.appliedIds], reply: `${colorMsg ? `${colorMsg} ${res.reply}` : res.reply}${fid}` };
   });
 }

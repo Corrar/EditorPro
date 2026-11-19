@@ -8,7 +8,7 @@ import { DEFERRED_MACROS } from './deferred';
 import { z } from 'zod';
 import {
   ASPECTS, AUDIO_EFFECTS, BLEND_MODES, CAPTION_PRESETS, CLIP_ANIMATIONS, COLOR_PRESETS, EASINGS, EFFECT_KINDS, FILTER_KINDS, FIT_MODES,
-  MARKER_KINDS, MASK_SHAPES, PACINGS, SHAPE_KINDS, SPEED_PRESETS, TEXT_ANIMATIONS, TRANSITIONS,
+  MARKER_KINDS, MASK_SHAPES, MOTION_MODES, PACINGS, SHAPE_KINDS, SPEED_PRESETS, TEXT_ANIMATIONS, TRANSITIONS,
 } from './sanitize';
 import { CLIP_TYPES, TRACK_KINDS } from './validate';
 import { OP_KINDS } from './validate';
@@ -209,7 +209,14 @@ export const StyleSchema = z.object({
   aspect: z.enum(ASPECTS).optional(),
   transitions: z.array(z.enum(TRANSITIONS)),
   colorPreset: z.enum(COLOR_PRESETS).optional(),
-  zoomPunchIns: z.boolean(),
+  zoomPunchIns: z.boolean().describe('true SÓ para zoom em pancada (<0,25 s); aproximação lenta e suave = false'),
+  camera: z.object({
+    mode: z.enum(MOTION_MODES).describe('static | smooth-push (aproximação lenta) | push-pull (aproxima/afasta) | punch (pancada) | pan | handheld | mixed'),
+    avgZoomPerShot: z.number().optional().describe('escala no fim de cada tomada (1.06 = aproxima 6%)'),
+    easing: z.enum(EASINGS).optional(),
+    punchOnKeyPhrases: z.boolean().optional(),
+  }).optional(),
+  transitionDetails: z.array(z.object({ kind: z.enum(TRANSITIONS), duration: z.number(), frequency: z.number().describe('0..1 dos cortes') })).optional(),
   captions: captionStyle.extend({ present: z.boolean() }).optional(),
   music: z.object({ present: z.boolean(), energy: z.enum(['low', 'medium', 'high']), genre: z.string().optional() }).optional(),
   textOverlays: z.object({ present: z.boolean(), examples: z.array(z.string()).optional() }).optional(),

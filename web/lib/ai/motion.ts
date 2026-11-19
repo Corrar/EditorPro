@@ -86,30 +86,42 @@ export function alignedResidual(prev: Gray, cur: Gray, s: number, tx: number, ty
 
 export interface PairMotion { s: number; tx: number; ty: number; residual: number; raw: number }
 
-/** melhor (escala, translação) entre dois quadros vizinhos: busca grossa em escala, depois translação, depois refino */
+/**
+ * Melhor (escala, translação) entre dois quadros vizinhos, do grosso ao fino:
+ * escala em passos de ~0,01 (amostrando 1 a cada 3 px) → refino ±0,01 → translação ±shift →
+ * refino fino da escala (resolução cheia só no fim).
+ */
 export function alignPair(prev: Gray, cur: Gray, o: AlignOpts = {}): PairMotion {
-  const sMin = o.sMin ?? 0.97, sMax = o.sMax ?? 1.06, steps = o.sSteps ?? 37, shift = o.shift ?? 3;
-  const fast = { ...o, stride: o.stride ?? 2 };
-  const raw = alignedResidual(prev, cur, 1, 0, 0, o);
-  let best = { s: 1, tx: 0, ty: 0, residual: raw };
-  for (let i = 0; i < steps; i++) {
-    const s = sMin + ((sMax - sMin) * i) / (steps - 1);
-    const r = alignedResidual(prev, cur, s, 0, 0, fast);
+  const sMin = o.sMin ?? 0.97, sMax = o.sMax ?? 1.06, shift = o.shift ?? 3;
+  const coarseN = Math.max(5, Math.round((sMax - sMin) / 0.01) + 1);
+  const at = (st: number) => ({ ...o, stride: st });
+  const raw = alignedResidual(prev, cur, 1, 0, 0, at(2));
+  let best = { s: 1, tx: 0, ty: 0, residual: alignedResidual(prev, cur, 1, 0, 0, at(3)) };
+  for (let i = 0; i < coarseN; i++) {
+    const s = sMin + ((sMax - sMin) * i) / (coarseN - 1);
+    const r = alignedResidual(prev, cur, s, 0, 0, at(3));
     if (r < best.residual) best = { s, tx: 0, ty: 0, residual: r };
+  }
+  const step = (sMax - sMin) / (coarseN - 1);
+  let mid = { ...best, residual: alignedResidual(prev, cur, best.s, 0, 0, at(2)) };
+  for (let k = -4; k <= 4; k++) {
+    if (!k) continue;
+    const s = best.s + (step * k) / 4;
+    const r = alignedResidual(prev, cur, s, 0, 0, at(2));
+    if (r < mid.residual) mid = { ...mid, s, residual: r };
   }
   for (let ty = -shift; ty <= shift; ty++) {
     for (let tx = -shift; tx <= shift; tx++) {
       if (!tx && !ty) continue;
-      const r = alignedResidual(prev, cur, best.s, tx, ty, fast);
-      if (r < best.residual) best = { s: best.s, tx, ty, residual: r };
+      const r = alignedResidual(prev, cur, mid.s, tx, ty, at(2));
+      if (r < mid.residual) mid = { s: mid.s, tx, ty, residual: r };
     }
   }
-  // refino fino da escala em torno do melhor (±meio passo, 9 passos), resolução cheia
-  const half = (sMax - sMin) / (steps - 1) / 2;
-  let fine = { ...best, residual: alignedResidual(prev, cur, best.s, best.tx, best.ty, o) };
-  for (let k = -4; k <= 4; k++) {
-    const s = best.s + (half * k) / 4;
-    const r = alignedResidual(prev, cur, s, best.tx, best.ty, o);
+  let fine = { ...mid, residual: alignedResidual(prev, cur, mid.s, mid.tx, mid.ty, at(1)) };
+  for (let k = -3; k <= 3; k++) {
+    if (!k) continue;
+    const s = mid.s + (step * k) / 12;
+    const r = alignedResidual(prev, cur, s, mid.tx, mid.ty, at(1));
     if (r < fine.residual) fine = { ...fine, s, residual: r };
   }
   return { ...fine, raw };
@@ -230,7 +242,21 @@ export function shotStatsOf(shots: { start: number; end: number }[]): ReferenceT
  * dissolver = rampa de diferenças em ≥3 amostras seguidas sem pico isolado; flash = pico de luminância.
  * `lum` = luminância média por quadro (0..255). Sem evidência: só 'cut'.
  */
-export function detectTransitions(track: MotionTrack, cuts: number[], lum?: number[]): ReferenceTemplate['transitions'] {
+/** o quadro do meio é uma MISTURA dos quadros das pontas? (dissolver) — erro da mistura / erro até as pontas */
+export function blendScore(a: Gray, mid: Gray, b: Gray): number {
+  let best = Infinity, ea = 0, eb = 0;
+  const n = mid.data.length;
+  for (let i = 0; i < n; i += 3) { ea += Math.abs(mid.data[i] - a.data[i]); eb += Math.abs(mid.data[i] - b.data[i]); }
+  for (let k = 1; k < 10; k++) {
+    const al = k / 10;
+    let e = 0;
+    for (let i = 0; i < n; i += 3) e += Math.abs(mid.data[i] - (al * a.data[i] + (1 - al) * b.data[i]));
+    if (e < best) best = e;
+  }
+  return best / Math.max(1e-6, Math.min(ea, eb));
+}
+
+export function detectTransitions(track: MotionTrack, cuts: number[], lum?: number[], gray?: Gray[]): ReferenceTemplate['transitions'] {
   const res = track.pairs.map((p) => p.residual);
   const med = median(res);
   const out: { kind: TransitionKind; t: number; duration: number }[] = [];
@@ -240,8 +266,10 @@ export function detectTransitions(track: MotionTrack, cuts: number[], lum?: numb
   const flush = () => {
     if (run.length >= 3) {
       const a = track.times[run[0]], b = track.times[run[run.length - 1] + 1];
-      // não conta se um corte seco cai no meio (é movimento + corte)
-      if (!cuts.some((c) => c > a + 0.02 && c < b - 0.02) || run.length >= 4) out.push({ kind: 'crossfade', t: (a + b) / 2, duration: r3(b - a) });
+      // dissolver de verdade: o quadro do meio é a mistura das pontas (com os quadros; sem eles, pela rampa)
+      const i0 = run[0], i1 = run[run.length - 1] + 1, im = Math.round((i0 + i1) / 2);
+      const isBlend = gray ? !!gray[i0] && !!gray[i1] && blendScore(gray[i0], gray[im], gray[i1]) < 0.55 : !cuts.some((c) => c > a + 0.02 && c < b - 0.02);
+      if (isBlend) out.push({ kind: 'crossfade', t: (a + b) / 2, duration: r3(b - a) });
     }
     run = [];
   };
@@ -276,73 +304,159 @@ export function hexOf(r: number, g: number, b: number): string {
 export interface RgbFrame { w: number; h: number; data: Uint8ClampedArray | number[] /* RGBA */ }
 
 /**
- * Faixa de legenda (protótipo capdetect.py): linhas com bordas fortes que ficam paradas enquanto o
- * fundo se mexe. Só confia se o fundo REALMENTE se mexe (senão um cenário parado vira "legenda").
- * Devolve faixa y0/y1, cor do texto (clara/saturada) e da caixa (escura e uniforme) ou null.
+ * Faixa de legenda (protótipo capdetect.py): em janelas curtas de quadros SEGUIDOS (~0,8 s, dentro de
+ * uma tomada), pixels parados (desvio < 6) e com borda forte = texto queimado. Só confia se o fundo
+ * REALMENTE se mexe (senão um cenário parado vira "legenda"). `frames` = quadros RGBA seguidos (~10 fps).
+ * Devolve faixa y0/y1, cor do texto (clara e saturada) e da caixa (escura) ou undefined.
  */
-export function detectCaptionBand(frames: RgbFrame[]): ReferenceTemplate['captions'] | undefined {
-  if (frames.length < 4) return undefined;
-  const { w, h } = frames[0];
-  const lumOf = (f: RgbFrame, x: number, y: number) => {
-    const k = (y * w + x) * 4;
-    return 0.299 * f.data[k] + 0.587 * f.data[k + 1] + 0.114 * f.data[k + 2];
+export function detectCaptionBand(frames: RgbFrame[] | RgbFrame[][], win = 8, maxWindows = 14): ReferenceTemplate['captions'] | undefined {
+  // janelas já separadas (amostrador do navegador guarda só elas): achata mantendo cada uma com `win` quadros
+  if (Array.isArray(frames[0])) {
+    const ws = (frames as RgbFrame[][]).filter((x) => x.length >= win);
+    return ws.length ? detectCaptionBand(ws.flatMap((x) => x.slice(0, win)).concat(ws[ws.length - 1].slice(0, 1)), win, maxWindows) : undefined;
+  }
+  const list = frames as RgbFrame[];
+  if (list.length < win + 1) return undefined;
+  frames = list;
+  const { w, h } = list[0];
+  const N = w * h;
+  const grayOf = (f: RgbFrame) => {
+    const g = new Float32Array(N);
+    for (let i = 0; i < N; i++) g[i] = (f.data[i * 4] + f.data[i * 4 + 1] + f.data[i * 4 + 2]) / 3;
+    return g;
   };
-  // energia de borda horizontal por linha (média nos quadros) e variação temporal por linha
-  const edge = new Float64Array(h), tvar = new Float64Array(h);
-  for (const f of frames) {
-    for (let y = 0; y < h; y++) {
-      let e = 0;
-      for (let x = 1; x < w; x++) e += Math.abs(lumOf(f, x, y) - lumOf(f, x - 1, y));
-      edge[y] += e / (w * frames.length);
+  const starts: number[] = [];
+  const nWin = Math.floor((list.length - 1) / win);
+  const step = Math.max(1, Math.floor(nWin / maxWindows));
+  for (let k = 0; k < nWin; k += step) starts.push(k * win);
+  const score = new Float32Array(N);
+  const motion: number[] = [];
+  for (const s0 of starts) {
+    const seg = list.slice(s0, s0 + win).map(grayOf);
+    const mean = new Float32Array(N), sq = new Float32Array(N), edge = new Float32Array(N);
+    for (const g of seg) {
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        const i = y * w + x, v = g[i];
+        mean[i] += v; sq[i] += v * v;
+        edge[i] += Math.abs(v - g[x ? i - 1 : i]) + Math.abs(v - g[y ? i - w : i]);
+      }
     }
-  }
-  for (let i = 1; i < frames.length; i++) {
-    for (let y = 0; y < h; y++) {
-      let d = 0;
-      for (let x = 0; x < w; x += 2) d += Math.abs(lumOf(frames[i], x, y) - lumOf(frames[i - 1], x, y));
-      tvar[y] += d / ((w / 2) * (frames.length - 1));
+    const sds: number[] = [];
+    for (let i = 0; i < N; i++) {
+      const m = mean[i] / seg.length;
+      const sd = Math.sqrt(Math.max(0, sq[i] / seg.length - m * m));
+      if (i % 7 === 0) sds.push(sd);
+      if (sd < 6 && edge[i] / seg.length > 40) score[i] += 1;
     }
+    motion.push(median(sds));
   }
-  const bgMotion = median(Array.from(tvar));
-  if (bgMotion < 4) return undefined; // fundo parado: não dá para separar legenda de cenário
-  const edgeMed = median(Array.from(edge));
-  // linha candidata: borda forte E muito mais estável que o fundo; procura a maior faixa contígua na metade de baixo/centro
-  const cand = Array.from({ length: h }, (_, y) => edge[y] > Math.max(6, edgeMed * 1.8) && tvar[y] < bgMotion * 0.55);
+  // fundo parado: cenário com bordas também fica "parado" — não dá para separar
+  if (median(motion) < 3) return undefined;
+  for (let i = 0; i < N; i++) score[i] /= starts.length;
+  const rows = Array.from({ length: h }, (_, y) => { let a = 0; for (let x = 0; x < w; x++) a += score[y * w + x]; return a / w; });
+  const top = Math.max(...rows);
+  if (top < 0.02) return undefined;
+  const on = rows.map((r) => r > top * 0.35);
+  // maior faixa contígua (tolerando falhas de 2 linhas)
   let best: [number, number] | undefined;
-  for (let y = Math.floor(h * 0.12); y < Math.floor(h * 0.95); y++) {
-    if (!cand[y]) continue;
+  for (let y = 0; y < h; y++) {
+    if (!on[y]) continue;
     let e = y;
-    // tolera falhas de 1 linha
-    while (e + 1 < h && (cand[e + 1] || (e + 2 < h && cand[e + 2]))) e++;
+    while (e + 1 < h && (on[e + 1] || on[e + 2] || on[e + 3])) e++;
     if (!best || e - y > best[1] - best[0]) best = [y, e];
     y = e;
   }
-  if (!best || best[1] - best[0] + 1 < Math.max(2, h * 0.02) || best[1] - best[0] + 1 > h * 0.25) return undefined;
-  const [y0, y1] = best;
-  // cores: na faixa, separa pixels claros/saturados (texto) dos escuros (caixa)
-  const px: [number, number, number, number][] = [];
-  for (const f of frames) for (let y = y0; y <= y1; y++) for (let x = Math.floor(w * 0.1); x < Math.ceil(w * 0.9); x++) {
-    const k = (y * w + x) * 4;
-    const r = f.data[k], g = f.data[k + 1], b = f.data[k + 2];
-    px.push([r, g, b, 0.299 * r + 0.587 * g + 0.114 * b]);
+  if (!best) return undefined;
+  const y0 = best[0], y1 = best[1] + 1;
+  if (y1 - y0 < 2 || y1 - y0 > h * 0.3) return undefined;
+  const colScore = Array.from({ length: w }, (_, x) => { let a = 0; for (let y = y0; y < y1; y++) a += score[y * w + x]; return a / (y1 - y0); });
+  const cols = colScore.map((c, x) => (c > 0.1 ? x : -1)).filter((x) => x >= 0);
+  const x0 = cols.length ? cols[0] : Math.floor(w * 0.1), x1 = cols.length ? cols[cols.length - 1] + 1 : Math.ceil(w * 0.9);
+  const bright: number[][] = [], dark: number[][] = [];
+  let total = 0;
+  for (const s0 of starts) {
+    const f = list[s0];
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+      const k = (y * w + x) * 4;
+      const r = f.data[k], g = f.data[k + 1], b = f.data[k + 2];
+      const lum = (r + g + b) / 3, mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+      total++;
+      if (lum > 120 && (mx - mn) / (mx + 1) > 0.4) bright.push([r, g, b]);
+      else if (lum > 170) bright.push([r, g, b]); // texto branco também conta
+      if (lum < 50) dark.push([r, g, b]);
+    }
   }
-  const sorted = [...px].sort((a, b) => a[3] - b[3]);
-  const top = sorted.slice(Math.floor(sorted.length * 0.85));
-  const bottom = sorted.slice(0, Math.floor(sorted.length * 0.4));
-  const avg = (l: typeof px) => l.reduce((a, p) => [a[0] + p[0], a[1] + p[1], a[2] + p[2]], [0, 0, 0]).map((x) => x / Math.max(1, l.length));
-  const t = avg(top), bx = avg(bottom);
-  // caixa: o escuro é uniforme (baixo desvio) e escuro de verdade em quase toda a faixa
-  const bl = bottom.map((p) => p[3]);
-  const bMean = bl.reduce((a, b) => a + b, 0) / Math.max(1, bl.length);
-  const bSd = Math.sqrt(bl.reduce((a, b) => a + (b - bMean) ** 2, 0) / Math.max(1, bl.length));
-  const darkShare = px.filter((p) => p[3] < 70).length / px.length;
-  const hasBox = bMean < 60 && bSd < 18 && darkShare > 0.35;
+  if (!bright.length) return undefined;
+  const med3 = (l: number[][]) => [0, 1, 2].map((c) => median(l.map((p) => p[c])));
+  // o miolo das letras (metade mais clara): a borda borrada da miniatura escurece a cor
+  const t = med3([...bright].sort((p, q) => p[0] + p[1] + p[2] - (q[0] + q[1] + q[2])).slice(Math.floor(bright.length / 2)));
+  const hasBox = dark.length / Math.max(1, total) > 0.3;
+  const bx = hasBox ? med3(dark) : null;
   return {
-    region: { y0: r3(y0 / h), y1: r3((y1 + 1) / h) },
+    region: { y0: r3(y0 / h), y1: r3(y1 / h) },
     textColor: hexOf(t[0], t[1], t[2]),
-    boxColor: hasBox ? hexOf(bx[0], bx[1], bx[2]) : null,
-    // altura do texto ≈ 60% da faixa (caixa tem respiro); sem caixa, a faixa é o texto
-    heightPx1920: Math.round(((y1 - y0 + 1) / h) * 1920 * (hasBox ? 0.62 : 0.9)),
+    boxColor: bx ? hexOf(bx[0], bx[1], bx[2]) : null,
+    // altura útil do texto: com caixa, ~70% da faixa (respiro da caixa); sem caixa, a faixa é o texto
+    heightPx1920: Math.round(((y1 - y0) / h) * 1920 * (hasBox ? 0.7 : 0.95)),
     uppercase: true,
   };
+}
+
+/* ---------- medição completa do modelo ---------- */
+
+export interface ReferenceMeasure {
+  cuts: number[];
+  template: ReferenceTemplate;
+  /** ms gastos no cálculo */
+  ms: number;
+}
+
+/** luminância média de um quadro cinza */
+function meanLum(g: Gray): number {
+  let s = 0;
+  for (let i = 0; i < g.data.length; i++) s += g.data[i];
+  return s / Math.max(1, g.data.length);
+}
+
+/**
+ * Mede o vídeo modelo a partir de quadros em cinza (≈10 fps, 108×192) e alguns quadros RGBA
+ * (faixa de legenda). `duration` = duração analisada; `color` = cor média (frames.ts).
+ * Cortes exatos, movimento por tomada (zoom/pan/pico-média/easing/pancadas), modo dominante,
+ * transições e faixa de legenda → ReferenceTemplate.
+ */
+export function measureReference(gray: Gray[], times: number[], rgb: RgbFrame[] | RgbFrame[][] = [], opts: { duration?: number; color?: ReferenceTemplate['color']; weak?: boolean } = {}): ReferenceMeasure {
+  const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  const n = Math.min(gray.length, times.length);
+  // faixa de legenda primeiro: ela fica parada enquanto o fundo mexe e atrapalha o alinhamento
+  const captions = detectCaptionBand(rgb);
+  const mask = captions ? { y0: Math.max(0, captions.region.y0 - 0.03), y1: Math.min(1, captions.region.y1 + 0.03) } : undefined;
+  const ao: AlignOpts = { sMin: 0.94, sMax: 1.1, shift: opts.weak ? 2 : 3, mask };
+  const pairs: PairMotion[] = [];
+  for (let i = 1; i < n; i++) pairs.push(alignPair(gray[i - 1], gray[i], ao));
+  const track: MotionTrack = { times: times.slice(0, n), pairs };
+  const cuts = detectCuts(track);
+  const duration = opts.duration ?? (n ? times[n - 1] + (n > 1 ? times[n - 1] - times[n - 2] : 0.1) / 2 : 0);
+  const frame = { w: gray[0]?.w ?? 108, h: gray[0]?.h ?? 192 };
+  const perShot = shotMotions(track, cuts, frame);
+  // tomadas começam em 0 e terminam na duração (a amostragem começa/termina meio passo para dentro)
+  if (perShot.length) { perShot[0].start = 0; perShot[perShot.length - 1].end = r3(duration); }
+  const motion = summarizeMotion(perShot);
+  const shots = [0, ...cuts].map((s, i, a) => ({ start: r3(s), end: r3(i + 1 < a.length ? a[i + 1] : duration) })).filter((s) => s.end > s.start);
+  const transitions = detectTransitions(track, cuts, gray.slice(0, n).map(meanLum), gray);
+  const template: ReferenceTemplate = {
+    shots,
+    shotStats: shotStatsOf(shots.length > 3 ? shots.slice(1, -1) : shots),
+    motion,
+    transitions,
+    color: opts.color ?? { r: 0.5, g: 0.5, b: 0.5, sat: 0.3, lum: 0.5 },
+    ...(captions ? { captions } : {}),
+  };
+  const t1 = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  return { cuts, template, ms: Math.round(t1 - t0) };
+}
+
+/** fração dos cortes a ±80 ms de uma batida */
+export function cutsOnBeatsRatio(cuts: number[], beats: number[], tol = 0.08): number {
+  if (!cuts.length || !beats.length) return 0;
+  return r3(cuts.filter((c) => beats.some((b) => Math.abs(b - c) <= tol)).length / cuts.length);
 }

@@ -218,7 +218,7 @@ export function styleFromCuts(cuts: Seconds[], duration: Seconds, size: { width?
   const names = { 'very-fast': 'muito rápido', fast: 'rápido', medium: 'moderado', slow: 'calmo' } as const;
   const tm = template?.motion;
   const motion: StyleMotion | undefined = tm
-    ? { kind: tm.mode, zoomPerShot: tm.avgZoomPerShot, easing: tm.easing, ...(tm.punchFrequency ? { punchRate: r3((tm.punchFrequency * 60) / Math.max(0.3, avg)) } : {}) }
+    ? { kind: tm.mode, zoomPerShot: tm.avgZoomPerShot, easing: tm.easing, ...(tm.perShot.some((x) => x.punches) ? { punchRate: r3((tm.perShot.reduce((n, x) => n + x.punches, 0) * 60) / Math.max(1, duration)) } : {}) }
     : undefined;
   const transitions: TransitionKind[] = template ? [...new Set<TransitionKind>(['cut', ...template.transitions.filter((x) => x.frequency > 0.05).map((x) => x.kind)])] : ['cut'];
   const cap = template?.captions;
@@ -665,14 +665,16 @@ export function planFirstEdit(input: FirstEditInput): DemoResult {
 
   // 2b) vídeo modelo = molde definitivo: corta no ritmo das tomadas dele (nos respiros da fala),
   //     movimento de câmera medido, só as transições dele e a legenda dele
-  const tpl = style ? templateOps(p, style, { wantsPunch: /punch|pancada/.test(norm(brief)), captions: !intent.captionLook }) : undefined;
+  // com modelo, "Reels/TikTok" no brief é a plataforma, não um pedido de legenda: só vale estilo de legenda citado
+  const briefLook = style && !/legend|letra|karaok|neon|caption/.test(norm(brief)) ? undefined : intent.captionLook;
+  const tpl = style ? templateOps(p, style, { wantsPunch: /punch|pancada/.test(norm(brief)), captions: !briefLook }) : undefined;
   if (tpl) {
     push(tpl.ops);
     said.push(...tpl.said);
   }
 
   // 3) estilo de legenda (brief > exemplo > ritmo). Vale mesmo antes da transcrição: fica pronto
-  const look = intent.captionLook
+  const look = briefLook
     ?? (style?.captions?.present && !style.template?.captions ? { name: 'do vídeo-exemplo', style: (({ present: _p, ...rest }) => rest)(style.captions) } : undefined)
     ?? (fast && !style ? captionLookFrom('tiktok') : undefined);
   if (look && (p.captions.segments.length || style)) {

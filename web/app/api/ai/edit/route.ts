@@ -109,8 +109,11 @@ export async function POST(req: Request) {
       const img = typeof f.data === 'string' ? imageBlock(f.data, typeof f.mediaType === 'string' ? f.mediaType : 'image/jpeg') : null;
       if (!img) continue;
       const t = num(f.t);
+      const isModel = typeof f.assetId === 'string' && (f.assetId === project.referenceAssetId || assets[f.assetId]?.role === 'reference');
       const label = f.assetId === 'resultado'
         ? `Quadro do RESULTADO (como ficou a edição) em ${t !== undefined ? t.toFixed(2) : '?'} s da timeline:`
+        : isModel
+        ? `Quadro do MODELO (vídeo de referência — copie o estilo, nunca o conteúdo) em ${t !== undefined ? t.toFixed(1) : '?'} s:`
         : `Miniatura do material "${str(f.assetId, 80) ?? '?'}" em ${t !== undefined ? t.toFixed(1) : '?'} s da mídia:`;
       content.push({ type: 'text', text: label }, img);
     }

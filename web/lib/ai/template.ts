@@ -10,7 +10,7 @@
 import type { CaptionStyle, Easing, Id, Keyframe, MotionMode, Project, ReferenceTemplate, Seconds, StyleProfile, TransitionKind, VideoClip } from '../types';
 import { allWords, applyOps, type EditOp } from '../ops';
 import { mergeKfProps } from './features';
-import { r3, smoothKeyframes } from './sanitize';
+import { isObj, r3, sanitizeStyleMotion, smoothKeyframes } from './sanitize';
 import { uid } from '../util';
 
 /** limites do movimento "suave" (padrão): zoom ≥0,6 s e no máx. 8% por tomada */
@@ -122,6 +122,8 @@ export interface MotionSpec {
   direction: 'in' | 'out' | 'alternate';
   /** só modo punch: pancadas por tomada (0..1 = fração das tomadas) */
   punchFrequency?: number;
+  /** só modo punch: intervalo médio entre pancadas DENTRO de uma tomada (s), medido no modelo */
+  punchEvery?: number;
 }
 
 /** movimento a usar: o MEDIDO no modelo; sem medição, aproximação lenta suave (padrão) */
@@ -129,7 +131,10 @@ export function motionSpecOf(style?: StyleProfile, wantsPunch = false): MotionSp
   if (wantsPunch) return { mode: 'punch', zoom: 1.12, easing: 'easeOut', direction: 'alternate', punchFrequency: 1 };
   const tm = style?.template?.motion;
   if (tm) {
+    const punches = tm.perShot.reduce((n, s) => n + s.punches, 0);
+    const span = tm.perShot.filter((s) => s.punches > 0).reduce((n, s) => n + (s.end - s.start), 0);
     return {
+      ...(punches > 1 && span > 0 ? { punchEvery: Math.max(0.5, span / punches) } : {}),
       mode: tm.mode,
       zoom: tm.avgZoomPerShot,
       easing: tm.easing === 'linear' ? 'easeInOut' : tm.easing,
@@ -170,6 +175,16 @@ export function motionKeyframes(dur: Seconds, spec: MotionSpec, i: number): Keyf
     // pancada em ~freq das tomadas (determinístico pelo índice)
     if (Math.floor((i + 1) * freq) === Math.floor(i * freq)) return [{ t: 0, transform: { scale: 1 } }];
     const z = Math.max(1.12, Math.min(1.25, spec.zoom > 1.1 ? spec.zoom : 1.12));
+    // várias pancadas por tomada (como no modelo): alterna 1 ↔ z a cada `punchEvery` s, rampa de 0,18 s
+    if (spec.punchEvery && dur >= spec.punchEvery * 1.5) {
+      const kf: Keyframe[] = [{ t: 0, transform: { scale: 1 } }];
+      for (let a = 0.05, k = 0; a < dur - 0.3; a += spec.punchEvery, k++) {
+        const from = k % 2 === 0 ? 1 : z, to = k % 2 === 0 ? z : 1;
+        if (a > 0.05) kf.push({ t: r3(a), transform: { scale: from } });
+        kf.push({ t: r3(Math.min(dur, a + 0.18)), transform: { scale: to }, easing: 'easeOut' });
+      }
+      return kf;
+    }
     const hit = r3(Math.min(0.18, dur / 3));
     const kf: Keyframe[] = [{ t: 0, transform: { scale: 1 } }, { t: hit, transform: { scale: z }, easing: 'easeOut' }];
     if (dur > 1.2) kf.push({ t: r3(Math.max(hit + 0.1, dur - 0.6)), transform: { scale: z } }, { t: end, transform: { scale: 1 }, easing: 'easeInOut' });
@@ -281,7 +296,7 @@ export function templateOps(p: Project, style: StyleProfile, opts: { wantsPunch?
     const lens = templateLengths(style);
     const splits = rhythmSplitOps(sim, lens, MAX_TEMPLATE_CUTS);
     const med = lens.length ? [...lens].sort((a, b) => a - b)[Math.floor(lens.length / 2)] : 0;
-    push(splits, splits.length ? `${splits.length} cortes no ritmo do modelo (tomadas de ~${med.toFixed(1).replace('.', ',')} s, nos respiros da fala)` : undefined);
+    push(splits, splits.length ? `${splits.length} corte${splits.length > 1 ? "s" : ""} no ritmo do modelo (tomadas de ~${med.toFixed(1).replace('.', ',')} s, nos respiros da fala)` : undefined);
   }
   if (opts.motion !== false) {
     const spec = motionSpecOf(style, opts.wantsPunch);
@@ -339,3 +354,35 @@ export function wantsPunchMotion(text: string, style?: StyleProfile): boolean {
   const k = style?.template?.motion.mode ?? style?.motion?.kind;
   return k === 'punch' || k === 'handheld' || /punch|pancada|tranco|zoom (rapido|seco)|tremid|shake/i.test(text.normalize('NFD').replace(/[̀-ͯ]/g, ''));
 }
+
+/**
+ * Junta o que o Claude descreveu com o MEDIDO (o medido ganha): movimento de câmera, transições, faixa de
+ * legenda (cor, caixa, posição, maiúsculas) e o molde inteiro guardado em style.template.
+ */
+export function mergeMeasured(style: StyleProfile, raw: unknown, template?: ReferenceTemplate): StyleProfile {
+  const r = isObj(raw) ? raw : {};
+  const cam = isObj(r.camera) ? r.camera : undefined;
+  const claudeMotion = cam ? sanitizeStyleMotion({ kind: cam.mode, zoomPerShot: cam.avgZoomPerShot, easing: cam.easing }) : undefined;
+  if (template) {
+    style.template = template;
+    const tm = template.motion;
+    style.motion = { kind: tm.mode, zoomPerShot: tm.avgZoomPerShot, easing: tm.easing };
+    style.zoomPunchIns = tm.mode === 'punch';
+    style.transitions = [...new Set<TransitionKind>(['cut', ...template.transitions.filter((t) => t.frequency > 0.05).map((t) => t.kind)])];
+    if (template.captions) {
+      const c = template.captions;
+      style.captions = {
+        ...(style.captions ?? {}),
+        present: true,
+        color: c.textColor,
+        ...(c.boxColor ? { background: c.boxColor } : {}),
+        position: { x: 0.5, y: r3((c.region.y0 + c.region.y1) / 2) },
+        ...(c.uppercase !== undefined && style.captions?.uppercase === undefined ? { uppercase: c.uppercase } : {}),
+      };
+    }
+  } else if (claudeMotion) {
+    style.motion = claudeMotion;
+  }
+  return style;
+}
+
