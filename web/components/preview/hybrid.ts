@@ -135,6 +135,9 @@ export function clipNeedsCanvas(clip: Clip, t: Seconds): string | null {
 
 export interface NativeGeometry {
   x: number; y: number; w: number; h: number; rot: number; fx: number; fy: number;
+  /** caixa-base (encaixe, sem a escala animada) e a escala: o CSS usa width/height = base (estável) e
+   *  transform: scale(s) — zoom animado sem relayout a cada quadro */
+  bw?: number; bh?: number; s?: number;
   /** recorte (px, relativo à caixa do elemento) que imita o clip do quadro deslocado numa transição */
   clip?: { top: number; right: number; bottom: number; left: number };
 }
@@ -154,12 +157,13 @@ export function nativeGeometry(clip: VideoClip, t: Seconds, W: number, H: number
   }
   const eg = effectGeometry(clip.effects, t);
   const s = Math.max(0.0001, tf.scale) * (tv ? tv.scale : 1) * eg.scale;
+  const bw = dw, bh = dh;
   dw *= s; dh *= s;
   const tdx = tv ? tv.dx : 0, tdy = tv ? tv.dy : 0;
   const cx = W / 2 + (tf.x + tdx + eg.dx) * W;
   const cy = H / 2 + (tf.y + tdy + eg.dy) * H;
   const rot = tf.rotation + (tv ? tv.rotation : 0) + eg.rotation;
-  const g: NativeGeometry = { x: cx - dw / 2, y: cy - dh / 2, w: dw, h: dh, rot, fx: clip.flipH ? -1 : 1, fy: clip.flipV ? -1 : 1 };
+  const g: NativeGeometry = { x: cx - dw / 2, y: cy - dh / 2, w: dw, h: dh, rot, fx: clip.flipH ? -1 : 1, fy: clip.flipV ? -1 : 1, bw, bh, s };
   // slide: o canvas recorta a camada no quadro deslocado; aqui, clip-path na caixa (sem rotação)
   if ((tdx || tdy) && !rot) {
     const fx0 = tdx * W, fy0 = tdy * H;
@@ -175,7 +179,10 @@ export function nativeGeometry(clip: VideoClip, t: Seconds, W: number, H: number
 export function geometryClip(g: NativeGeometry): string {
   const c = g.clip;
   if (!c || (c.top < 0.5 && c.right < 0.5 && c.bottom < 0.5 && c.left < 0.5)) return '';
-  return `inset(${c.top.toFixed(1)}px ${c.right.toFixed(1)}px ${c.bottom.toFixed(1)}px ${c.left.toFixed(1)}px)`;
+  // com a caixa-base + scale(s), o inset é aplicado ANTES da escala: divide por s
+  const k = g.bw && g.s ? 1 / g.s : 1;
+  const f = (v: number) => (v * k).toFixed(1);
+  return `inset(${f(c.top)}px ${f(c.right)}px ${f(c.bottom)}px ${f(c.left)}px)`;
 }
 
 /** filtro CSS da camada (filtros simples + desfoque da transição, em px do quadro) */
@@ -187,8 +194,12 @@ export function layerFilter(l: NativeLayer, W: number, H: number): string {
 
 /** transform CSS (origem no centro do elemento) */
 export function geometryTransform(g: NativeGeometry): string {
-  let s = `translate(${g.x.toFixed(2)}px,${g.y.toFixed(2)}px)`;
+  // caixa-base (bw×bh) com origem no centro: posiciona o centro onde o retângulo final fica e escala por s
+  const bw = g.bw ?? g.w, bh = g.bh ?? g.h, sc = g.bw ? g.s ?? 1 : 1;
+  const x = g.x + g.w / 2 - bw / 2, y = g.y + g.h / 2 - bh / 2;
+  let s = `translate(${x.toFixed(2)}px,${y.toFixed(2)}px)`;
   if (g.rot) s += ` rotate(${g.rot.toFixed(3)}deg)`;
-  if (g.fx !== 1 || g.fy !== 1) s += ` scale(${g.fx},${g.fy})`;
+  const sx = sc * g.fx, sy = sc * g.fy;
+  if (Math.abs(sx - 1) > 1e-5 || Math.abs(sy - 1) > 1e-5) s += ` scale(${+sx.toFixed(5)},${+sy.toFixed(5)})`;
   return s;
 }

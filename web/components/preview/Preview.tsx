@@ -399,7 +399,15 @@ export default function Preview() {
       }
       raf = requestAnimationFrame(tick);
       // ritmo: desenha no fps do projeto (tela de 90/120 Hz não precisa redesenhar o mesmo quadro 3–4x)
-      if (now - lastDraw < frameInterval(st.project.fps)) return;
+      if (now - lastDraw < frameInterval(st.project.fps)) {
+        // entre os quadros do projeto, no modo nativo, só a GEOMETRIA do <video> acompanha o rAF (zoom/pan
+        // animados ficam lisos em telas de 60–120 Hz; só transform, sem relayout nem redesenho do canvas)
+        if (STATS.mode === 'nativo' && !viewRef.current.compare && nativeAllowed()) {
+          const plan = nativePlan(st.project, t);
+          if (plan.native) pool.present(plan, t, fitRef.current.w, fitRef.current.h);
+        }
+        return;
+      }
       lastDraw = now;
       // a próxima transição em shader (até 1,5 s): compila agora, não no meio dela
       for (const k of shaderKindsIn(st.project, t, t + 1.5)) if (!isWarm(k)) { warmShader(k); break; }

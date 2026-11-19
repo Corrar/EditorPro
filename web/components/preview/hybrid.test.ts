@@ -119,13 +119,29 @@ describe('geometria nativa = mesma conta do drawLayer', () => {
     const g = nativeGeometry(c, 2, 100, 200, 100, 200);
     expect(g.w).toBeCloseTo(200);
     expect(g.x).toBeCloseTo(50 + 10 - 100);
-    expect(geometryTransform(g)).toContain('scale(-1,1)');
+    // caixa-base 100×200 (width/height estáveis) + scale(2) no transform, espelhada: sem relayout no zoom
+    expect(g.bw).toBeCloseTo(100);
+    expect(geometryTransform(g)).toBe('translate(10.00px,0.00px) scale(-2,2)');
+  });
+  it('caixa-base + scale(s) dá o MESMO retângulo visual que width/height escalados', () => {
+    const c = vclip('a', 0, 2, { keyframes: [{ t: 0, transform: { scale: 1.37, x: -0.05, y: 0.08 } }] });
+    const g = nativeGeometry(c, 1, 360, 640, 1080, 1920);
+    // retângulo visual da caixa-base escalada pela origem no centro
+    const m = /translate\(([-\d.]+)px,([-\d.]+)px\) scale\(([-\d.]+),([-\d.]+)\)/.exec(geometryTransform(g))!;
+    const tx = +m[1], ty = +m[2], sc = +m[3];
+    const cx = tx + g.bw! / 2, cy = ty + g.bh! / 2;
+    expect(cx - (g.bw! * sc) / 2).toBeCloseTo(g.x, 1);
+    expect(cy - (g.bh! * sc) / 2).toBeCloseTo(g.y, 1);
+    expect(g.bw! * sc).toBeCloseTo(g.w, 1);
+    expect(g.bh! * sc).toBeCloseTo(g.h, 1);
   });
   it('slide recorta a camada no quadro deslocado (clip-path)', () => {
     const c = vclip('a', 0, 5, { keyframes: [{ t: 0, transform: { scale: 1.2 } }] });
     const g = nativeGeometry(c, 1, 100, 200, 100, 200, { opacity: 1, dx: 0.5, dy: 0, scale: 1, rotation: 0, motionBlur: 0, blur: 0, flash: 0, glitch: 0, pixelate: 0, shake: 0, rgbSplit: 0, burn: 0 });
     expect(geometryClip(g)).toMatch(/^inset\(/);
     expect(g.clip!.left).toBeCloseTo(10); // a sobra do zoom à esquerda do quadro deslocado some
+    const k = (v: number) => (v / 1.2).toFixed(1); // inset aplicado antes da escala: ÷ s
+    expect(geometryClip(g)).toBe(`inset(${k(g.clip!.top)}px ${k(g.clip!.right)}px ${k(g.clip!.bottom)}px ${k(g.clip!.left)}px)`);
   });
   it('desfoque da transição vira blur() em px do quadro', () => {
     expect(layerFilter({ clip: vclip('a', 0, 5), opacity: 1, filter: 'none', z: 1, tv: { opacity: 1, dx: 0, dy: 0, scale: 1, rotation: 0, motionBlur: 0, blur: 0.5, flash: 0, glitch: 0, pixelate: 0, shake: 0, rgbSplit: 0, burn: 0 } }, 360, 640)).toBe('blur(5.4px)');
