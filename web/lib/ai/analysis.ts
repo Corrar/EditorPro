@@ -7,7 +7,7 @@
 import type { AspectRatio, Id, MediaAsset, StyleProfile } from '../types';
 import { cutsFromDiffs, detectSilences, styleFromCuts, type Range } from './demo';
 import { detectBeats } from './features';
-import { deviceProfile, sampleVideo, type Frame } from './frames';
+import { deviceProfile, sampleVideo, type ColorStats, type Frame } from './frames';
 
 const MAX_DECODE_BYTES = 400 * 1024 * 1024;
 const silenceCache = new Map<string, Range[]>();
@@ -87,7 +87,7 @@ export async function silencesFor(assets: MediaAsset[]): Promise<Record<Id, Rang
 
 export interface ReferenceSample {
   frames: Frame[];
-  metrics: { duration: number; cuts: number[]; avgShotLength: number; pacing: StyleProfile['pacing']; aspect?: AspectRatio; width: number; height: number };
+  metrics: { duration: number; cuts: number[]; avgShotLength: number; pacing: StyleProfile["pacing"]; aspect?: AspectRatio; width: number; height: number; color?: ColorStats };
   /** perfil heurístico (modo demo / fallback se a IA falhar) */
   localStyle: StyleProfile;
 }
@@ -104,10 +104,10 @@ export async function sampleReference(asset: MediaAsset, onProgress?: (f: number
     });
     if (!s.duration) return undefined;
     const cuts = cutsFromDiffs(s.diffs, s.diffTimes);
-    const localStyle = styleFromCuts(cuts, s.duration, { width: s.width || asset.width, height: s.height || asset.height });
+    const localStyle = styleFromCuts(cuts, s.duration, { width: s.width || asset.width, height: s.height || asset.height }, s.color);
     return {
       frames: withFrames ? s.frames : [],
-      metrics: { duration: s.duration, cuts, avgShotLength: localStyle.avgShotLength, pacing: localStyle.pacing, aspect: localStyle.aspect, width: s.width, height: s.height },
+      metrics: { duration: s.duration, cuts, avgShotLength: localStyle.avgShotLength, pacing: localStyle.pacing, aspect: localStyle.aspect, width: s.width, height: s.height, ...(s.color ? { color: s.color } : {}) },
       localStyle,
     };
   } catch (e) {

@@ -69,6 +69,43 @@ export interface Filter {
 /** LUTs/predefinições prontas (engine traduz para Filter[]) */
 export type ColorPreset = 'none' | 'cinematic' | 'warm' | 'cool' | 'vibrant' | 'vintage' | 'bw' | 'moody';
 
+/* ---------- correção de cor estilo DaVinci (aditivo 2026-11-19; motor em lib/color, sessão "cor") ---------- */
+
+/** roda de cor: deslocamento por canal + mestre (luminância), todos -1..1 (0 = neutro) */
+export interface ColorWheel { r: number; g: number; b: number; y: number }
+/** ponto de curva normalizado 0..1 (x = entrada, y = saída) */
+export interface CurvePoint { x: number; y: number }
+/** faixas de cor do HSL secundário */
+export type HslBand = 'red' | 'orange' | 'yellow' | 'green' | 'aqua' | 'blue' | 'purple' | 'magenta';
+export interface HslAdjust { hue: number; sat: number; lum: number } // -1..1
+
+export interface ColorGrade {
+  /** primárias: lift (sombras), gamma (médios), gain (altas luzes), offset (geral) */
+  lift?: ColorWheel;
+  gamma?: ColorWheel;
+  gain?: ColorWheel;
+  offset?: ColorWheel;
+  /** ajustes globais -1..1 (0 = neutro) */
+  exposure?: number;
+  contrast?: number;
+  /** pivô do contraste 0..1 (padrão 0.435, como no DaVinci) */
+  pivot?: number;
+  saturation?: number;
+  vibrance?: number;
+  temperature?: number;
+  tint?: number;
+  highlights?: number;
+  shadows?: number;
+  /** curvas (lista ordenada por x; ausente = identidade) */
+  curves?: { master?: CurvePoint[]; r?: CurvePoint[]; g?: CurvePoint[]; b?: CurvePoint[] };
+  /** HSL secundário por faixa de cor */
+  hsl?: Partial<Record<HslBand, HslAdjust>>;
+  /** LUT 3D (.cube importada ou embutida): id resolvido por lib/color; intensidade 0..1 */
+  lut?: { id: string; intensity: number };
+  /** mistura da correção inteira com o original 0..1 (padrão 1) */
+  mix?: number;
+}
+
 export type TransitionKind =
   | 'cut' | 'fade' | 'crossfade' | 'slide-left' | 'slide-right' | 'slide-up'
   | 'zoom-in' | 'zoom-out' | 'whip' | 'glitch' | 'flash'
@@ -208,6 +245,8 @@ export interface VideoClip extends BaseClip, VisualExtras, AudioExtras {
   keyframes?: Keyframe[];
   filters: Filter[];
   colorPreset?: ColorPreset;
+  /** correção de cor estilo DaVinci (aplicada depois dos filtros/preset) */
+  colorGrade?: ColorGrade;
   /** transição na ENTRADA deste clipe (vinda do clipe anterior da mesma trilha) */
   transitionIn?: Transition;
   fadeIn?: Seconds;
@@ -222,6 +261,7 @@ export interface ImageClip extends BaseClip, VisualExtras {
   filters: Filter[];
   /** (aditivo, sessão shell) predefinição de cor também em imagens */
   colorPreset?: ColorPreset;
+  colorGrade?: ColorGrade;
   transitionIn?: Transition;
 }
 
@@ -323,6 +363,8 @@ export interface AdjustmentClip extends BaseClip {
   type: 'adjustment';
   filters: Filter[];
   colorPreset?: ColorPreset;
+  /** correção de cor aplicada a tudo que está abaixo (camada de ajuste = "nó" global) */
+  colorGrade?: ColorGrade;
   effects?: VisualEffect[];
 }
 

@@ -14,6 +14,9 @@ import { useAIBridge } from '@/lib/ai/bridge';
 import { joinDictation, useDictation } from '@/lib/ai/speech';
 import { liveLabel, liveSummary } from '@/lib/ai/live';
 import { FastButton } from './FastButton';
+import AttachMenu, { filesFromTransfer } from './AttachMenu';
+import { ModelActions, ModelAttachment, ModelChip } from './ModelBits';
+import { emit } from '@/lib/events';
 
 const QUICK = [
   'Cortar silêncios', 'Legendas estilo TikTok', 'Deixar mais dinâmico', 'Gancho com zoom e flash',
@@ -66,6 +69,7 @@ export default function AiPopup({ onMinimize, onExpand, autoFocus = false, initi
   const setChatContext = useEditor((s) => s.setChatContext);
   const { status, busy, runs, loadStatus, send, undoRun, answer, skip } = useAIChat();
   const [text, setText] = useState('');
+  const [pending, setPending] = useState<File[]>([]);
   const baseRef = useRef('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -124,7 +128,12 @@ export default function AiPopup({ onMinimize, onExpand, autoFocus = false, initi
   const empty = !lastUser && !lastAssistant;
 
   return (
-    <section className="ep-aip" aria-label="Editar com IA">
+    <section
+      className="ep-aip"
+      aria-label="Editar com IA"
+      onDragOver={(e) => { if (Array.from(e.dataTransfer.types).includes('Files')) e.preventDefault(); }}
+      onDrop={(e) => { const f = filesFromTransfer(e.dataTransfer); if (f.length) { e.preventDefault(); setPending(f); } }}
+    >
       <header className="ep-aip-head">
         <div className="ep-aip-spark"><Icon name="ai" size={18} /></div>
         <b className="ep-aip-title">Editar com IA</b>
@@ -138,13 +147,14 @@ export default function AiPopup({ onMinimize, onExpand, autoFocus = false, initi
           </button>
         ) : null}
       </header>
+      <ModelChip compact />
 
       <div className="ep-aip-body" ref={bodyRef} aria-live="polite">
         {empty ? (
           <p className="ep-aip-hint">Diga o que mudar e eu edito ao vivo enquanto você assiste. Depois é só ir detalhando.</p>
         ) : (
           <>
-            {lastUser ? <div className="ep-aip-me">{lastUser.text}</div> : null}
+            {lastUser ? <div className="ep-aip-me">{lastUser.attachments?.length ? <ModelAttachment ids={lastUser.attachments} /> : null}{lastUser.text}</div> : null}
             {lastAssistant ? (
               <div className={`ep-aip-ai${lastAssistant.status === 'error' ? ' err' : ''}`}>
                 {run && !run.done && run.phase ? (
@@ -164,6 +174,7 @@ export default function AiPopup({ onMinimize, onExpand, autoFocus = false, initi
                 ) : null}
                 {run ? <MiniSteps run={run} /> : null}
                 {lastAssistant.text ? <p className="ep-aip-text">{lastAssistant.text}</p> : null}
+                {run?.model && run.done && !run.error ? <ModelActions assetId={run.model.assetId} /> : null}
                 {canUndo ? (
                   <button className="ep-ch-undo" onClick={() => undoRun(lastAssistant.id)}>
                     <Icon name="undo" size={13} /> Desfazer
@@ -190,6 +201,13 @@ export default function AiPopup({ onMinimize, onExpand, autoFocus = false, initi
       ) : null}
 
       <div className={`ep-ch-input ep-aip-input${busy ? ' busy' : ''}${dict.listening ? ' listening' : ''}`}>
+        <AttachMenu
+          size={18}
+          pending={pending}
+          onPendingDone={() => setPending([])}
+          onModel={(files) => { const said = text; setText(''); baseRef.current = ''; useAIChat.getState().attachModel(files, said); }}
+          onMedia={(files) => { emit('ep:attach-files', { files }); useEditor.getState().pushMessage({ role: 'user', text: `📎 ${files.map((f) => f.name).join(', ')}`, status: 'done' }); }}
+        />
         {dict.supported ? (
           <button
             className={`ep-aip-mic${dict.listening ? ' on' : ''}`}
@@ -210,6 +228,7 @@ export default function AiPopup({ onMinimize, onExpand, autoFocus = false, initi
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); }
           }}
+          onPaste={(e) => { const f = filesFromTransfer(e.clipboardData); if (f.length) { e.preventDefault(); setPending(f); } }}
           aria-label="O que a IA deve mudar"
         />
         <button className="ep-ch-send" disabled={busy || !text.trim()} onClick={() => submit()} aria-label="Enviar">

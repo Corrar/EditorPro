@@ -17,6 +17,7 @@ import { chooseWhisper, transcribeMedia } from './whisper';
 import { beatSyncOps, fillerOps, reframeOps } from './features';
 import { trackSubject } from './reframe';
 import { distributeWords } from './sanitize';
+import { describeStyle, modelRequestText, styleOps, styleScopeFromText, type StyleScope } from './model';
 import { materializeSfx, sanitizeSfxRequests, type SfxRequest } from './library';
 
 /** acrescenta às ops os AudioClips dos efeitos sonoros pedidos (gera o WAV no aparelho) */
@@ -351,6 +352,16 @@ export async function generateCaptions(opts: PipelineOptions & { language?: stri
 /* ---------- chat ---------- */
 
 async function demoChat(text: string, apply: NonNullable<PipelineOptions['apply']>, opts: PipelineOptions): Promise<PipelineResult> {
+  // "reedite seguindo o estilo do vídeo modelo" (+ "só as legendas/ritmo/cores")
+  const st = store().project.style;
+  if (st && /(estilo|ritmo|cores|legendas?) do (video )?(modelo|exemplo)|video modelo|igual ao modelo/.test(norm(text))) {
+    const scope = styleScopeFromText(text) ?? 'all';
+    const { ops: raw, said } = styleOps(store().project, st, scope);
+    const { ops } = sanitizeOps(raw, store().project, store().assets);
+    const appliedIds = ops.length ? await apply(ops) : [];
+    const msg = said.length ? said.join(', ') : 'nada a mudar';
+    return { reply: ops.length ? `Feito, no estilo do modelo: ${msg}.` : `${msg.charAt(0).toUpperCase()}${msg.slice(1)}.`, ops, appliedIds, provider: 'demo', warnings: [] };
+  }
   let silences: Record<Id, Range[]> | undefined;
   if (demoNeeds(text).silences) {
     opts.onStatus?.('Ouvindo o áudio…');
@@ -594,4 +605,42 @@ export async function applyComments(opts: PipelineOptions & { markerIds?: Id[] }
 /** duração útil p/ UI */
 export function timelineDuration(): number {
   return projectDuration(store().project);
+}
+
+/* ---------- vídeo modelo anexado no chat ---------- */
+
+/**
+ * Analisa um vídeo modelo (role 'reference'): quadros + cortes medidos aqui,
+ * Claude descreve o estilo (ou heurística local no demo). Vira o estilo ativo
+ * do projeto (set_project {style, referenceAssetId}) e devolve o resumo.
+ */
+export async function analyzeModel(assetId: Id, opts: PipelineOptions = {}): Promise<PipelineResult & { style?: StyleProfile }> {
+  const apply = opts.apply ?? defaultApply;
+  const status = await getStatus();
+  const asset = store().assets[assetId];
+  if (!asset || asset.kind !== 'video') throw new AIClientError('O vídeo modelo precisa ser um vídeo.', 400, 'bad_model');
+  const warnings: string[] = [];
+  opts.onStatus?.('Analisando o estilo do modelo…');
+  const sample = await sampleReference(asset, (f) => opts.onStatus?.(`Analisando o estilo do modelo… ${Math.round(f * 100)}%`, f), status.configured);
+  if (!sample) throw new AIClientError('Não consegui ler esse vídeo modelo. Tente outro arquivo (MP4/WebM).', 400, 'bad_model');
+  let style = sample.localStyle;
+  if (status.configured) {
+    try {
+      opts.onStatus?.('A IA está estudando o estilo do modelo…');
+      style = await analyzeReference(sample);
+    } catch (e) {
+      warnings.push(`análise pela IA falhou (${errText(e)}) — usei a análise local`);
+    }
+  }
+  opts.onLog?.(`Modelo lido: ${sample.metrics.cuts.length} cortes em ${sample.metrics.duration.toFixed(0)} s`);
+  const ops: EditOp[] = [{ op: 'set_project', patch: { style, referenceAssetId: asset.id }, explain: 'Guardando o estilo do modelo' }];
+  const appliedIds = await apply(ops, { delayMs: 150 });
+  const reply = `${describeStyle(style, asset.name)}${warnings.length ? `\n(${warnings.join('; ')})` : ''}`;
+  return { reply, ops, appliedIds, provider: status.provider, warnings, style };
+}
+
+/** aplica o estilo do modelo ativo (tudo ou só uma parte) */
+export async function applyModelStyle(scope: StyleScope, opts: PipelineOptions = {}): Promise<PipelineResult> {
+  if (!store().project.style) throw new AIClientError('Anexe um vídeo modelo primeiro.', 400, 'no_model');
+  return chatEdit(modelRequestText(scope), opts);
 }

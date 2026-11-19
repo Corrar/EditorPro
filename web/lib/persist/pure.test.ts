@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createProject, makeVideoClip } from '../defaults';
 import type { MediaAsset } from '../types';
-import { buildRecord, debounce, isBlank, orphanBlobIds, proxyBlobId, relativeTime, stripAsset, summarize, usedAssetIds } from './pure';
+import { buildRecord, canKeep, debounce, isBlank, orphanBlobIds, proxyBlobId, recentsOf, relativeTime, stripAsset, summarize, upsertRecent, usedAssetIds } from './pure';
 
 const asset: MediaAsset = {
   id: 'a1', kind: 'video', role: 'source', name: 'v.mp4', mime: 'video/mp4', size: 10, duration: 4,
@@ -82,5 +82,28 @@ describe('relativeTime', () => {
     expect(relativeTime(now - 5 * 60_000, now)).toBe('há 5 min');
     expect(relativeTime(now - 3 * 3600_000, now)).toBe('há 3 h');
     expect(relativeTime(now - 26 * 3600_000, now)).toBe('ontem');
+  });
+});
+
+describe('mídia recente', () => {
+  const r = (id: string, t: number, kind: MediaAsset['kind'] = 'video', role: MediaAsset['role'] = 'source') => ({ asset: stripAsset({ ...asset, id, kind, role }), addedAt: t });
+  it('upsertRecent põe no topo, sem duplicar, e corta no máximo', () => {
+    const { list, dropped } = upsertRecent([r('a', 1), r('b', 2), r('c', 3)], r('b', 9), 2);
+    expect(list.map((x) => x.asset.id)).toEqual(['b', 'a']);
+    expect(dropped.map((x) => x.asset.id)).toEqual(['c']);
+  });
+  it('recentsOf filtra por tipo, tira o Modelo e ordena do mais novo', () => {
+    const l = [r('a', 1), r('b', 5), r('c', 3, 'image'), r('d', 9, 'video', 'reference')];
+    expect(recentsOf(l, 'video').map((x) => x.asset.id)).toEqual(['b', 'a']);
+    expect(recentsOf(l, 'image').map((x) => x.asset.id)).toEqual(['c']);
+  });
+  it('canKeep respeita a cota com folga', () => {
+    const MB = 1024 * 1024;
+    expect(canKeep(null, 500 * MB)).toBe(true);
+    expect(canKeep({ quota: 1000 * MB, usage: 100 * MB }, 300 * MB)).toBe(true);
+    expect(canKeep({ quota: 1000 * MB, usage: 700 * MB }, 200 * MB)).toBe(false);
+  });
+  it('recentes protegem o blob (e o proxy) do GC', () => {
+    expect(orphanBlobIds(['x', proxyBlobId('x'), 'y'], [], ['x'])).toEqual(['y']);
   });
 });

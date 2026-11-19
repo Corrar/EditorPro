@@ -33,6 +33,15 @@ describe('ops', () => {
     expect(right.duration).toBe(12);
   });
 
+  it('update_clip com colorGrade (DaVinci) e split preservam a correção nos dois pedaços', () => {
+    const { p } = withClip();
+    const grade = { lift: { r: 0, g: 0, b: 0.05, y: -0.02 }, gain: { r: 0.04, g: 0, b: 0, y: 0 }, contrast: 0.2, curves: { master: [{ x: 0, y: 0 }, { x: 0.5, y: 0.55 }, { x: 1, y: 1 }] }, hsl: { orange: { hue: 0, sat: 0.1, lum: 0 } }, mix: 1 };
+    const g = applyOp(p, { op: 'update_clip', clipId: 'c1', patch: { colorGrade: grade } });
+    expect((findClip(g, 'c1')!.clip as VideoClip).colorGrade).toEqual(grade);
+    const s = applyOp(g, { op: 'split_clip', clipId: 'c1', at: 5, newId: 'c2' });
+    expect((findClip(s, 'c2')!.clip as VideoClip).colorGrade).toEqual(grade);
+  });
+
   it('split respeita speed', () => {
     const { p } = withClip();
     const fast = applyOp(p, { op: 'update_clip', clipId: 'c1', patch: { speed: 2, duration: 10 } });
