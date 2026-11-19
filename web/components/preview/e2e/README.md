@@ -16,3 +16,5 @@ Vídeo: `ffmpeg -f lavfi -i testsrc2=duration=40:size=1080x1920:rate=30 -f lavfi
   apresentar. Antes: 3–7 pretas em ~60 capturas; agora 0 (desktop) e 0 (Pixel 7, CPU 4×). `DUMP=1` mostra o estado.
 - `node at3.cjs <dir> [mobile]` — caso da IA: parado exatamente em 3,0 s, efeito 'custom' (com e sem intensity) no
   clipe que começa em 3,0 e texto que começa em 3,0 aparecem no preview.
+- `node blink2.cjs <dir> [mobile] [rodadas]` — roteiro blink2 da principal (bruto.mp4 de 12 s, GOP padrão: seeks lentos):
+  tocando + 6 splits, pausa + salto + applyLive (fase "paused"), depois toca. Antes 1–2 pretas por rodada; agora 0.

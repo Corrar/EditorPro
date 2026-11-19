@@ -178,7 +178,7 @@ export default function Preview() {
 
   /* ---------- desenho ---------- */
   /** desenha o quadro t; false = vídeo nativo ainda sem quadro (mantém o que está na tela) */
-  const draw = useCallback((t: number, force = false): boolean => {
+  const draw = useCallback((t: number): boolean => {
     const cv = canvasRef.current;
     const pool = poolRef.current;
     if (!cv || !pool) return true;
@@ -189,11 +189,11 @@ export default function Preview() {
       : nativeAllowed() ? nativePlan(st.project, t) : ({ native: false, reason: 'desligado' } as const);
     const { w: fw, h: fh } = fitRef.current;
     const pr = pool.present(plan, t, fw, fh);
-    if (pr === 'canvas' || (pr === false && force)) {
-      // nativo sem mídia utilizável (ou esperando demais): composição completa no canvas, sem o vídeo
-      plan = { native: false, reason: pr === 'canvas' ? 'mídia indisponível' : 'esperando quadro' };
+    if (pr === 'canvas') {
+      // nativo sem mídia utilizável (fonte quebrada / sem url): composição completa no canvas, sem o vídeo
+      plan = { native: false, reason: 'mídia indisponível' };
       pool.present(plan, t, fw, fh);
-    } else if (!pr) return false;
+    } else if (!pr) return false; // elemento válido ainda buscando: MANTÉM o quadro atual (nunca troca por canvas sem vídeo → preto)
     // troca de qualidade pendente: redimensiona e desenha no MESMO quadro
     if (wantQRef.current !== qualityRef.current) { qualityRef.current = wantQRef.current; applySize(); }
     const ctx = cv.getContext('2d');
@@ -254,7 +254,7 @@ export default function Preview() {
       }
       const late = !!waitSinceRef.current && now - waitSinceRef.current >= 2500;
       // passou do limite: desenha assim mesmo (força o canvas) — antes desistia sem desenhar (r2 #3)
-      if (!draw(tv, late) && !late) {
+      if (!draw(tv) && !late) {
         if (!waitSinceRef.current) waitSinceRef.current = now;
         window.setTimeout(requestStill, 120);
         return;
@@ -411,7 +411,7 @@ export default function Preview() {
       // rede de segurança na reprodução: um vídeo que não entrega quadro não congela o canvas inteiro
       // (textos/legendas/PiP) por mais de 1,5 s (r2 #1/#2)
       const lateP = holdSince > 0 && now - holdSince > 1500;
-      if ((s.pending && !lateP) || !draw(t, lateP)) { if (!holdSince) holdSince = now; STATS.held++; showTime(t); }
+      if ((s.pending && !lateP) || !draw(t)) { if (!holdSince) holdSince = now; STATS.held++; showTime(t); }
       else holdSince = 0;
       lastSetRef.current = t;
       st.setPlayhead(t);
