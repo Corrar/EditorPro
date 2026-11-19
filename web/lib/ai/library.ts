@@ -17,9 +17,10 @@ import {
   buildTemplate, captionPresetDef, captionPresetOp, fontDef, lookAdjustmentOps, lookClipOps, lookDef, sfxClipOps, sfxDef, templateDef,
 } from '../library';
 import { clampNum, color, isObj, r3, str } from './sanitize';
+import { musicTrack } from '../music/catalog';
 import { sanitizeCaptionStyle } from './sanitize';
 
-export const LIBRARY_MACROS = ['apply_template', 'apply_caption_preset', 'apply_look', 'add_sfx'] as const;
+export const LIBRARY_MACROS = ['apply_template', 'apply_caption_preset', 'apply_look', 'add_sfx', 'add_music'] as const;
 export type LibraryMacro = (typeof LIBRARY_MACROS)[number];
 
 export interface SfxRequest { sfxId: string; at: number; volume?: number; explain?: string }
@@ -110,6 +111,13 @@ export function expandLibraryOp(item: Record<string, unknown>, p: Project, sfx: 
       if (!ops.length) fail('look sem clipes para aplicar');
       return withExplain(ops, item.explain);
     }
+    case 'add_music': {
+      // faixa do catálogo de músicas livres: gerada no navegador depois (pedido no SanitizeResult)
+      const id = str(item.musicId ?? item.id, 60) ?? fail('musicId ausente');
+      if (!musicTrack(id)) fail(`música desconhecida: ${id}`);
+      sfx.push({ sfxId: `music:${id}`, at: 0 });
+      return [];
+    }
     case 'add_sfx': {
       const id = str(item.sfxId ?? item.id, 60) ?? fail('sfxId ausente');
       const def = sfxDef(id) ?? fail(`efeito sonoro desconhecido: ${id}`);
@@ -130,7 +138,10 @@ export function sanitizeSfxRequests(v: unknown, duration: number): SfxRequest[] 
   const out: SfxRequest[] = [];
   for (const r of v.slice(0, 24)) {
     if (!isObj(r)) continue;
-    const def = sfxDef(String(r.sfxId ?? ''));
+    const rawId = String(r.sfxId ?? '');
+    // "music:<id>" = faixa do catálogo de músicas pedida pela IA (add_music)
+    if (rawId.startsWith('music:')) { if (musicTrack(rawId.slice(6))) out.push({ sfxId: rawId, at: 0 }); continue; }
+    const def = sfxDef(rawId);
     const at = clampNum(r.at, 0, Math.max(0, duration));
     if (!def || at === undefined) continue;
     const volume = clampNum(r.volume, 0, 2);
@@ -151,6 +162,7 @@ export async function materializeSfx(reqs: SfxRequest[], p: Project, applyOpsFn:
   const ops: EditOp[] = [];
   let sim = p;
   for (const r of reqs) {
+    if (r.sfxId.startsWith('music:')) continue; // músicas são tratadas à parte (catalogMusicOpsById)
     const def = sfxDef(r.sfxId);
     if (!def) continue;
     let asset = cache.get(def.id);

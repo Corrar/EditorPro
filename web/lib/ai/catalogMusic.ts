@@ -66,6 +66,26 @@ export async function catalogMusicOps(
   }
 }
 
+/** como catalogMusicOps, mas com a faixa escolhida (ex.: pela IA, `add_music {musicId}`) */
+export async function catalogMusicOpsById(
+  id: string,
+  p: Project,
+  opts: { onStatus?: (s: string) => void } = {},
+): Promise<{ ops: EditOp[]; name: string; id: string } | null> {
+  try {
+    const m = await import('../music');
+    const track = m.musicTrack(id);
+    if (!track) return null;
+    const duration = m.fitMusicDuration(p, 0);
+    opts.onStatus?.(`Gerando a música “${track.name}”…`);
+    const asset = await m.prepareMusicAsset(id, duration);
+    const ops = m.musicClipOps(p, asset, 0, { volume: catalogMusicVolume(p), fadeIn: 0.2, duck: true });
+    return { ops: ops.map((o) => (o.op === 'add_clip' ? { ...o, explain: `Música do catálogo: “${track.name}” (${track.bpm} BPM)` } : o)), name: track.name, id };
+  } catch {
+    return null;
+  }
+}
+
 /** id do catálogo de um asset de música (pelo nome do arquivo gerado) */
 export async function catalogIdOf(asset: MediaAsset | undefined): Promise<string | undefined> {
   if (!asset?.library) return undefined;

@@ -225,3 +225,23 @@ describe('bugs da QA', () => {
     expect(useEditor.getState().future.length).toBeGreaterThan(0); // dá para refazer
   }, 30000);
 });
+
+describe('música do catálogo pela IA', () => {
+  it('add_music vira pedido de música (id válido) e o catálogo vai no prompt; id inventado é descartado', async () => {
+    const { MUSIC_CATALOG } = await import('../music/catalog');
+    const id = MUSIC_CATALOG[0].id;
+    const r = sanitizeOps([{ op: 'add_music', musicId: id }, { op: 'add_music', musicId: 'nao-existe' }], base(), { a1: src });
+    expect(r.sfx).toEqual([{ sfxId: `music:${id}`, at: 0 }]);
+    expect(r.dropped).toHaveLength(1);
+    const { sanitizeSfxRequests } = await import('./library');
+    expect(sanitizeSfxRequests([{ sfxId: `music:${id}`, at: 0 }, { sfxId: 'music:x', at: 0 }], 30)).toEqual([{ sfxId: `music:${id}`, at: 0 }]);
+    const { engineCatalogForAI } = await import('./catalogs');
+    expect(engineCatalogForAI()).toContain(`${id} (${MUSIC_CATALOG[0].name}`);
+  });
+  it('demo não usa efeito sonoro da biblioteca como música de fundo', async () => {
+    const { planFirstEdit } = await import('./demo');
+    const sfx = { id: 'w1', kind: 'audio', role: 'music', name: 'Whoosh.wav', mime: 'audio/wav', size: 1, duration: 0.9, library: true } as MediaAsset;
+    const plan = planFirstEdit({ project: base(), assets: { a1: src, w1: sfx }, brief: 'vídeo com música', silencesByAsset: {} } as never);
+    expect(JSON.stringify(plan.ops)).not.toContain('"assetId":"w1"');
+  });
+});

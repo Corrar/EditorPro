@@ -173,6 +173,7 @@ export const EditOpSchema = z.object({
   intensity: z.number().optional().describe('apply_look: 0..1'),
   clipIds: z.array(z.string()).optional(),
   sfxId: z.string().optional().describe('add_sfx: id do efeito sonoro'),
+  musicId: z.string().optional().describe('add_music: id da música livre do catálogo'),
   atCuts: z.boolean().optional().describe('add_sfx: um em cada corte/transição da trilha principal'),
   volume: z.number().optional(),
 });

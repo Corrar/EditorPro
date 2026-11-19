@@ -20,11 +20,21 @@ import { trackSubject } from './reframe';
 import { distributeWords } from './sanitize';
 import { describeStyle, modelRequestText, styleOps, styleScopeFromText, type StyleScope } from './model';
 import { materializeSfx, sanitizeSfxRequests, type SfxRequest } from './library';
-import { backgroundMusicClips, catalogIdOf, catalogMusicOps, chatMusicRequest, needsCatalogMusic, userMusic } from './catalogMusic';
+import { backgroundMusicClips, catalogIdOf, catalogMusicOps, catalogMusicOpsById, chatMusicRequest, needsCatalogMusic, userMusic } from './catalogMusic';
 
 /** acrescenta às ops os AudioClips dos efeitos sonoros pedidos (gera o WAV no aparelho) */
 async function withSfx(ops: EditOp[], sfx: SfxRequest[] | undefined, onStatus?: (s: string) => void): Promise<EditOp[]> {
-  const reqs = sanitizeSfxRequests(sfx, Math.max(projectDuration(store().project), 1) + 600);
+  const all = sanitizeSfxRequests(sfx, Math.max(projectDuration(store().project), 1) + 600);
+  const musicReq = all.find((r) => r.sfxId.startsWith('music:'));
+  const reqs = all.filter((r) => !r.sfxId.startsWith('music:'));
+  // faixa do catálogo escolhida pela IA (add_music): só se o usuário não mandou música nem há trilha
+  if (musicReq) {
+    const sim = applyOps(store().project, ops).project;
+    if (!userMusic(store().assets).length && !backgroundMusicClips(sim, store().assets).length) {
+      const m = await catalogMusicOpsById(musicReq.sfxId.slice(6), sim, { onStatus });
+      if (m) ops = [...ops, ...sanitizeOps(m.ops, sim, store().assets).ops];
+    }
+  }
   if (!reqs.length) return ops;
   onStatus?.('Gerando efeitos sonoros…');
   try {

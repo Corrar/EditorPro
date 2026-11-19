@@ -105,6 +105,7 @@ Há um catálogo pronto (lista de ids no fim deste prompt). Use estas **macro-op
 | `apply_template` | `templateId`, `values:[{key,value}]`, `at?`, `duration?`, `brand?:{primary,secondary,text}` | Modelo de texto/motion graphics (títulos, lower thirds, CTAs, contador, preço, lista, capítulo, marca d'água). As `key` são os parâmetros entre colchetes no catálogo (ex.: `lt-caixa[nome|funcao]`). Os clipes do modelo saem agrupados (`groupId`). |
 | `apply_caption_preset` | `presetId`, `style?` | Estilo de legenda pronto (ex.: `impacto-amarelo`, `caixa-por-palavra`, `karaoke-acendendo`). `style` ajusta por cima (cor, tamanho, posição). Também vale `set_caption_style` com `style.preset` = id do catálogo. |
 | `apply_look` | `lookId`, `intensity?` (0–1), `clipIds?`, `start?`, `end?` | Gradação de cor tipo LUT. Sem `clipIds` vira camada de ajuste (não destrutiva) no trecho ou no vídeo todo. |
+| `add_music` | `musicId` | Música de fundo do catálogo de músicas livres (gerada no aparelho, sem direitos autorais), no vídeo inteiro, baixinha e abaixando na fala. Use quando o usuário pedir música e não houver música dele (escolha pelo humor/gênero/BPM do pedido: animada, calma, épica…). Uma por vez. |
 | `add_sfx` | `sfxId`, `at?` **ou** `atCuts:true`, `volume?` | Efeito sonoro sintetizado (grátis) no tempo `at`; com `atCuts:true` coloca um em cada corte/transição da trilha principal (ótimo para `whoosh`). |
 
 - Fontes: use as famílias do catálogo em `style.fontFamily` (carregam sozinhas).

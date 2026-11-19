@@ -18,6 +18,7 @@ import { SPEED_PRESET_LABELS } from '../engine/speed';
 import { SHAPE_LABELS } from '../engine/shapes';
 import { MASK_LABELS } from '../engine/masks';
 import { BUILTIN_LOOKS } from '../color/luts';
+import { MUSIC_CATALOG } from '../music/catalog';
 // catálogo da sessão FX (fonte da verdade p/ efeitos, transições, blend, máscaras e animações de clipe)
 import {
   ALL_BLEND_MODES, ALL_CLIP_ANIMATIONS, ALL_EFFECT_KINDS, ALL_MASK_SHAPES, ALL_TRANSITION_KINDS,
@@ -71,6 +72,7 @@ export const COLOR_LOOKS = (BUILTIN_LOOKS ?? []).map((l) => ({ id: l.id, name: l
 export function engineCatalogForAI(): string {
   const lines = (Object.keys(CATALOG) as (keyof typeof CATALOG)[])
     .map((k) => `${TITLES[k]}: ${CATALOG[k].map((id) => (LABELS[k]?.[id] ? `${id} (${LABELS[k][id]})` : id)).join(', ')}`);
+  if (MUSIC_CATALOG.length) lines.push(`Músicas livres (add_music.musicId; geradas no aparelho, sem direitos autorais): ${MUSIC_CATALOG.map((t) => `${t.id} (${t.name}; ${t.genre}, ${t.mood}, ${t.bpm} BPM)`).join(', ')}`);
   if (COLOR_LOOKS.length) lines.push(`Looks de cor (colorGrade.lut.id, intensity 0–1): ${COLOR_LOOKS.map((l) => `${l.id} (${l.name})`).join(', ')}`);
   return lines.join('\n');
 }

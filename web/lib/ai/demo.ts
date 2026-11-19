@@ -633,7 +633,8 @@ export function planFirstEdit(input: FirstEditInput): DemoResult {
   }
 
   // 8) música de fundo (se o usuário enviou)
-  const music = Object.values(assets).find((a) => a.role === 'music' && (a.kind === 'audio' || a.kind === 'video'));
+  // só música de verdade do usuário (efeitos sonoros/faixas da biblioteca são library e curtos)
+  const music = Object.values(assets).find((a) => a.role === 'music' && !a.library && (a.duration ?? 0) >= 4 && (a.kind === 'audio' || a.kind === 'video'));
   const hasAudioClip = p.tracks.some((t) => t.clips.some((c) => c.type === 'audio'));
   if (music && !hasAudioClip) {
     const total = projectDuration(p);
