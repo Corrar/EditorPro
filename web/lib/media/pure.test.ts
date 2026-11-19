@@ -69,3 +69,13 @@ describe('contagens e tempos', () => {
     expect(thumbSize(1920, 1080, 90)).toEqual({ width: 160, height: 90 });
   });
 });
+
+describe('looksUndecodable', () => {
+  it('sem dimensões ou sem quadros = não decodifica', async () => {
+    const { looksUndecodable, UNDECODABLE_MSG } = await import('./pure');
+    expect(looksUndecodable({ width: 0, height: 0, thumbCount: 0, duration: 5 })).toBe(true);
+    expect(looksUndecodable({ width: 1080, height: 1920, thumbCount: 0, duration: 5 })).toBe(true);
+    expect(looksUndecodable({ width: 1080, height: 1920, thumbCount: 6, duration: 5 })).toBe(false);
+    expect(UNDECODABLE_MSG('a.mov')).toContain('Mais compatível');
+  });
+});
