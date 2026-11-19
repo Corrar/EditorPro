@@ -447,3 +447,8 @@
 /* textos empilhados dentro dos blocos v2 */
 .ep-aicard .t, .ep-aicard .d, .ep-tile .lb, .ep-tile .ds { display:block; }
 .ep-aicard > span:not(.spark) { min-width:0; }
+
+/* tema ainda desconhecido (1º render): só o fundo neutro, sem flash do tema errado */
+.ep-root.theme-pending { background:#FFFFFF; }
+.ep-root.theme-pending > * { visibility:hidden; }
+@media (prefers-color-scheme: dark) { .ep-root.theme-pending, .ep-root.theme-pending .ep-boot { background:#0D0D0F; } }

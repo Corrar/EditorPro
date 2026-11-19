@@ -21,18 +21,19 @@ import MobileNav from './MobileNav';
 import SettingsModal from './SettingsModal';
 import Sidebar from './Sidebar';
 import Toasts from './Toasts';
+import { useTheme } from './theme';
 import Workspace from './Workspace';
 import type { ToolId } from './tools';
 
 type View = 'loading' | 'home' | 'editor';
-const THEME_KEY = 'ep_theme';
 const SB_KEY = 'ep_sb_min';
 const DEFAULT_BRIEF = 'Edite este material em um vídeo dinâmico: corte as pausas, mantenha o ritmo e adicione legendas.';
 
 const mq = (q: string) => typeof window !== 'undefined' && window.matchMedia(q).matches;
 
 export default function EditorShell() {
-  const [dark, setDark] = useState(true);
+  const [themeDark, toggleTheme] = useTheme();
+  const dark = !!themeDark;
   const [view, setView] = useState<View>('loading');
   const [busy, setBusy] = useState<string | null>(null);
   const [tool, setTool] = useState<ToolId>('media');
@@ -48,21 +49,14 @@ export default function EditorShell() {
   // preferências
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(THEME_KEY);
-      // padrão: segue o sistema; escolha manual salva tem prioridade
-      setDark(saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches);
       if (localStorage.getItem(SB_KEY) === '1' || mq('(max-width: 1100px)')) setSbMin(true);
     } catch {}
     if (mq('(max-width: 1099px)')) setSideOpen(false);
-    // sem escolha manual, acompanha a troca de tema do sistema
-    const sys = window.matchMedia('(prefers-color-scheme: dark)');
-    const onSys = () => { try { if (!localStorage.getItem(THEME_KEY)) setDark(sys.matches); } catch { setDark(sys.matches); } };
-    sys.addEventListener('change', onSys);
     // ao encolher a janela para ≤1099 (gavetas), fecha painel e chat sobrepostos
     const m = window.matchMedia('(max-width: 1099px)');
     const onChange = () => { if (m.matches) { setSideOpen(false); setChatOpen(false); } };
     m.addEventListener('change', onChange);
-    return () => { m.removeEventListener('change', onChange); sys.removeEventListener('change', onSys); };
+    return () => m.removeEventListener('change', onChange);
   }, []);
 
   // altura real da área visível (teclado virtual do celular não cobre o chat)
@@ -98,12 +92,6 @@ export default function EditorShell() {
   // seleção de clipe: no celular a ferramenta "Editar" vira a primeira opção; se o painel Editar já estava aberto, segue
   const selCount = useEditor((s) => s.selection.length);
   useEffect(() => { if (!selCount && tool === 'edit') setSideOpen((v) => (mq('(max-width: 1099px)') ? false : v)); }, [selCount, tool]);
-  const toggleTheme = useCallback(() => {
-    setDark((d) => {
-      try { localStorage.setItem(THEME_KEY, d ? 'light' : 'dark'); } catch {}
-      return !d;
-    });
-  }, []);
   const toggleSb = () => setSbMin((v) => { try { localStorage.setItem(SB_KEY, v ? '0' : '1'); } catch {} return !v; });
 
   // ingestão pedida por outros módulos + restauração (ou wizard direto em /?novo=1)
@@ -233,8 +221,8 @@ export default function EditorShell() {
   };
 
   return (
-    <div className={`ep-root${dark ? ' dark' : ''}`}>
-      {view === 'loading' ? (
+    <div className={`ep-root${dark ? ' dark' : ''}${themeDark === null ? ' theme-pending' : ''}`}>
+      {view === 'loading' || themeDark === null ? (
         <div className="ep-boot"><div className="ep-logo"><div className="mark"><span /><i /></div></div><span className="ep-spin" /></div>
       ) : (
         <div className={`ep-shell v-${view}`}>
