@@ -26,6 +26,7 @@ const STOP = new Set(
 /** frases que o Whisper inventa em silêncio/música (normalizadas, sem acento/pontuação) */
 export const PHANTOM_PHRASES = [
   'espero que tenham gostado', 'ate o proximo video', 'tchau tchau', 'se inscreva', 'inscrevase no canal', 'legenda adriana zanotto',
+  'acompanha o seu canal', 'acompanhe o canal', 'acompanhe o nosso canal', 'ative as notificacoes', 'ate a proxima', 'valeu galera',
   'legendas pela comunidade', 'obrigado por assistir', 'obrigada por assistir', 'ative o sininho', 'amaraorg', 'subtitles by', 'thanks for watching',
 ];
 /** sempre lixo, com ou sem áudio */
@@ -106,6 +107,8 @@ function groups(ws: W[], gap = 0.5): W[][] {
 
 /** (c) frase só de números/pontuação; (d) frases-fantasma */
 function markGroups(ws: W[], runs: Range[] | undefined) {
+  const phantoms: W[][] = [];
+  let real = 0;
   for (const g of groups(ws)) {
     const live = g.filter((w) => !w.drop);
     if (!live.length) continue;
@@ -126,7 +129,12 @@ function markGroups(ws: W[], runs: Range[] | undefined) {
     const phantom = PHANTOM_PHRASES.some((p) => flat.includes(p)) || flat === 'e ai';
     // frase-fantasma: só some se não há voz embaixo dela (ou se a duração é absurda p/ tão pouca fala)
     if (phantom && (speech < 0.5 || perWord > 1.2)) for (const w of live) w.drop = true;
+    else if (phantom) phantoms.push(live);
+    else real++;
   }
+  // o arquivo INTEIRO só tem frase de fim de vídeo: é o Whisper inventando sobre música/ruído (o VAD de energia
+  // não separa música de voz). Num vídeo com fala de verdade, "se inscreva no canal" no fim continua.
+  if (!real) for (const g of phantoms) for (const w of g) w.drop = true;
 }
 
 export interface FilterReport { input: number; kept: number; loops: number; bursts: number; noSpeech: number; groups: number; outOfRange: number }

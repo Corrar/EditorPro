@@ -64,7 +64,9 @@ describe.skipIf(!hasFx)('filterAsr (sem áudio)', () => {
   it('frase-fantasma em silêncio some; com voz embaixo fica', () => {
     const words: WhisperChunk[] = 'espero que tenham gostado'.split(' ').map((t, i) => ({ text: ` ${t}`, timestamp: [10 + i * 0.3, 10.25 + i * 0.3] }));
     expect(filterAsr(words, [{ start: 0, end: 5 }, { start: 9.6, end: 9.7 }])).toEqual([]);
-    expect(filterAsr(words, [{ start: 9.8, end: 11.4 }]).length).toBe(4);
+    // com voz embaixo E outra fala no arquivo, fica (sozinha no arquivo inteiro ela é tratada como invenção)
+    const real: WhisperChunk[] = 'gente hoje tem bolo'.split(' ').map((t, i) => ({ text: ` ${t}`, timestamp: [2 + i * 0.3, 2.25 + i * 0.3] }));
+    expect(filterAsr([...real, ...words], [{ start: 1.9, end: 3.3 }, { start: 9.8, end: 11.4 }]).length).toBe(8);
   });
   it('amara.org / "legendas pela comunidade" somem sempre', () => {
     const words: WhisperChunk[] = 'Legendas pela comunidade Amara.org'.split(' ').map((t, i) => ({ text: ` ${t}`, timestamp: [1 + i * 0.3, 1.25 + i * 0.3] }));
@@ -159,5 +161,17 @@ describe('vad (sintético)', () => {
     const a = bursts(60, [[30, 31], [31.2, 32.2]]);
     expect(speechSeconds(energyRuns(a))).toBeGreaterThan(1.5);
     expect(speechSeconds(energyRuns(new Float32Array(60 * RATE)))).toBe(0);
+  });
+});
+
+describe('frase de fim de vídeo sobre música (medido no navegador: "Acompanha o seu canal.")', () => {
+  const w = (t: string, i: number): WhisperChunk => ({ text: ` ${t}`, timestamp: [8 + i * 0.35, 8.3 + i * 0.35] });
+  it('arquivo só com a frase-fantasma (e VAD dizendo "som" por causa da música): some', () => {
+    const words = 'Acompanha o seu canal.'.split(' ').map(w);
+    expect(filterAsr(words, [{ start: 0, end: 20 }], { duration: 20 })).toEqual([]);
+  });
+  it('com fala de verdade antes, "se inscreva no canal" no fim fica', () => {
+    const words = [...'Hoje eu vou mostrar a receita.'.split(' ').map((t, i) => ({ text: ` ${t}`, timestamp: [1 + i * 0.3, 1.25 + i * 0.3] as [number, number] })), ...'se inscreva no canal'.split(' ').map(w)];
+    expect(filterAsr(words, [{ start: 0, end: 20 }], { duration: 20 }).length).toBe(words.length);
   });
 });

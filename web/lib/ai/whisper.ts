@@ -356,5 +356,7 @@ export async function transcribeMedia(asset: MediaAsset, opts: TranscribeOptions
     chunks = loc.chunks;
     opts.onInfo?.({ mode: 'local', label: loc.label });
   }
+  // diagnóstico (QA/Playwright): saída crua do Whisper, trechos de voz e o que o filtro deixou
+  try { (globalThis as { __epAsr?: unknown }).__epAsr = { asset: asset.id, raw: chunks, runs, duration: total }; } catch { /* sem global */ }
   return chunksToCaptions(chunks, runs, total);
 }

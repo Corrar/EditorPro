@@ -158,6 +158,15 @@ export function refineWordTimes(chunks: WhisperChunk[], runs: Range[], report?: 
     if (e - s <= 1e-3) e = s + Math.max(0.12, 0.06 * chars);
     return { text: w.text, s: Math.max(0, s), e: Math.max(0, e) };
   });
+  // 1b) última palavra antes de uma pausa vai até o fim do trecho de voz dela (Whisper encurta "quarenta" → "40")
+  if (runs.length) {
+    for (let i = 0; i < out.length; i++) {
+      const w = out[i], nx = out[i + 1];
+      if (nx && nx.s - w.e <= 0.15) continue;
+      const r = runs.find((x) => x.start <= w.s + 0.05 && x.end >= w.s);
+      if (r && r.end > w.e && r.end - w.s <= 1.5 && (!nx || r.end <= nx.s - 0.02)) w.e = r.end;
+    }
+  }
   // 2) ordem monotônica, mínimo de 0,06 s por palavra, sem sobreposição
   for (let i = 1; i < out.length; i++) {
     out[i].s = Math.max(out[i].s, out[i - 1].s + 0.06);

@@ -325,7 +325,7 @@ async function whisperCaptions(sources: MediaAsset[], language: string, opts: Pi
       segs.push(...captionsMediaToTimeline(store().project, a.id, mediaSegs));
     }
     const line = providerLine(run.info);
-    if (line) opts.onLog?.(line);
+    if (line && segs.length) opts.onLog?.(line);
     if (!segs.length) run.reason = 'no-speech';
     return segs.sort((x, y) => x.start - y.start);
   } catch (e) {
