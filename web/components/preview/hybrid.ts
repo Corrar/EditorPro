@@ -18,6 +18,7 @@ import { clipAnimFx } from '@/lib/engine/animations';
 import { resolveFilters, needsPixelGrade } from '@/lib/engine/filters';
 import { transitionVisual, type TransitionVisual } from '@/lib/engine/transitions';
 import { isShaderTransition } from '@/lib/engine/shaderTransitions';
+import { gradeNeedsCanvas, gradeCssEquivalent } from '@/lib/color';
 
 /** uma camada nativa: um <video> visível com geometria/opacidade/filtro em CSS */
 export interface NativeLayer {
@@ -95,7 +96,8 @@ export function nativePlan(p: Project, t: Seconds): NativePlan {
     // (como no drawLayer: o clipe que sai não aplica o próprio fade)
     const fade = it.transition?.role === 'out' ? 1 : fadeOpacity(clip, t);
     const opacity = Math.max(0, Math.min(1, tf.opacity * fade * (tv ? tv.opacity : 1)));
-    layers.push({ clip, opacity, filter: f.css, tv, z: it.transition?.role === 'out' ? 0 : 1 });
+    const filter = [f.css, gradeCssEquivalent(clip.colorGrade)].filter((x) => x && x !== 'none').join(' ') || 'none';
+    layers.push({ clip, opacity, filter, tv, z: it.transition?.role === 'out' ? 0 : 1 });
   }
   return { native: true, track: main, layers };
 }
@@ -113,6 +115,8 @@ export function clipNeedsCanvas(clip: Clip, t: Seconds): string | null {
   if (cr && (cr.w < 0.999 || cr.h < 0.999 || cr.x > 0.001 || cr.y > 0.001)) return 'recorte';
   const f = resolveFilters(clip.filters, clip.colorPreset, 1);
   if (needsPixelGrade(f) || f.temperature || f.tint || f.fade || f.vignette || f.grain) return 'look';
+  // correção de cor: CSS quando há equivalente (exposição/contraste/saturação), senão WebGL no canvas
+  if (gradeNeedsCanvas(clip.colorGrade)) return 'cor';
   if (/blur\(/.test(f.css)) return 'desfoque';
   const a = clipAnimFx(clip, Math.max(0, t - clip.start), clip.duration);
   if (a.opacity < 0.999 || a.dx || a.dy || Math.abs(a.scale - 1) > 0.001 || a.rotation || a.blur || a.scaleX !== 1) return 'animação';

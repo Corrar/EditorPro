@@ -21,6 +21,7 @@ import { processPixels } from './gl';
 import { emojiCanvas, shapeCanvas, clipShapeAspect } from './shapes';
 import { getSegMask, requestSegMask } from './segment';
 import { hash, scratch, type AnyCanvas, type Ctx } from './surface';
+import { gradeLayer } from '../color';
 import type { MediaElement } from './index';
 
 export type { Ctx } from './surface';
@@ -155,6 +156,13 @@ export function drawLayer(ctx: Ctx, layer: LayerItem, t: Seconds, el: MediaEleme
     if (out) { src = out as CanvasImageSource; sw = out.width; sh = out.height; }
   }
 
+  /* correção de cor estilo DaVinci (sessão Cor; WebGL, canvas reaproveitado — desenhado logo abaixo) */
+  if ('colorGrade' in clip && clip.colorGrade) {
+    const kk = Math.min(1, 1920 / Math.max(sw, sh));
+    const g = gradeLayer(src, clip.colorGrade, sw * kk, sh * kk);
+    if (g) { src = g; sw = (g as HTMLCanvasElement).width; sh = (g as HTMLCanvasElement).height; }
+  }
+
   /* geometria */
   let dw: number, dh: number;
   if (natural) {
@@ -260,7 +268,7 @@ function overlayColor(ctx: Ctx, color: string, alpha: number, W: number, H: numb
 
 export function applyAdjustment(ctx: Ctx, clip: AdjustmentClip, t: Seconds, W: number, H: number) {
   const f = resolveFilters(clip.filters, clip.colorPreset, H / 1080);
-  const anyFx = f.css !== 'none' || needsPixelGrade(f) || f.temperature || f.tint || f.fade || f.vignette || f.grain || clip.effects?.length;
+  const anyFx = f.css !== 'none' || needsPixelGrade(f) || f.temperature || f.tint || f.fade || f.vignette || f.grain || clip.effects?.length || !!clip.colorGrade;
   if (!anyFx) return;
   const local = t - clip.start;
   // entra/sai suave em 0,2 s p/ não "estalar"
@@ -271,6 +279,10 @@ export function applyAdjustment(ctx: Ctx, clip: AdjustmentClip, t: Seconds, W: n
   if (needsPixelGrade(f)) {
     const out = processPixels(snap as TexImageSource, W, H, W, H, { highlights: f.highlights, shadows: f.shadows, sharpen: f.sharpen });
     if (out) { const { c, ctx: g } = scratch(ctx.canvas, W, H, 10); g.drawImage(out as CanvasImageSource, 0, 0); base = c as CanvasImageSource; }
+  }
+  if (clip.colorGrade) {
+    const g = gradeLayer(base, clip.colorGrade, W, H);
+    if (g) { const { c, ctx: gc } = scratch(ctx.canvas, W, H, 12); gc.drawImage(g, 0, 0); base = c as CanvasImageSource; }
   }
   const { c: work, ctx: wc } = scratch(ctx.canvas, W, H, 11);
   wc.filter = f.css;
