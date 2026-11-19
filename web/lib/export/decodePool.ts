@@ -10,7 +10,7 @@
 import type { Clip, MediaAsset, VideoClip } from '../types';
 import type { MediaElement, MediaSources } from '../engine';
 import { OfflineMediaPool } from './mediaPool';
-import { demuxMp4, decoderConfigFor, keyIndexFor, type DemuxVideo } from './demux';
+import { demuxMp4, decoderConfigFor, indexMp4Video, keyIndexFor, readPlan, type SampleRef, type VideoIndex } from './demux';
 import { shouldCheck, sourceIsBlack } from './blackCheck';
 
 /** salto à frente maior que isto reinicia na chave mais próxima em vez de decodificar tudo */
@@ -29,7 +29,50 @@ export function decodeFallbackReason(clip: Clip, asset: MediaAsset | undefined):
   return null;
 }
 
-interface Track { v: DemuxVideo; cfg: VideoDecoderConfig }
+interface Track { v: VideoIndex; cfg: VideoDecoderConfig; blob: Blob }
+
+/**
+ * Bytes das amostras lidos sob demanda do Blob (janela de ~48 amostras por vez) e
+ * liberados assim que vão p/ o decoder: memória ~constante mesmo com arquivo de 500 MB.
+ */
+class SampleReader {
+  private data = new Map<number, Uint8Array>();
+  private loading: Promise<void> | null = null;
+  failure: unknown = null;
+  constructor(private blob: Blob, private samples: SampleRef[]) {}
+
+  has(i: number) { return !!this.samples[i]?.data || this.data.has(i); }
+
+  /** bytes da amostra i (e libera a memória dela) */
+  take(i: number): Uint8Array {
+    const pre = this.samples[i].data;
+    if (pre) return pre;
+    const d = this.data.get(i)!;
+    this.data.delete(i);
+    return d;
+  }
+
+  /** carrega a janela a partir de i (se ainda não estiver carregando) */
+  load(i: number): Promise<void> {
+    if (this.loading) return this.loading;
+    let from = i;
+    while (from < this.samples.length && this.has(from)) from++;
+    const plan = readPlan(this.samples, from);
+    if (!plan) return Promise.resolve();
+    this.loading = (async () => {
+      const buf = new Uint8Array(await this.blob.slice(plan.start, plan.end).arrayBuffer());
+      for (let k = plan.from; k < plan.to; k++) {
+        const s = this.samples[k];
+        // cópia própria: libera o trecho inteiro (com o áudio intercalado) quando a janela acaba
+        this.data.set(k, buf.slice(s.offset - plan.start, s.offset - plan.start + s.size));
+      }
+    })().catch((e) => { this.failure = e; }).finally(() => { this.loading = null; });
+    return this.loading;
+  }
+
+  /** descarta o que foi carregado (seek p/ outro ponto) */
+  reset() { this.data.clear(); }
+}
 
 /** decodificador sequencial de UM clipe */
 class ClipDecoder {
@@ -40,10 +83,19 @@ class ClipDecoder {
   private flushed = false;
   private failure: unknown = null;
   private wake: (() => void) | null = null;
-  constructor(private track: Track) {}
+  private reader: SampleReader;
+  constructor(private track: Track) {
+    this.reader = new SampleReader(track.blob, track.v.samples);
+  }
+
+  private chunk(i: number): EncodedVideoChunk {
+    const s = this.track.v.samples[i];
+    return new EncodedVideoChunk({ type: s.sync ? 'key' : 'delta', timestamp: Math.round(s.cts * 1e6), duration: Math.round(s.duration * 1e6), data: this.reader.take(i) });
+  }
 
   private start(t: number) {
     this.close(false);
+    this.reader.reset();
     this.dec = new VideoDecoder({
       output: (f) => {
         // mantém em ordem de apresentação
@@ -79,6 +131,7 @@ class ClipDecoder {
     const dec = this.dec!;
     for (;;) {
       if (this.failure) throw this.failure;
+      if (this.reader.failure) throw this.reader.failure;
       // avança: o quadro atual passa a ser o último decodificado com timestamp ≤ t
       while (this.queue.length && this.queue[0].timestamp <= us) {
         const f = this.queue.shift()!;
@@ -88,8 +141,8 @@ class ClipDecoder {
       // decidido quando já existe quadro posterior a t (ou o vídeo acabou)
       if (this.queue.length || (this.flushed && dec.decodeQueueSize === 0)) break;
       if (this.next < samples.length && dec.decodeQueueSize < 6) {
-        const s = samples[this.next++];
-        dec.decode(new EncodedVideoChunk({ type: s.sync ? 'key' : 'delta', timestamp: Math.round(s.cts * 1e6), duration: Math.round(s.duration * 1e6), data: s.data }));
+        if (!this.reader.has(this.next)) { await this.reader.load(this.next); continue; }
+        dec.decode(this.chunk(this.next++));
         continue;
       }
       if (this.next >= samples.length && !this.flushed) {
@@ -111,10 +164,12 @@ class ClipDecoder {
     const dec = this.dec;
     if (!dec || this.failure || dec.state !== 'configured') return;
     const samples = this.track.v.samples;
-    while (this.next < samples.length && this.queue.length + dec.decodeQueueSize < MAX_AHEAD) {
-      const s = samples[this.next++];
-      dec.decode(new EncodedVideoChunk({ type: s.sync ? 'key' : 'delta', timestamp: Math.round(s.cts * 1e6), duration: Math.round(s.duration * 1e6), data: s.data }));
+    while (this.next < samples.length && this.queue.length + dec.decodeQueueSize < MAX_AHEAD && this.reader.has(this.next)) {
+      dec.decode(this.chunk(this.next++));
     }
+    // leitura da próxima janela em paralelo com o render/encode
+    if (this.next < samples.length && !this.reader.has(this.next)) void this.reader.load(this.next);
+    else if (this.next + 16 < samples.length && !this.reader.has(this.next + 16)) void this.reader.load(this.next + 16);
   }
 
   close(_all = true) {
@@ -184,10 +239,15 @@ export class DecodedMediaPool implements MediaSources {
       p = (async () => {
         try {
           const blob = await (await fetch(asset.url!)).blob();
-          const dm = await demuxMp4(blob, { audio: false });
-          if (!dm?.video?.samples.length) return null;
-          const cfg = await decoderConfigFor(dm.video);
-          return cfg ? { v: dm.video, cfg } : null;
+          // índice sob demanda (só o moov); MP4 fragmentado etc. → demux completo em memória
+          let v: VideoIndex | null = await indexMp4Video(blob).catch(() => null);
+          if (!v) {
+            const dm = await demuxMp4(blob, { audio: false });
+            if (!dm?.video?.samples.length) return null;
+            v = { ...dm.video, samples: dm.video.samples.map((x) => ({ cts: x.cts, dts: x.dts, duration: x.duration, sync: x.sync, offset: 0, size: x.data.byteLength, data: x.data })) };
+          }
+          const cfg = await decoderConfigFor(v);
+          return cfg ? { v, cfg, blob } : null;
         } catch { return null; }
       })();
       this.tracks.set(asset.id, p);
