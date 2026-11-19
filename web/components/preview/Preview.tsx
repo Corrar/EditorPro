@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useEditor } from '@/lib/store';
 import { projectDuration } from '@/lib/ops';
-import { renderFrame, segEvents } from '@/lib/engine';
+import { assetEvents, renderFrame, segEvents } from '@/lib/engine';
 import { emit, on } from '@/lib/events';
 import { formatTime } from '@/lib/util';
 import { LiveMediaPool } from './livePool';
@@ -145,6 +145,8 @@ export default function Preview() {
     pool.onFrame = () => { if (!useEditor.getState().playing) requestStill(); };
     // máscara de "remover fundo" ficou pronta: redesenha o quadro parado
     segEvents.onReady = () => { if (!useEditor.getState().playing) requestStill(); };
+    // fonte/emoji da biblioteca carregou: redesenha
+    assetEvents.onReady = () => { if (!useEditor.getState().playing) requestStill(); };
     return () => { pool.dispose(); poolRef.current = null; };
   }, [requestStill]);
 

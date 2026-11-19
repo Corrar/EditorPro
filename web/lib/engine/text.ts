@@ -59,6 +59,12 @@ export interface AnimState {
   visibleChars: number;
   /** progresso 0..1 ao longo da duração (karaokê) */
   progress: number;
+  /** marca-texto atrás do texto (0..1 da largura; -1 = sem) */
+  sweep: number;
+  /** sublinhado desenhado (0..1; -1 = sem) */
+  underlineDraw: number;
+  /** caixa de fundo revelada (0..1; -1 = sem) — o texto aparece depois da caixa */
+  boxReveal: number;
 }
 
 export const INTRO = 0.35;
@@ -67,6 +73,7 @@ export const OUTRO = 0.3;
 const base = (local: number, duration: number): AnimState => ({
   opacity: 1, dy: 0, dx: 0, scale: 1, rotation: 0, blur: 0, wave: 0, wavePhase: 0, glitch: 0,
   visibleChars: Infinity, progress: duration > 0 ? clamp01(local / duration) : 1,
+  sweep: -1, underlineDraw: -1, boxReveal: -1,
 });
 
 const hash = (n: number) => { const x = Math.sin(n * 91.7 + 13.3) * 43758.5453; return x - Math.floor(x); };
@@ -95,6 +102,25 @@ function intro(s: AnimState, anim: TextAnimation, p: number, local: number, dura
       } else s.visibleChars = Math.min(s.visibleChars, Math.floor(totalChars * p));
       break;
     case 'karaoke': s.opacity *= clamp01(p * 3); break;
+    case 'scale-in': s.scale *= 0.2 + 0.8 * ease('easeOut', p); s.opacity *= clamp01(p * 2); break;
+    case 'blur-in': s.blur = Math.max(s.blur, a * 1.2); s.scale *= 1 + 0.15 * a; s.opacity *= clamp01(p * 1.6); break;
+    case 'stomp': {
+      // chega grande e "bate" com um tranco
+      const q = clamp01(p * 1.6);
+      s.scale *= q < 1 ? 2.4 - 1.4 * ease('easeIn', q) : 1;
+      s.opacity *= clamp01(p * 4);
+      if (p > 0.62 && p < 0.9) s.dy += Math.sin((p - 0.62) * 40) * 0.08;
+      break;
+    }
+    case 'drop': s.dy += -(1 - easeOutBounce(p)) * 3 * dir; s.opacity *= clamp01(p * 5); break;
+    case 'highlight-sweep': s.sweep = dir === 1 ? ease('easeInOut', p) : p; s.opacity *= clamp01(p * 4 + 0.2); break;
+    case 'underline-draw': s.underlineDraw = dir === 1 ? ease('easeInOut', p) : p; break;
+    case 'box-reveal': {
+      s.boxReveal = ease('easeOut', clamp01(p * 1.6));
+      s.opacity *= clamp01((p - 0.45) * 3); // texto surge depois da caixa
+      break;
+    }
+    case 'shake': s.dx += Math.sin(local * 70) * 0.12 * a; s.rotation += Math.sin(local * 55) * 4 * a; s.opacity *= clamp01(p * 4); break;
     default: break;
   }
 }
@@ -112,6 +138,8 @@ function loop(s: AnimState, anim: TextAnimation, local: number) {
     case 'slide-left': case 'slide-right': s.dx += Math.sin(ph * 0.5) * 0.15; break;
     case 'slide-up': case 'slide-down': s.dy += Math.sin(ph * 0.5) * 0.1; break;
     case 'blur': s.blur = Math.max(s.blur, 0.25 * (0.5 - 0.5 * Math.cos(ph))); break;
+    case 'shake': s.dx += Math.sin(local * 40) * 0.05; s.rotation += Math.sin(local * 33) * 1.5; break;
+    case 'stomp': case 'scale-in': s.scale *= 1 + 0.07 * Math.max(0, Math.sin(ph * 0.9)); break;
     default: break;
   }
 }
