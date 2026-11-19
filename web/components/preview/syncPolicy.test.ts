@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  driftDecision, warmPosition, WARM_START, PlaybackClock, QualityGovernor, prerollPlan, frameReady, frameInterval,
+  driftDecision, staleIdle, warmPosition, WARM_START, PlaybackClock, QualityGovernor, prerollPlan, frameReady, frameInterval,
   SEEK_DRIFT, KICK_GRACE_MS, MAX_HOLD_MS, PREROLL,
 } from './syncPolicy';
 import type { Project, VideoClip } from '@/lib/types';
@@ -177,5 +177,30 @@ describe('frameReady com prova de quadro (rVFC) — Android: seeked antes do qua
   });
   it('não regride: readyState baixo depois do seek continua bloqueando', () => {
     expect(frameReady({ readyState: 1, seeking: true, currentTime: 0 }, 6.5, { presented: 6.5, sinceSettleMs: 9999 })).toBe(false);
+  });
+});
+
+describe('staleIdle (libera decodificadores presos)', () => {
+  const a = { url: 'blob:orig' }, b = { url: 'blob:proxy' };
+  it('fonte trocou p/ o proxy: os livres da original saem', () => {
+    expect(staleIdle([a, b], 'blob:proxy')).toEqual([a]);
+  });
+  it('mídia removida: todos saem', () => {
+    expect(staleIdle([a, b], null)).toEqual([a, b]);
+  });
+  it('nada muda quando a fonte é a mesma', () => {
+    expect(staleIdle([b], 'blob:proxy')).toEqual([]);
+  });
+});
+
+describe('PlaybackClock com velocidade de reprodução', () => {
+  it('2× anda o dobro; 0,5× a metade', () => {
+    const c = new PlaybackClock();
+    c.reset(0, 0); c.rate = 2;
+    let t = 0; for (let w = 100; w <= 1000; w += 100) t = c.tick(w, null);
+    expect(t).toBeCloseTo(2);
+    c.reset(0, 0); c.rate = 0.5;
+    for (let w = 100; w <= 1000; w += 100) t = c.tick(w, null);
+    expect(t).toBeCloseTo(0.5);
   });
 });

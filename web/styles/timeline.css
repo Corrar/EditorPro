@@ -765,3 +765,75 @@
   box-shadow: 0 4px 14px rgba(0, 0, 0, .18), 0 0 0 1px rgba(0, 0, 0, .06);
 }
 .ep-tl-addend:active { transform: translate(var(--tx, 0), -50%) scale(.94); }
+
+/* =====================================================================
+   v3 — ferramentas estilo DaVinci (seleção/lâmina/trims, monitor, ajuda)
+   ===================================================================== */
+.ep-tl-seg { display: inline-flex; gap: 2px; padding: 2px; border-radius: 12px; background: var(--tile, var(--chip)); flex: none; }
+.ep-tl-seg .ep-tl-btn { width: 30px; height: 30px; }
+
+/* cursores por ferramenta */
+.ep-tl[data-tool='blade'] .ep-tl-clip { cursor: crosshair; }
+.ep-tl[data-tool='ripple'] .ep-tl-clip, .ep-tl[data-tool='roll'] .ep-tl-clip { cursor: col-resize; }
+.ep-tl[data-tool='slip'] .ep-tl-clip, .ep-tl[data-tool='slide'] .ep-tl-clip { cursor: ew-resize; }
+.ep-tl[data-tool='blade'] .ep-tl-handle, .ep-tl[data-tool='slip'] .ep-tl-handle, .ep-tl[data-tool='slide'] .ep-tl-handle { pointer-events: none; opacity: 0; }
+
+/* lâmina: linha do corte sob o mouse */
+.ep-tl-bladeline {
+  position: absolute; top: -2px; bottom: -2px; width: 0; z-index: 7; pointer-events: none;
+  border-left: 2px dashed #fff; filter: drop-shadow(0 0 2px rgba(0, 0, 0, .55));
+}
+.ep-tl-bladeline::before {
+  content: ''; position: absolute; top: -4px; left: -6px; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--green); border: 2px solid #fff;
+}
+
+/* clipes empurrados/ajustados por ripple/roll/slide durante a prévia */
+.ep-tl-clip.pro-touched { outline: 1.5px dashed var(--green); outline-offset: -1.5px; }
+
+/* monitor de trim (2-up) */
+.ep-tl-monitor {
+  position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 40; pointer-events: none;
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 8px;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .25); width: min(380px, calc(100% - 16px));
+}
+.ep-tl-mon-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 0 2px 6px; font-size: 12px; color: var(--sub); }
+.ep-tl-mon-head b { color: var(--ink); font-size: 12.5px; }
+.ep-tl-mon-frames { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.ep-tl-mon-side { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ep-tl-mon-side img, .ep-tl-mon-side i { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; background: #111; display: block; }
+.ep-tl-mon-side span { font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ep-tl-mon-side.empty { display: grid; place-items: center; aspect-ratio: 16 / 9; border-radius: 8px; background: var(--tile, var(--chip)); color: var(--faint); }
+.ep-tl.center .ep-tl-monitor { top: 30px; }
+
+/* lista de ferramentas */
+.ep-tl-menu button.cur { background: var(--tintG); color: var(--tintGInk); }
+.ep-tl-toolname { display: flex; flex-direction: column; line-height: 1.15; }
+.ep-tl-toolname small { font-size: 10.5px; color: var(--muted); }
+.ep-tl-menunote { font-size: 11px; color: var(--muted); padding: 4px 10px 6px; }
+.ep-tl-toolchips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px 6px 6px; }
+.ep-tl-menu .ep-tl-toolchips button {
+  flex-direction: column; gap: 3px; padding: 8px 2px; justify-content: center; text-align: center;
+  font-size: 11px; font-weight: 600; background: var(--tile, var(--chip)); border-radius: 10px; min-height: 52px;
+}
+.ep-tl-menu .ep-tl-toolchips button.on { background: var(--green); color: #fff; }
+
+/* ajuda de atalhos */
+.ep-tl-help-back {
+  position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 16px;
+  background: rgba(10, 10, 12, .45); animation: toastIn .14s ease both;
+}
+.ep-tl-help {
+  width: min(880px, 100%); max-height: min(86vh, 100%); overflow: auto; overscroll-behavior: contain;
+  background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 20px; padding: 16px 18px 18px;
+  box-shadow: 0 30px 70px rgba(0, 0, 0, .35); font-family: var(--font-ui), 'Poppins', sans-serif;
+}
+.ep-tl-help-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.ep-tl-help-head b { font-size: 16px; }
+.ep-tl-help-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px 22px; }
+.ep-tl-help h4 { margin: 4px 0 6px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.ep-tl-help dl { margin: 0; display: flex; flex-direction: column; gap: 5px; }
+.ep-tl-help dl div { display: flex; align-items: baseline; gap: 10px; font-size: 13px; }
+.ep-tl-help dt { flex: none; min-width: 108px; }
+.ep-tl-help dd { margin: 0; color: var(--sub); }
+.ep-tl-help kbd { font-family: var(--font-ui), sans-serif; font-size: 11px; font-weight: 600; color: var(--ink); background: var(--chip); border: 1px solid var(--line2); border-radius: 6px; padding: 2px 6px; white-space: nowrap; }

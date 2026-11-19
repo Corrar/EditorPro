@@ -390,8 +390,11 @@ export function detachAudioOps(p: Project, clipId: Id): EditOp[] {
   const f = findClip(p, clipId);
   if (!f || f.clip.type !== 'video' || f.track.locked) return [];
   const v = f.clip;
+  // o áudio separado nasce VINCULADO ao vídeo (move/apara junto; Ctrl+Alt+L desvincula, Alt = J/L-cut)
+  const linkId = v.linkId ?? uid('link');
   const audio: Clip = {
     id: uid('clip'),
+    linkId,
     type: 'audio',
     assetId: v.assetId,
     start: v.start,
@@ -407,7 +410,7 @@ export function detachAudioOps(p: Project, clipId: Id): EditOp[] {
   const pl = placeClip(p, 'audio', v.duration, v.start);
   return [
     { op: 'add_clip', trackId: pl.trackId, clip: audio, explain: 'Separando o áudio do vídeo' },
-    { op: 'update_clip', clipId: v.id, patch: { muted: true } },
+    { op: 'update_clip', clipId: v.id, patch: { muted: true, linkId } },
   ];
 }
 

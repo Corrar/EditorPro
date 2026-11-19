@@ -15,7 +15,7 @@ import { sourceTime, clipSpeed, trackLayers } from '@/lib/engine/timing';
 import { clipGainAt } from '@/lib/engine/audio';
 import { buildAudioChain, chainKey, needsAudioChain, type FxChain } from '@/lib/engine/audioFx';
 import { nativeGeometry, geometryTransform, geometryClip, layerFilter, type NativePlan } from './hybrid';
-import { driftDecision, frameReady, prerollPlan, warmPosition, type FrameProof, type LeadState } from './syncPolicy';
+import { driftDecision, staleIdle, frameReady, prerollPlan, warmPosition, type FrameProof, type LeadState } from './syncPolicy';
 
 /** roteamento de um elemento pelo grafo WebAudio (efeitos de voz / tom) */
 interface Route { source: MediaElementAudioSourceNode; gain: GainNode; chain: FxChain | null; key: string }
@@ -53,7 +53,11 @@ export class LiveMediaPool implements MediaSources {
   /** último play()/seek de cada elemento (ms) — carência antes de corrigir desvio com seek */
   private kicks = new WeakMap<AV, number>();
   /** contadores p/ o painel "Mostrar desempenho" */
-  readonly stats = { waiting: 0, seeks: 0 };
+  readonly stats = { waiting: 0, seeks: 0, errors: 0 };
+  /** fontes que este aparelho não decodifica (ex.: HEVC/HDR em Android sem suporte) */
+  readonly unplayable = new Set<string>();
+  /** avisado quando uma fonte falha (o Preview mostra um aviso uma vez por asset) */
+  onUnplayable: (assetId: string, usingProxy: boolean) => void = () => {};
   /** último quadro apresentado (requestVideoFrameCallback) e último seeked/loadeddata, por elemento */
   private presented = new WeakMap<AV, number>();
   private settledAt = new WeakMap<AV, number>();
@@ -123,6 +127,16 @@ export class LiveMediaPool implements MediaSources {
     }
     el.addEventListener('seeked', ping);
     el.addEventListener('waiting', () => { this.stats.waiting++; });
+    el.addEventListener('error', () => {
+      const err = el.error;
+      // só "formato não suportado"/decodificação; aborto por troca de src não conta
+      if (!err || (err.code !== 3 && err.code !== 4) || !el.getAttribute('src')) return;
+      this.stats.errors++;
+      const url = el.dataset.url ?? '';
+      if (this.unplayable.has(url)) return;
+      this.unplayable.add(url);
+      this.onUnplayable(asset.id, !!(asset as MediaAsset & { proxyUrl?: string }).proxyUrl && url === (asset as MediaAsset & { proxyUrl?: string }).proxyUrl);
+    });
     el.addEventListener('seeking', () => { this.stats.seeks++; });
     el.addEventListener('loadeddata', ping);
     this.host?.appendChild(el);
@@ -200,7 +214,7 @@ export class LiveMediaPool implements MediaSources {
   }
 
   /** sincroniza todos os elementos com o tempo t */
-  sync(p: Project, assets: Record<string, MediaAsset>, t: Seconds, playing: boolean, fps = 30): SyncState {
+  sync(p: Project, assets: Record<string, MediaAsset>, t: Seconds, playing: boolean, fps = 30, playRate = 1): SyncState {
     this.lastPlaying = playing;
     const now = performance.now();
     const active: { clip: Clip; track: Track; role?: 'in' | 'out' }[] = [];
@@ -227,6 +241,16 @@ export class LiveMediaPool implements MediaSources {
     let lead: LeadState | null = null;
     let pending = false;
 
+    // livres de mídia removida ou de fonte trocada (proxy pronto): destrói (libera o decodificador)
+    for (const [assetId, list] of [...this.idle]) {
+      const a = assets[assetId];
+      const cur = a?.url ? mediaUrl(a) : null;
+      const stale = staleIdle(list.map((el) => ({ el, url: el.dataset.url ?? '' })), cur);
+      if (!stale.length) continue;
+      stale.forEach(({ el }) => this.destroy(el));
+      const rest = list.filter((el) => !stale.some((x) => x.el === el));
+      if (rest.length) this.idle.set(assetId, rest); else this.idle.delete(assetId);
+    }
     // libera ANTES de pegar elementos: depois de um corte (split/ripple) os pedaços ganham ids
     // novos; o elemento do clipe antigo (já carregado, no quadro certo) volta ao pool livre e é
     // reaproveitado pelo pedaço novo — em vez de criar um <video> do zero (quadro preto/travada).
@@ -252,7 +276,9 @@ export class LiveMediaPool implements MediaSources {
       const routed = this.route(el, clip, gain);
       if (!routed) el.volume = Math.min(1, Math.max(0, gain));
       el.muted = !this.unlocked || gain <= 0.0001;
-      const rate = Math.min(16, Math.max(0.0625, clipSpeed(clip, t)));
+      const speed = clipSpeed(clip, t);
+      // velocidade do elemento = velocidade do clipe × velocidade de reprodução do preview
+      const rate = Math.min(16, Math.max(0.0625, speed * playRate));
       if (playing && reverse) {
         if (!el.paused) el.pause();
         if (!el.seeking && Math.abs(el.currentTime - target) > 0.5 / fps) this.seek(el, target, now);
@@ -266,7 +292,7 @@ export class LiveMediaPool implements MediaSources {
           if (el.paused) this.play(el, now);
           if (isLead) {
             // tempo de timeline mostrado pelo vídeo (1ª ordem; vale p/ curva de velocidade)
-            const videoT = t + (el.currentTime - target) / rate;
+            const videoT = t + (el.currentTime - target) / Math.max(0.0625, speed);
             const stalled = el.paused || el.seeking || el.readyState < 3;
             lead = { videoT, stalled };
           }
@@ -290,8 +316,9 @@ export class LiveMediaPool implements MediaSources {
         const el = this.acquire(clip, asset);
         el.muted = true;
         const at = sourceTime(clip, clip.start);
-        const rate = Math.min(16, Math.max(0.0625, clipSpeed(clip, clip.start)));
-        const pos = warmPosition(at, clip.start - t, rate, !!clip.reverse);
+        const speed = Math.max(0.0625, clipSpeed(clip, clip.start));
+        const rate = Math.min(16, speed * playRate);
+        const pos = warmPosition(at, clip.start - t, speed, !!clip.reverse);
         if (pos.play) {
           // partida a quente: já tocando (mudo) quando o corte chegar — sem a latência do play()
           const dec = driftDecision({ drift: pos.at - el.currentTime, rate, sinceKickMs: now - (this.kicks.get(el) ?? -Infinity), lead: false });
@@ -340,6 +367,11 @@ export class LiveMediaPool implements MediaSources {
     el.volume = 1;
     r.gain.gain.setTargetAtTime(Math.max(0, gain), this.actx!.currentTime, 0.015);
     return true;
+  }
+
+  /** iOS/Android suspendem o AudioContext (chamada, outro app, tela bloqueada): retoma no gesto de play */
+  resumeAudio() {
+    if (this.actx && this.actx.state !== 'running' && this.actx.state !== 'closed') void this.actx.resume().catch(() => {});
   }
 
   get isUnlocked() {

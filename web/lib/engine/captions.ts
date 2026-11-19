@@ -140,3 +140,55 @@ export function wordStates(chunk: CaptionChunk, t: Seconds, look: CaptionLook): 
     return { active, highlighted };
   });
 }
+
+/* ---------- zonas seguras por plataforma (biblioteca) ---------- */
+
+export type SafeZoneId = 'none' | 'tiktok' | 'reels' | 'shorts' | 'youtube';
+
+/**
+ * Área livre da interface do app, em frações do quadro vertical (9:16):
+ * topo (abas/busca), base (legenda do post, botões) e direita (coluna de ações).
+ * Valores conservadores medidos a partir dos layouts públicos dos apps.
+ */
+export const SAFE_ZONES: Record<Exclude<SafeZoneId, 'none'>, { top: number; bottom: number; left: number; right: number; label: string }> = {
+  tiktok: { top: 0.09, bottom: 0.20, left: 0.05, right: 0.16, label: 'TikTok' },
+  reels: { top: 0.10, bottom: 0.22, left: 0.05, right: 0.14, label: 'Reels' },
+  shorts: { top: 0.08, bottom: 0.21, left: 0.05, right: 0.15, label: 'Shorts' },
+  youtube: { top: 0.05, bottom: 0.12, left: 0.05, right: 0.05, label: 'YouTube' },
+};
+
+/**
+ * Ajusta o centro (x,y) de um bloco de altura `blockH` e largura `blockW`
+ * (frações do quadro) para caber na zona segura. Em quadros não verticais só
+ * as plataformas horizontais (youtube) se aplicam com margens próprias.
+ */
+export function clampToSafeZone(zone: SafeZoneId | undefined, x: number, y: number, blockW: number, blockH: number, portrait: boolean): { x: number; y: number; maxW: number } {
+  if (!zone || zone === 'none' || (!portrait && zone !== 'youtube')) return { x, y, maxW: 1 };
+  const z = SAFE_ZONES[zone];
+  const maxW = Math.max(0.3, 1 - z.left - z.right);
+  const minY = z.top + blockH / 2, maxY = 1 - z.bottom - blockH / 2;
+  const minX = z.left + Math.min(blockW, maxW) / 2, maxX = 1 - z.right - Math.min(blockW, maxW) / 2;
+  return {
+    x: minX <= maxX ? Math.min(maxX, Math.max(minX, x)) : (z.left + 1 - z.right) / 2,
+    y: minY <= maxY ? Math.min(maxY, Math.max(minY, y)) : (z.top + 1 - z.bottom) / 2,
+    maxW,
+  };
+}
+
+/* ---------- ênfase automática de palavras-chave ---------- */
+
+const EMPHASIS_WORDS = new Set([
+  'nunca', 'sempre', 'jamais', 'agora', 'hoje', 'grátis', 'gratis', 'segredo', 'segredos', 'verdade', 'incrível', 'incrivel',
+  'importante', 'atenção', 'atencao', 'cuidado', 'erro', 'erros', 'melhor', 'pior', 'maior', 'menor', 'único', 'unico', 'única', 'unica',
+  'rápido', 'rapido', 'fácil', 'facil', 'dinheiro', 'milhões', 'milhoes', 'mil', 'dobro', 'triplo', 'todo', 'tudo', 'ninguém', 'ninguem',
+  'chocante', 'urgente', 'novo', 'nova', 'sucesso', 'resultado', 'resultados', 'truque', 'dica', 'dicas', 'pare', 'proibido', 'garantido',
+  'absurdo', 'insano', 'louco', 'surreal', 'top', 'demais', 'muito', 'zero', 'primeiro', 'primeira', 'último', 'ultimo', 'última', 'ultima',
+]);
+
+/** palavra merece ênfase automática? (números/valores/porcentagens ou palavra forte) */
+export function isEmphasisWord(word: string): boolean {
+  const raw = word.trim();
+  if (/\d/.test(raw) || /^(R\$|US\$|\$|€)/i.test(raw) || /%$/.test(raw)) return true;
+  const n = normWord(raw);
+  return n.length >= 3 && EMPHASIS_WORDS.has(n);
+}

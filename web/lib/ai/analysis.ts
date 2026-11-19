@@ -5,7 +5,7 @@
    A lógica numérica fica em demo.ts (pura, testada).
    ===================================================================== */
 import type { AspectRatio, Id, MediaAsset, StyleProfile } from '../types';
-import { cutsFromDiffs, detectSilences, styleFromCuts, type Range } from './demo';
+import { cutsFromDiffs, detectSilences, styleFromCuts, type Range, type SilenceOptions } from './demo';
 import { detectBeats } from './features';
 import { deviceProfile, sampleVideo, type ColorStats, type Frame } from './frames';
 
@@ -62,14 +62,14 @@ export async function toMono16k(audio: AudioBuffer): Promise<Float32Array> {
 }
 
 /** silêncios (tempos da mídia) de um asset, com cache por id+url */
-export async function silencesOf(asset: MediaAsset): Promise<Range[]> {
+export async function silencesOf(asset: MediaAsset, opts?: SilenceOptions): Promise<Range[]> {
   if (!asset.url || asset.kind === 'image') return [];
-  const key = `${asset.id}|${asset.url}`;
+  const key = `${asset.id}|${asset.url}|${opts ? JSON.stringify(opts) : ''}`;
   const hit = silenceCache.get(key);
   if (hit) return hit;
   try {
     const { samples, sampleRate } = toMonoDecimated(await decodeAudio(asset.url));
-    const r = detectSilences(samples, sampleRate);
+    const r = detectSilences(samples, sampleRate, opts);
     silenceCache.set(key, r);
     return r;
   } catch (e) {
@@ -79,9 +79,9 @@ export async function silencesOf(asset: MediaAsset): Promise<Range[]> {
   }
 }
 
-export async function silencesFor(assets: MediaAsset[]): Promise<Record<Id, Range[]>> {
+export async function silencesFor(assets: MediaAsset[], opts?: SilenceOptions): Promise<Record<Id, Range[]>> {
   const out: Record<Id, Range[]> = {};
-  for (const a of assets) out[a.id] = await silencesOf(a);
+  for (const a of assets) out[a.id] = await silencesOf(a, opts);
   return out;
 }
 
@@ -131,5 +131,22 @@ export async function beatsOf(asset: MediaAsset): Promise<number[]> {
   } catch (e) {
     console.warn('[ai] não deu para achar as batidas de', asset.name, e);
     return [];
+  }
+}
+
+/** cor média de um vídeo (amostragem rápida, sem quadros p/ IA), com cache */
+const colorCache = new Map<string, ColorStats | null>();
+export async function colorStatsOf(asset: MediaAsset): Promise<ColorStats | undefined> {
+  if (!asset.url || asset.kind !== 'video') return undefined;
+  const key = `${asset.id}|${asset.url}`;
+  if (colorCache.has(key)) return colorCache.get(key) ?? undefined;
+  try {
+    const s = await sampleVideo(asset.url, { maxDuration: 40, maxFrames: 1, diffStep: 0.5 });
+    colorCache.set(key, s.color ?? null);
+    return s.color;
+  } catch (e) {
+    console.warn('[ai] cor média falhou', asset.name, e);
+    colorCache.set(key, null);
+    return undefined;
   }
 }

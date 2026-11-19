@@ -17,10 +17,11 @@ import CanvasTab from './CanvasTab';
 import { AdjustTool, EffectsTool, FiltersTool } from './LookTabs';
 import ReviewTab from './ReviewTab';
 import { MotionTemplateGallery } from '@/components/library';
+import ColorTool, { useColorAvailable } from './ColorTool';
 import { askAI } from '@/components/shell/ui';
 import { formatTime } from '@/lib/util';
 
-export type InspectorTool = 'review' | 'edit' | 'text' | 'stickers' | 'captions' | 'effects' | 'filters' | 'adjust' | 'transitions' | 'audio' | 'canvas' | 'templates';
+export type InspectorTool = 'review' | 'edit' | 'text' | 'stickers' | 'captions' | 'effects' | 'filters' | 'adjust' | 'transitions' | 'audio' | 'canvas' | 'templates' | 'color';
 
 export const INSPECTOR_TABS: { id: InspectorTool; label: string }[] = [
   { id: 'edit', label: 'Editar' },
@@ -33,6 +34,7 @@ export const INSPECTOR_TABS: { id: InspectorTool; label: string }[] = [
   { id: 'transitions', label: 'Transições' },
   { id: 'captions', label: 'Legendas' },
   { id: 'adjust', label: 'Ajustes' },
+  { id: 'color', label: 'Cor' },
   { id: 'canvas', label: 'Formatos' },
   { id: 'review', label: 'Revisão' },
 ];
@@ -59,6 +61,7 @@ function SelectionChip() {
 export default function Inspector({ tool, title }: { tool?: InspectorTool; title?: string }) {
   const [inner, setInner] = useState<InspectorTool>('text');
   const active = tool ?? inner;
+  const colorOk = useColorAvailable();
   const label = title ?? INSPECTOR_TABS.find((t) => t.id === active)?.label;
   return (
     <div className="ep-insp">
@@ -68,7 +71,7 @@ export default function Inspector({ tool, title }: { tool?: InspectorTool; title
       </div>
       {!tool && (
         <div className="ep-insp-tabs">
-          {INSPECTOR_TABS.map((t) => (
+          {INSPECTOR_TABS.filter((t) => t.id !== 'color' || colorOk).map((t) => (
             <button key={t.id} type="button" data-ep-tool={t.id === 'canvas' ? 'formats' : t.id} className={t.id === active ? 'on' : ''} onClick={() => setInner(t.id)}>{t.label}</button>
           ))}
         </div>
@@ -86,6 +89,7 @@ export default function Inspector({ tool, title }: { tool?: InspectorTool; title
         {active === 'transitions' && <TransitionsTab />}
         {active === 'audio' && <AudioTab />}
         {active === 'templates' && <MotionTemplateGallery />}
+        {active === 'color' && <ColorTool />}
       </div>
     </div>
   );
