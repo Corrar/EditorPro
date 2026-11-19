@@ -6,6 +6,7 @@ import { useEditor } from '@/lib/store';
 import { findClip } from '@/lib/ops';
 import { type RowInfo, useDims, useTimelineUi } from '@/lib/timeline/ui';
 import { assetOf } from '@/lib/timeline/clip';
+import { keyframesOf } from '@/lib/timeline/keyframes';
 import { ClipView } from './ClipView';
 import { CaptionBody, ClipBody } from './ClipBody';
 import { ISliders, ISticker, IAudio, ICaptions, IEye, IEyeOff, ILock, IMute, IPlus, IText, IUnlock, IVideo, IVolume } from './icons';
@@ -18,6 +19,7 @@ function TrackHeaderInner({ track, height }: { track: Track; height: number }) {
   const dispatch = useEditor((s) => s.dispatch);
   const { headerW, compact } = useDims();
   const popOpen = useTimelineUi((s) => s.trackPop?.id === track.id);
+  const over = useTimelineUi((s) => s.reorderOver === track.id);
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(track.name);
   useEffect(() => setName(track.name), [track.name]);
@@ -51,7 +53,12 @@ function TrackHeaderInner({ track, height }: { track: Track; height: number }) {
     );
   }
   return (
-    <div className={`ep-tl-head k-${track.kind}${track.locked ? ' locked' : ''}`} style={{ width: headerW, height }}>
+    <div
+      className={`ep-tl-head k-${track.kind}${track.locked ? ' locked' : ''}${over ? ' over' : ''}`}
+      style={{ width: headerW, height }}
+      data-track-id={track.id}
+      title="Arraste para reordenar a trilha"
+    >
       <span className="ep-tl-headic"><Icon size={13} /></span>
       <div className="ep-tl-headname">
         {editing ? (
@@ -353,6 +360,42 @@ export const TouchHandles = memo(function TouchHandles({ project, rows, zoom }: 
           );
         }),
       )}
+    </>
+  );
+});
+
+/* ---------------- losangos de keyframe (clipe selecionado) ---------------- */
+
+export const KeyframeLayer = memo(function KeyframeLayer({ project, rows, zoom }: { project: Project; rows: RowInfo[]; zoom: number }) {
+  const { headerW, coarse } = useDims();
+  const selection = useEditor((s) => s.selection);
+  const drag = useTimelineUi((s) => (s.drag?.mode === 'keyframe' ? s.drag : null));
+  const items: { key: string; x: number; y: number; data: string }[] = [];
+  for (const id of selection.slice(0, 6)) {
+    const f = findClip(project, id);
+    if (!f) continue;
+    const row = rows.find((r) => r.id === f.track.id);
+    if (!row) continue;
+    keyframesOf(f.clip).forEach((k, i) => {
+      const t = drag && drag.clipId === id && drag.index === i ? drag.t : k.t;
+      items.push({ key: `${id}-${i}`, x: headerW + (f.clip.start + t) * zoom, y: row.top + row.height - 3, data: `${id}|${i}` });
+    });
+  }
+  const hit = coarse ? 32 : 16;
+  return (
+    <>
+      {items.map((it) => (
+        <span
+          key={it.key}
+          className="ep-tl-kf"
+          data-kf={it.data}
+          style={{ transform: `translate(${it.x - hit / 2}px, ${it.y - hit / 2}px)`, width: hit, height: hit }}
+          title="Keyframe — arraste para mudar o tempo"
+          aria-label="Keyframe"
+        >
+          <i />
+        </span>
+      ))}
     </>
   );
 });

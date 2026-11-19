@@ -188,6 +188,8 @@ describe('responsivo', () => {
     expect(low.short).toBe(true);
     expect(low.rulerH).toBeLessThan(desk.rulerH);
     expect(dimsFor(0, 0, false).compact).toBe(false); // ainda não medido
+    expect(dimsFor(760, 300, false)).toMatchObject({ compact: false, barCompact: true }); // timeline ao lado do chat
+    expect(dimsFor(1000, 300, false).barCompact).toBe(false);
     const rows = rowLayout(mock(), false, phone.rowH);
     expect(rows[0].kind).toBe('captions');
     expect(rows.find((r) => r.kind === 'video')!.height).toBe(phone.rowH.video);
