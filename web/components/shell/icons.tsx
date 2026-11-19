@@ -54,3 +54,7 @@ export const IconMic = (p: P) => <Svg {...p}><rect x="9" y="3" width="6" height=
 export const IconCopy = (p: P) => <Svg {...p}><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></Svg>;
 export const IconPencil = (p: P) => <Svg {...p}><path d="M4 20h4L19 9l-4-4L4 16z" /><path d="m13.5 6.5 4 4" /></Svg>;
 export const IconReview = (p: P) => <Svg {...p}><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" /><path d="m9 11.5 2 2 4-4" /></Svg>;
+export const IconHelp = (p: P) => <Svg {...p}><circle cx="12" cy="12" r="9" /><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17h.01" /></Svg>;
+export const IconChevRight = (p: P) => <Svg {...p}><path d="m9 6 6 6-6 6" /></Svg>;
+export const IconArrowLeft = (p: P) => <Svg {...p}><path d="M19 12H5m6-6-6 6 6 6" /></Svg>;
+export const IconLayout = (p: P) => <Svg {...p}><rect x="3" y="3" width="18" height="18" rx="4" /><path d="M3 9h18M9 21V9" /></Svg>;

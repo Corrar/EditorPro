@@ -49,15 +49,20 @@ export default function EditorShell() {
   useEffect(() => {
     try {
       const saved = localStorage.getItem(THEME_KEY);
-      if (saved) setDark(saved === 'dark');
+      // padrão: segue o sistema; escolha manual salva tem prioridade
+      setDark(saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches);
       if (localStorage.getItem(SB_KEY) === '1' || mq('(max-width: 1100px)')) setSbMin(true);
     } catch {}
     if (mq('(max-width: 1099px)')) setSideOpen(false);
+    // sem escolha manual, acompanha a troca de tema do sistema
+    const sys = window.matchMedia('(prefers-color-scheme: dark)');
+    const onSys = () => { try { if (!localStorage.getItem(THEME_KEY)) setDark(sys.matches); } catch { setDark(sys.matches); } };
+    sys.addEventListener('change', onSys);
     // ao encolher a janela para ≤1099 (gavetas), fecha painel e chat sobrepostos
     const m = window.matchMedia('(max-width: 1099px)');
     const onChange = () => { if (m.matches) { setSideOpen(false); setChatOpen(false); } };
     m.addEventListener('change', onChange);
-    return () => m.removeEventListener('change', onChange);
+    return () => { m.removeEventListener('change', onChange); sys.removeEventListener('change', onSys); };
   }, []);
 
   // altura real da área visível (teclado virtual do celular não cobre o chat)
@@ -197,6 +202,14 @@ export default function EditorShell() {
     setView('editor');
   };
 
+  const importNew = (files: File[]) => {
+    resetWorkspace({ aspect: '9:16' });
+    setTool('media');
+    setSideOpen(true);
+    setView('editor');
+    setTimeout(() => emit('ep:attach-files', { files }), 0);
+  };
+
   const fromTemplate = (id: string) => {
     startFromProject(projectFromTemplate(id));
     setTool('media');
@@ -229,7 +242,8 @@ export default function EditorShell() {
           <div className="ep-content">
             {view === 'home' && (
               <Home
-                onStart={startWizard} onEmpty={openEmpty} onOpen={open} onTemplate={fromTemplate} busy={busy} focusWizard={focusWizard}
+                onStart={startWizard} onEmpty={openEmpty} onOpen={open} onTemplate={fromTemplate}
+                onTool={pickTool} onImport={importNew} onTheme={toggleTheme} dark={dark} busy={busy} focusWizard={focusWizard}
                 canResume={hasContent ? projectName : null} onResume={() => setView('editor')}
               />
             )}
