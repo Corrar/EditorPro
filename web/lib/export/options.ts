@@ -23,6 +23,8 @@ export interface ExportOptions {
   speed?: ExportSpeed;
   onProgress?: (fraction: number, stage: string) => void;
   signal?: AbortSignal;
+  /** aviso p/ mostrar no resultado (ex.: 'O áudio de "x.mp4" não pôde ser incluído (…)'); o export continua */
+  onWarning?: (message: string) => void;
 }
 
 export const QUALITY_SHORT: Record<Exclude<ExportQuality, 'full'>, number> = { draft: 540, hd: 720, fhd: 1080, '4k': 2160 };

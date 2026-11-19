@@ -1,5 +1,5 @@
 import { DecodedMediaPool } from '@/lib/export/decodePool';
 import { makePreviewProxy } from '@/lib/export/proxy';
 import { mixProjectAudio } from '@/lib/export/audioMix';
-import { FrameSurface } from '@/lib/export/decodePool';
-(window as any).EPX = { DecodedMediaPool, makePreviewProxy, mixProjectAudio };
+import { createProject, makeAudioClip, makeVideoClip } from '@/lib/defaults';
+(window as any).EPX = { DecodedMediaPool, makePreviewProxy, mixProjectAudio, createProject, makeAudioClip, makeVideoClip };

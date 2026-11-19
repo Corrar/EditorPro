@@ -103,6 +103,8 @@ export async function exportVideo(p: Project, assets: Record<string, MediaAsset>
   // avisos do pool (ex.: troca de decodificador por quadro preto) aparecem junto do progresso
   let notice = '';
   pool.onNotice = (m) => { notice = m; };
+  // avisos que precisam chegar ao usuário no fim (ex.: áudio de um arquivo não entrou)
+  const warn = (m: string) => { notice = m; opts.onWarning?.(m); };
   const rawReport = report;
   const reportN = (f: number, stage: string) => rawReport(f, notice ? `${stage} · ${notice}` : stage);
   try {
@@ -111,10 +113,11 @@ export async function exportVideo(p: Project, assets: Record<string, MediaAsset>
     report(0.02, 'Mixando áudio');
     let audio: AudioBuffer | null = null;
     try {
-      audio = await mixProjectAudio(p, assets, { signal, onProgress: (f) => report(0.02 + f * 0.06, 'Mixando áudio') });
+      audio = await mixProjectAudio(p, assets, { signal, onProgress: (f) => report(0.02 + f * 0.06, 'Mixando áudio'), onWarning: (m) => warn(m) });
     } catch (e) {
       if ((e as Error).name === 'AbortError') throw e;
       console.warn('[export] falha ao mixar áudio, exportando sem som', e);
+      warn('O áudio do projeto não pôde ser mixado: o vídeo sai sem som.');
     }
     if (signal?.aborted) throw abortErr();
     // 1) WebCodecs (rápido, quadro a quadro) — só se também souber codificar o áudio (ou não houver áudio)
