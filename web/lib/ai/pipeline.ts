@@ -3,18 +3,19 @@
    transcrição (Whisper local) -> pedido de edição (Claude) -> aplicação
    AO VIVO (store.applyLive). Sem chave: MODO DEMO (local, sem custo).
    ===================================================================== */
-import type { CaptionSegment, ChatContext, Clip, Id, MediaAsset, Project, StyleProfile } from '../types';
+import type { CaptionSegment, ChatContext, Clip, ColorGrade, Id, MediaAsset, Project, StyleProfile } from '../types';
 import { applyOps, clipEnd, projectDuration, type EditOp } from '../ops';
 import { makeAudioClip, makeImageClip, makeVideoClip } from '../defaults';
 import { useEditor } from '../store';
 import { AIClientError, analyzeReference, getStatus, requestEdit, translateSegments, type AIStatus, type EditFrame } from './client';
-import { beatsOf, sampleReference, silencesFor } from './analysis';
-import { chatIntent, demoCaptions, demoNeeds, planFirstEdit, speechRanges, type Range } from './demo';
+import { beatsOf, colorStatsOf, sampleReference, silencesFor } from './analysis';
+import { colorGradeOps, matchColorGrade } from './colormatch';
+import { chatIntent, demoCaptions, demoNeeds, planFirstEdit, silenceCutOps, silenceOptsFromText, speechRanges, type Range } from './demo';
 import { deviceProfile, framesFromThumbnails, sampleVideo } from './frames';
 import { captionsMediaToTimeline } from './timemap';
 import { sanitizeOps } from './validate';
 import { chooseWhisper, transcribeMedia } from './whisper';
-import { beatSyncOps, fillerOps, reframeOps } from './features';
+import { beatSyncOps, emphasisZoomOps, fillerOps, reframeOps } from './features';
 import { trackSubject } from './reframe';
 import { distributeWords } from './sanitize';
 import { describeStyle, modelRequestText, styleOps, styleScopeFromText, type StyleScope } from './model';
@@ -279,7 +280,7 @@ export async function runFirstEdit(opts: PipelineOptions & { brief: string }): P
 
     // ----- modo demo -----
     opts.onStatus?.('Ouvindo o áudio para achar as pausas…');
-    const silences = await silencesFor(media);
+    const silences = await silencesFor(media, silenceOptsFromText(brief));
     const nSil = Object.values(silences).reduce((n, r) => n + r.length, 0);
     opts.onLog?.(nSil ? `Áudio analisado: ${nSil} pausa${nSil > 1 ? 's' : ''} encontrada${nSil > 1 ? 's' : ''}` : 'Áudio analisado');
     opts.onStatus?.('Planejando a edição…');
@@ -356,7 +357,13 @@ async function demoChat(text: string, apply: NonNullable<PipelineOptions['apply'
   const st = store().project.style;
   if (st && /(estilo|ritmo|cores|legendas?) do (video )?(modelo|exemplo)|video modelo|igual ao modelo/.test(norm(text))) {
     const scope = styleScopeFromText(text) ?? 'all';
-    const { ops: raw, said } = styleOps(store().project, st, scope);
+    // cor: combina com as cores medidas do modelo (ColorGrade); sem modelo legível, usa o preset do perfil
+    const grade = scope === 'all' || scope === 'colors' ? await matchColorOps(opts) : null;
+    const graded = !!grade?.ops.length;
+    const styled = styleOps(store().project, st, scope);
+    const rest = graded ? styled.ops.filter((o) => !(o.op === 'update_clip' && 'colorPreset' in o.patch)) : styled.ops;
+    const raw = graded ? [...grade!.ops, ...rest] : rest;
+    const said = graded ? ['cor combinada com o modelo', ...styled.said.filter((x) => !/^cores |cores naturais/.test(x))] : styled.said;
     const { ops } = sanitizeOps(raw, store().project, store().assets);
     const appliedIds = ops.length ? await apply(ops) : [];
     const msg = said.length ? said.join(', ') : 'nada a mudar';
@@ -366,7 +373,7 @@ async function demoChat(text: string, apply: NonNullable<PipelineOptions['apply'
   if (demoNeeds(text).silences) {
     opts.onStatus?.('Ouvindo o áudio…');
     const used = onTimeline(store().project);
-    silences = await silencesFor(sourceAssets(store().assets).filter((a) => a.kind !== 'image' && used.has(a.id)));
+    silences = await silencesFor(sourceAssets(store().assets).filter((a) => a.kind !== 'image' && used.has(a.id)), silenceOptsFromText(text));
   }
   const r = chatIntent(text, { project: store().project, assets: store().assets, silencesByAsset: silences, target: opts.context });
   if (r.undo) {
@@ -432,7 +439,10 @@ const RE = {
   translate: /(tradu[zc]|traduc)/,
   fillers: /vicio|muleta|\bne\b.*\btipo\b|\btipo\b.*\bne\b|hesitac/,
   beats: /batida|\bbeat|ritmo da musica/,
-  needsWords: /vicio|muleta|destaque|melhores (partes|momentos|trechos)|capitulo|gancho/,
+  needsWords: /vicio|muleta|destaque|melhores (partes|momentos|trechos)|capitulo|gancho|enfase|frases (fortes|importantes)/,
+  silence: /(cort|tir|remov|limp|elimin|apag)\w* .{0,20}(silenc|pausa|respiro|tempo morto)|(silenc|pausa)\w* .{0,25}(maior|acima|agressiv|longa|curta)/,
+  emphasis: /zoom.{0,25}(enfase|frases? (fortes|importantes|de impacto)|palavras? (fortes|importantes|chave)|momentos? (fortes|importantes))|zoom automatico|(enfase|destaque).{0,20}zoom/,
+  matchColor: /(combin|igual|parecid|casa|bate|iguala|match).{0,25}\bcor(es)?\b|\bcor(es)?\b.{0,30}(do|ao|com o) (video )?(modelo|exemplo|referencia)|color match/,
 };
 const LANGS: [RegExp, string, string][] = [
   [/ingles|english/, 'en-US', 'inglês'], [/espanhol|spanish/, 'es-ES', 'espanhol'], [/frances/, 'fr-FR', 'francês'],
@@ -544,6 +554,34 @@ async function localFeature(text: string, apply: NonNullable<PipelineOptions['ap
     return null; // "marca as batidas" etc. seguem p/ o demo/Claude com asset.beats preenchido
   }
 
+  // cortar silêncios com limiar ajustável ("pausas maiores que 1 s", "agressivo", "só as longas")
+  if (RE.silence.test(t) && !/(nao|sem) cort/.test(t)) {
+    const sOpts = silenceOptsFromText(text);
+    opts.onStatus?.('Ouvindo o áudio para achar as pausas…');
+    const used = onTimeline(store().project);
+    const silences = await silencesFor(sourceAssets(store().assets).filter((a) => a.kind !== 'image' && used.has(a.id)), sOpts);
+    const { ops, removed } = silenceCutOps(store().project, silences);
+    const lim = sOpts?.minSilence ? ` (pausas ≥ ${sOpts.minSilence.toString().replace('.', ',')} s)` : '';
+    if (!ops.length) return { reply: `Não encontrei pausas para cortar${lim}.`, ops: [], appliedIds: [], provider, warnings };
+    return done(ops, `Cortei ${ops.length} pausa${ops.length > 1 ? 's' : ''}${lim}: ${removed.toFixed(1).replace('.', ',')} s a menos.`);
+  }
+
+  // zoom automático nas frases de ênfase
+  if (RE.emphasis.test(t)) {
+    if (!(await ensureWords(opts, apply, warnings))) return { reply: 'Para achar as frases de ênfase eu preciso transcrever a fala primeiro (ligue o CC).', ops: [], appliedIds: [], provider, warnings };
+    const { ops, count } = emphasisZoomOps(store().project);
+    if (!ops.length) return { reply: 'Não achei frases de ênfase dentro do vídeo.', ops: [], appliedIds: [], provider, warnings };
+    return done(ops, `Coloquei zoom punch-in em ${count} frase${count > 1 ? 's' : ''} de ênfase.`);
+  }
+
+  // combinar a cor com o vídeo modelo (ColorGrade calculado das cores médias)
+  if (RE.matchColor.test(t)) {
+    const r = await matchColorOps(opts);
+    if (!r) return { reply: 'Para combinar a cor eu preciso de um vídeo modelo: toque no 📎 → "Vídeo modelo (estilo)".', ops: [], appliedIds: [], provider, warnings };
+    if (!r.ops.length) return { reply: 'As cores do seu vídeo já estão parecidas com as do modelo.', ops: [], appliedIds: [], provider, warnings };
+    return done(r.ops, `Combinei a cor com o modelo “${r.name}” (equilíbrio de cor, exposição, contraste e saturação).`);
+  }
+
   // recursos que dependem das palavras: transcreve antes, depois segue normalmente
   if (RE.needsWords.test(t) && !/["“”]/.test(text) && !store().project.captions.segments.length) await ensureWords(opts, apply, warnings);
   return null;
@@ -609,6 +647,24 @@ export function timelineDuration(): number {
 
 /* ---------- vídeo modelo anexado no chat ---------- */
 
+/** ops de colorGrade que aproximam as cores do material às do vídeo modelo ativo */
+async function matchColorOps(opts: PipelineOptions): Promise<{ ops: EditOp[]; name: string } | null> {
+  const ref = referenceAsset(store().assets, store().project);
+  if (!ref) return null;
+  opts.onStatus?.('Medindo as cores do modelo…');
+  const model = await colorStatsOf(ref);
+  if (!model) return null;
+  const used = onTimeline(store().project);
+  const grades: Record<Id, ColorGrade> = {};
+  for (const a of sourceAssets(store().assets)) {
+    if (a.kind !== 'video' || a.id === ref.id || !used.has(a.id)) continue;
+    opts.onStatus?.(`Medindo as cores de "${a.name}"…`);
+    const st = await colorStatsOf(a);
+    if (st) grades[a.id] = matchColorGrade(model, st);
+  }
+  return { ops: colorGradeOps(store().project, grades), name: ref.name };
+}
+
 /**
  * Analisa um vídeo modelo (role 'reference'): quadros + cortes medidos aqui,
  * Claude descreve o estilo (ou heurística local no demo). Vira o estilo ativo
@@ -639,8 +695,22 @@ export async function analyzeModel(assetId: Id, opts: PipelineOptions = {}): Pro
   return { reply, ops, appliedIds, provider: status.provider, warnings, style };
 }
 
-/** aplica o estilo do modelo ativo (tudo ou só uma parte) */
+/** aplica o estilo do modelo ativo (tudo ou só uma parte). A cor é combinada localmente (ColorGrade). */
 export async function applyModelStyle(scope: StyleScope, opts: PipelineOptions = {}): Promise<PipelineResult> {
   if (!store().project.style) throw new AIClientError('Anexe um vídeo modelo primeiro.', 400, 'no_model');
-  return chatEdit(modelRequestText(scope), opts);
+  const status = await getStatus();
+  if (!status.configured) return chatEdit(modelRequestText(scope), opts);
+  if (scope !== 'colors' && scope !== 'all') return chatEdit(modelRequestText(scope), opts);
+  const apply = opts.apply ?? defaultApply;
+  return withSingleUndo(async () => {
+    const m = await matchColorOps(opts);
+    const clean = m?.ops.length ? sanitizeOps(m.ops, store().project, store().assets).ops : [];
+    const ids = clean.length ? await apply(clean) : [];
+    const colorMsg = clean.length ? `Cores combinadas com o modelo “${m!.name}”.` : '';
+    if (scope === 'colors') {
+      return { reply: colorMsg || 'As cores do seu vídeo já estão parecidas com as do modelo.', ops: clean, appliedIds: ids, provider: status.provider, warnings: [] };
+    }
+    const res = await chatEdit(`${modelRequestText('all')}${clean.length ? ' (as cores JÁ foram combinadas com o modelo via colorGrade — não mexa em cor/filtros/looks)' : ''}`, opts);
+    return { ...res, ops: [...clean, ...res.ops], appliedIds: [...ids, ...res.appliedIds], reply: colorMsg ? `${colorMsg} ${res.reply}` : res.reply };
+  });
 }
