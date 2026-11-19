@@ -6,7 +6,7 @@
    ===================================================================== */
 import type {
   AspectRatio, AudioClip, AudioEffectKind, CaptionSegment, CaptionStyle, ChatContext as UIChatContext, Clip, ClipAnimation, ColorPreset, Id,
-  Keyframe, MediaAsset, Project, Seconds, SpeedPreset, StyleProfile, TransitionKind, VideoClip, VisualEffectKind,
+  Keyframe, MediaAsset, Project, ReferenceTemplate, Seconds, SpeedPreset, StyleMotion, StyleProfile, TransitionKind, VideoClip, VisualEffectKind,
 } from '../types';
 import { DEFAULT_TRANSFORM } from '../types';
 import { beatMarkerOps, beatSyncOps, chapterOps, fillerOps, highlightOps, hookFromTranscript, hookOps, mergeKfProps, timelineBeats } from './features';
@@ -16,6 +16,7 @@ import { formatTime, uid } from '../util';
 import { distributeWords, r3, splitSegment } from './sanitize';
 import { captionsMediaToTimeline, clipsOfAsset, mediaRangeToTimeline, mergeRanges } from './timemap';
 import { demoLibraryOps } from './library';
+import { motionSpecOf, shotMotionOps, templateOps, type MotionSpec } from './template';
 
 export interface Range { start: Seconds; end: Seconds }
 export interface DemoResult { reply: string; ops: EditOp[]; undo?: boolean }
@@ -195,31 +196,54 @@ export function colorPresetFromStats(c?: { r: number; g: number; b: number; sat:
   if (!c) return undefined;
   if (c.sat < 0.07) return 'bw';
   if (c.lum < 0.28) return 'moody';
-  if (c.sat > 0.5) return 'vibrant';
+  // quente/frio ANTES da saturação: um look quente saturado é "quente", não "vibrante"
   const warm = c.r - c.b;
-  if (warm > 0.08) return 'warm';
-  if (warm < -0.06) return 'cool';
+  if (warm > 0.045) return 'warm';
+  if (warm < -0.05) return 'cool';
+  if (c.sat > 0.5) return 'vibrant';
   if (c.sat < 0.18 && c.lum > 0.35) return 'vintage';
   return undefined;
 }
 
-export function styleFromCuts(cuts: Seconds[], duration: Seconds, size: { width?: number; height?: number } = {}, color?: { r: number; g: number; b: number; sat: number; lum: number }): StyleProfile {
+/**
+ * Perfil local do modelo: SÓ o que foi medido (nada inventado a partir do ritmo).
+ * Sem medição de movimento/legenda/transição: corte seco, sem zoom, legenda "não medida" (present:false),
+ * sem gancho. Com o molde medido (`template`, lib/ai/motion.ts), copia movimento, transições e legenda dele.
+ */
+export function styleFromCuts(cuts: Seconds[], duration: Seconds, size: { width?: number; height?: number } = {}, color?: { r: number; g: number; b: number; sat: number; lum: number }, template?: ReferenceTemplate): StyleProfile {
   const shots = cuts.length + 1;
-  const avg = r3(duration > 0 ? duration / shots : 3);
+  const avg = r3(template?.shots.length ? template.shots.reduce((n, x) => n + x.end - x.start, 0) / template.shots.length : duration > 0 ? duration / shots : 3);
   const pacing: StyleProfile['pacing'] = avg < 1.2 ? 'very-fast' : avg < 2.5 ? 'fast' : avg < 5 ? 'medium' : 'slow';
-  const fast = pacing === 'fast' || pacing === 'very-fast';
   const aspect = aspectOf(size.width, size.height);
   const names = { 'very-fast': 'muito rápido', fast: 'rápido', medium: 'moderado', slow: 'calmo' } as const;
+  const tm = template?.motion;
+  const motion: StyleMotion | undefined = tm
+    ? { kind: tm.mode, zoomPerShot: tm.avgZoomPerShot, easing: tm.easing, ...(tm.punchFrequency ? { punchRate: r3((tm.punchFrequency * 60) / Math.max(0.3, avg)) } : {}) }
+    : undefined;
+  const transitions: TransitionKind[] = template ? [...new Set<TransitionKind>(['cut', ...template.transitions.filter((x) => x.frequency > 0.05).map((x) => x.kind)])] : ['cut'];
+  const cap = template?.captions;
+  const MOVES: Record<string, string> = { static: 'câmera parada', 'smooth-push': 'aproximação lenta e suave', 'push-pull': 'aproxima e afasta suave', punch: 'zoom em pancada', pan: 'movimento lateral', handheld: 'câmera na mão', mixed: 'movimento misto' };
+  const bits = [
+    `Ritmo ${names[pacing]}: ${template?.shots.length ?? shots} tomada${(template?.shots.length ?? shots) > 1 ? 's' : ''} em ${duration.toFixed(0)} s (média de ${avg.toFixed(1)} s por tomada)`,
+    aspect ? `formato ${aspect}` : '',
+    tm ? `${MOVES[tm.mode] ?? tm.mode}${Math.abs(tm.avgZoomPerShot - 1) > 0.01 ? ` (${Math.round((tm.avgZoomPerShot - 1) * 100)}% por tomada)` : ''}` : '',
+    template ? (transitions.length > 1 ? `transições: ${transitions.filter((t) => t !== 'cut').join(', ')}` : 'só cortes secos') : '',
+    cap ? `legenda ${cap.textColor}${cap.boxColor ? ' em caixa' : ''}${cap.uppercase ? ' maiúscula' : ''}` : '',
+  ].filter(Boolean);
+  const preset = colorPresetFromStats(color);
   return {
-    summary: `Ritmo ${names[pacing]}: ${shots} tomada${shots > 1 ? 's' : ''} em ${duration.toFixed(0)} s (média de ${avg.toFixed(1)} s por tomada)${aspect ? `, formato ${aspect}` : ''}. Análise local (modo demo).`,
+    summary: `${bits.join(', ')}. ${template ? 'Medido quadro a quadro no aparelho.' : 'Análise local (modo demo).'}`,
     pacing,
     avgShotLength: avg,
     ...(aspect ? { aspect } : {}),
-    transitions: fast ? ['cut', 'zoom-in'] : ['cut', 'crossfade'],
-    zoomPunchIns: fast,
-    captions: fast ? { present: true, preset: 'bold-pop', maxWords: 2, uppercase: true } : { present: true, preset: 'classic', maxWords: 5 },
-    hook: fast ? 'Começa direto na ação, sem introdução' : undefined,
-    ...(colorPresetFromStats(color) ? { colorPreset: colorPresetFromStats(color) } : {}),
+    transitions,
+    zoomPunchIns: tm?.mode === 'punch',
+    captions: cap
+      ? { present: true, color: cap.textColor, ...(cap.boxColor ? { background: cap.boxColor } : {}), position: { x: 0.5, y: r3((cap.region.y0 + cap.region.y1) / 2) }, ...(cap.uppercase !== undefined ? { uppercase: cap.uppercase } : {}), ...(cap.wordsPerChunk ? { maxWords: cap.wordsPerChunk } : {}) }
+      : { present: false },
+    ...(preset ? { colorPreset: preset } : {}),
+    ...(motion ? { motion } : {}),
+    ...(template ? { template } : {}),
   };
 }
 
@@ -413,15 +437,37 @@ export function punchKeyframes(duration: Seconds, period = 2.6, scale = 1.12): K
   return kf;
 }
 
-/** zoom punch-in: em clipes cortados, alterna enquadramento a cada corte; em clipe único, usa keyframes */
-export function zoomOps(p: Project, strong = false, only?: Set<Id>): EditOp[] {
+/** aproximação suave contínua num clipe longo: alterna aproximar/afastar a cada `period` s (easeInOut) */
+export function pushKeyframes(duration: Seconds, period = 3, delta = 0.06): Keyframe[] {
+  const kf: Keyframe[] = [{ t: 0, transform: { scale: 1 } }];
+  const n = Math.max(1, Math.round(duration / Math.max(1.2, period)));
+  const step = duration / n;
+  for (let i = 1; i <= n; i++) kf.push({ t: r3(Math.min(duration, i * step)), transform: { scale: r3(i % 2 === 1 ? 1 + delta : 1) }, easing: 'easeInOut' });
+  return kf;
+}
+
+/**
+ * Zoom no vídeo. Padrão = movimento SUAVE (aproximação lenta por tomada, easeInOut, ≤8 px/quadro);
+ * `mode: 'punch'` (pedido explícito "zoom punch"/modelo com pancada) = zoom rápido ritmado.
+ */
+export function zoomOps(p: Project, strong = false, only?: Set<Id>, mode: 'smooth' | 'punch' = 'smooth', spec?: MotionSpec): EditOp[] {
   const clips = videoClipsOf(p).filter((c) => !c.locked && (!only || only.has(c.id)));
-  const z = strong ? 1.16 : 1.1;
+  if (mode === 'smooth') {
+    const s = spec ?? { ...motionSpecOf(), zoom: strong ? 1.08 : 1.06 };
+    if (clips.length >= 2) return shotMotionOps(p, s, new Set(clips.map((c) => c.id)));
+    return clips.map((c) => ({
+      op: 'update_clip' as const,
+      clipId: c.id,
+      patch: { keyframes: mergeKfProps(c.keyframes, pushKeyframes(c.duration, strong ? 2.4 : 3.2, Math.abs(s.zoom - 1) || 0.06), ['scale']) },
+      explain: `Aproximação suave no clipe de ${fmt(c.start)}`,
+    }));
+  }
+  const z = strong ? 1.16 : 1.12;
   if (clips.length >= 3) {
     return clips.map((c, i) => ({
       op: 'update_clip' as const,
       clipId: c.id,
-      patch: { transform: { ...c.transform, scale: i % 2 === 1 ? z : 1 }, keyframes: mergeKfProps(c.keyframes, i % 2 === 1 ? [] : [{ t: 0, transform: { scale: 1 } }, { t: r3(c.duration), transform: { scale: 1.04 } }], ['scale']) },
+      patch: { transform: { ...c.transform, scale: i % 2 === 1 ? z : 1 }, keyframes: mergeKfProps(c.keyframes, i % 2 === 1 ? [] : [{ t: 0, transform: { scale: 1 } }, { t: r3(c.duration), transform: { scale: 1.04 }, easing: 'easeInOut' }], ['scale']) },
       explain: i % 2 === 1 ? `Punch-in no corte em ${fmt(c.start)}` : `Zoom lento em ${fmt(c.start)}`,
     }));
   }
@@ -567,6 +613,8 @@ export interface FirstEditInput {
   style?: StyleProfile;
   /** só testes/harness: legendas de exemplo (texto do brief). No app, legenda vem só da transcrição. */
   allowExampleCaptions?: boolean;
+  /** a cor JÁ foi casada com o modelo (colorGrade): não põe preset de cor por cima */
+  colorGraded?: boolean;
 }
 
 export function planFirstEdit(input: FirstEditInput): DemoResult {
@@ -615,11 +663,19 @@ export function planFirstEdit(input: FirstEditInput): DemoResult {
     if (cut.length) said.push(`cortei ${cut.length} pausa${cut.length > 1 ? 's' : ''} (${removed.toFixed(1)} s a menos)`);
   }
 
-  // 3) estilo de legenda (brief > exemplo > ritmo)
+  // 2b) vídeo modelo = molde definitivo: corta no ritmo das tomadas dele (nos respiros da fala),
+  //     movimento de câmera medido, só as transições dele e a legenda dele
+  const tpl = style ? templateOps(p, style, { wantsPunch: /punch|pancada/.test(norm(brief)), captions: !intent.captionLook }) : undefined;
+  if (tpl) {
+    push(tpl.ops);
+    said.push(...tpl.said);
+  }
+
+  // 3) estilo de legenda (brief > exemplo > ritmo). Vale mesmo antes da transcrição: fica pronto
   const look = intent.captionLook
-    ?? (style?.captions?.present ? { name: 'do vídeo-exemplo', style: (({ present: _p, ...rest }) => rest)(style.captions) } : undefined)
-    ?? (fast ? captionLookFrom('tiktok') : undefined);
-  if (look && p.captions.segments.length) {
+    ?? (style?.captions?.present && !style.template?.captions ? { name: 'do vídeo-exemplo', style: (({ present: _p, ...rest }) => rest)(style.captions) } : undefined)
+    ?? (fast && !style ? captionLookFrom('tiktok') : undefined);
+  if (look && (p.captions.segments.length || style)) {
     push([{ op: 'set_caption_style', style: look.style, explain: `Legenda ${look.name}` }]);
     said.push(`legenda ${look.name}`);
   }
@@ -627,7 +683,8 @@ export function planFirstEdit(input: FirstEditInput): DemoResult {
   // 4) gancho/título nos primeiros segundos
   // pedido explícito de título/gancho sem texto citado: tira da fala (frase mais forte) ou usa um padrão
   const wantsHook = /titulo|gancho|chamada|headline|\bhook\b/.test(norm(brief));
-  const hook = intent.hook ?? style?.textOverlays?.examples?.[0]
+  // os textos do modelo (textOverlays.examples) são AMOSTRAS de estilo: nunca viram conteúdo
+  const hook = intent.hook
     ?? (wantsHook ? (!exampleCaptions ? hookFromTranscript(p) : undefined) ?? 'Você precisa ver isso!' : undefined);
   if (hook) {
     const d = r3(Math.min(2.5, Math.max(1.2, projectDuration(p) * 0.3)));
@@ -637,25 +694,26 @@ export function planFirstEdit(input: FirstEditInput): DemoResult {
     said.push(`título "${hook}"`);
   }
 
-  // 5) zoom punch-in
-  if (intent.zoom || style?.zoomPunchIns) {
-    const z = zoomOps(p, fast);
+  // 5) zoom: com modelo, o movimento dele já entrou (2b); sem modelo, suave por padrão e pancada só se pedir
+  const explicitZoom = /zoom|punch/.test(norm(brief));
+  if (!style && (intent.zoom || explicitZoom)) {
+    const punch = /punch|pancada/.test(norm(brief));
+    const z = zoomOps(p, fast, undefined, punch ? 'punch' : 'smooth');
     push(z);
-    if (z.length) said.push('zoom punch-in');
+    if (z.length) said.push(punch ? 'zoom punch-in' : 'zoom suave (aproximação lenta)');
   }
 
-  // 6) cor
-  const color = intent.color ?? (style?.colorPreset && style.colorPreset !== 'none' ? { preset: style.colorPreset, name: 'do exemplo' } : undefined)
-    ?? (intent.calm ? { preset: 'warm' as ColorPreset, name: 'quentes' } : undefined);
-  if (color) {
+  // 6) cor: com o modelo, a cor vem do colorGrade casado (nunca empilha um preset por cima)
+  const color = intent.color ?? (style && !input.colorGraded && style.colorPreset && style.colorPreset !== 'none' && !style.template ? { preset: style.colorPreset, name: 'do exemplo' } : undefined)
+    ?? (intent.calm && !style ? { preset: 'warm' as ColorPreset, name: 'quentes' } : undefined);
+  if (color && !(input.colorGraded && !intent.color)) {
     const c = colorOps(p, color.preset, color.name);
     push(c);
     if (c.length) said.push(`cores ${color.name}`);
   }
 
-  // 7) transições entre os cortes
-  const styleTr = style?.transitions.find((k) => k !== 'cut');
-  const tr = intent.transition ?? (styleTr ? { kind: styleTr, name: 'do exemplo' } : undefined) ?? (intent.calm ? { kind: 'crossfade' as TransitionKind, name: 'suave' } : undefined);
+  // 7) transições entre os cortes: as do modelo já entraram (2b); aqui só o que o usuário pediu (ou o calmo sem modelo)
+  const tr = intent.transition ?? (intent.calm && !style ? { kind: 'crossfade' as TransitionKind, name: 'suave' } : undefined);
   if (tr && videoClipsOf(p).length > 1) {
     const t = transitionOps(p, tr.kind, tr.name);
     push(t);
@@ -848,7 +906,10 @@ export function chatIntent(text: string, ctx: ChatContext): DemoResult {
   // --- zoom
   if (/zoom|punch/.test(t) && !/transi/.test(t)) {
     if (negate.test(t)) push(removeZoomOps(p, only), 'tirei o zoom');
-    else push(zoomOps(p, /(forte|mais zoom|bastante)/.test(t), only), 'coloquei zoom punch-in');
+    else {
+      const punch = /punch|pancada|rapid|seco|batida|tranco/.test(t);
+      push(zoomOps(p, /(forte|mais zoom|bastante)/.test(t), only, punch ? 'punch' : 'smooth'), punch ? 'coloquei zoom punch-in' : 'coloquei zoom suave (aproximação lenta)');
+    }
   }
 
   // --- cortar começo/fim
@@ -1111,7 +1172,7 @@ export function chatIntent(text: string, ctx: ChatContext): DemoResult {
       const { ops: cut, removed } = silenceCutOps(p, tight);
       if (cut.length) push(cut, `cortei ${cut.length} pausas (${removed.toFixed(1)} s)`);
     }
-    if (!ops.some((o) => o.op === 'update_clip' && 'keyframes' in (o.patch ?? {}))) push(zoomOps(p, true), 'zoom punch-in');
+    if (!ops.some((o) => o.op === 'update_clip' && 'keyframes' in (o.patch ?? {}))) push(zoomOps(p, true), 'zoom suave nas tomadas');
     if (p.captions.segments.length) push([{ op: 'set_caption_style', style: captionLookFrom('tiktok')!.style, explain: 'Legendas rápidas estilo TikTok' }], 'legendas rápidas');
   }
 

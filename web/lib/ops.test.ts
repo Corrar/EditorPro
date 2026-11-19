@@ -184,3 +184,23 @@ describe('ops — campos aditivos da timeline (linkId, solo, height)', () => {
     expect(tr.height).toBe(1.5);
   });
 });
+
+describe('contrato aditivo: StyleProfile.template / motion (sessão modelo)', () => {
+  it('set_project com style.template e style.motion guarda tudo (sobrevive ao chat e ao undo)', () => {
+    const template = {
+      shots: [{ start: 0, end: 1.2 }, { start: 1.2, end: 2.4 }],
+      shotStats: { median: 1.2, p10: 1.2, p90: 1.2 },
+      motion: { mode: 'smooth-push' as const, avgZoomPerShot: 1.15, easing: 'easeInOut' as const, direction: 'in' as const, perShot: [{ start: 0, end: 1.2, zoomTotal: 1.15, panX: 0, panY: 0, peakOverMean: 1.7, easing: 'easeInOut' as const, punches: 0 }] },
+      transitions: [{ kind: 'cut' as const, duration: 0, frequency: 1 }],
+      captions: { region: { y0: 0.7, y1: 0.77 }, textColor: '#F3D205', boxColor: '#110E0D', heightPx1920: 80, uppercase: true, wordsPerChunk: 2 },
+      color: { r: 0.6, g: 0.47, b: 0.35, sat: 0.68, lum: 0.5 },
+    };
+    const style = { summary: 'x', pacing: 'very-fast' as const, avgShotLength: 1.2, transitions: ['cut' as const], zoomPunchIns: false, motion: { kind: 'smooth-push' as const, zoomPerShot: 1.15 }, template };
+    const p = applyOp(createProject(), { op: 'set_project', patch: { style } });
+    expect(p.style?.template).toEqual(template);
+    expect(p.style?.motion).toEqual({ kind: 'smooth-push', zoomPerShot: 1.15 });
+    // sem os campos novos continua válido (aditivo)
+    const old = applyOp(createProject(), { op: 'set_project', patch: { style: { summary: 'y', pacing: 'slow', avgShotLength: 4, transitions: ['cut'], zoomPunchIns: false } } });
+    expect(old.style?.template).toBeUndefined();
+  });
+});

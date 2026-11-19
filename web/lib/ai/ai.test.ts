@@ -254,7 +254,11 @@ describe('demo: exemplo e brief', () => {
     const st = styleFromCuts(cuts, 10, { width: 1080, height: 1920 });
     expect(st.pacing).toBe('fast');
     expect(st.aspect).toBe('9:16');
-    expect(st.zoomPunchIns).toBe(true);
+    // perfil local honesto: só o medido (nada de zoom/transição/legenda/gancho inventados pelo ritmo)
+    expect(st.zoomPunchIns).toBe(false);
+    expect(st.transitions).toEqual(['cut']);
+    expect(st.captions).toEqual({ present: false });
+    expect(st.hook).toBeUndefined();
   });
 
   it('parseBrief entende palavras-chave', () => {

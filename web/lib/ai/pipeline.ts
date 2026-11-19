@@ -19,9 +19,10 @@ import { beatSyncOps, emphasisZoomOps, fillerOps, reframeOps } from './features'
 import { trackSubject } from './reframe';
 import { distributeWords } from './sanitize';
 import { describeStyle, modelRequestText, styleOps, styleScopeFromText, type StyleScope } from './model';
+import { smoothMotionOps, wantsPunchMotion } from './template';
 import { materializeSfx, sanitizeSfxRequests, type SfxRequest } from './library';
 import { asOwn, isAbort as isRunAbort } from './runGuard';
-import { finalizeClaude, type FinalizeDeps, type Finalized } from './finalize';
+import { MAX_AI_OPS, finalizeClaude, type FinalizeDeps, type Finalized } from './finalize';
 import { runScript } from './script/run';
 import { createGraphicAsset, updateGraphicAsset } from './svg';
 import { isVisualChange, renderResultFrames, reviewEnabled, reviewTimes } from './review';
@@ -341,6 +342,24 @@ export async function runFirstEdit(opts: PipelineOptions & { brief: string }): P
       } else opts.onLog?.('Não consegui ler o vídeo-exemplo — sigo sem ele');
     }
 
+    // 1b) modelo = molde definitivo: a cor do material é casada com a do modelo (colorGrade) ANTES do
+    //     plano (demo ou Claude) — e nenhum preset de cor vai por cima (não empilha dois looks)
+    let colorGraded = false;
+    if (ref && store().project.style) {
+      try {
+        const m = await matchColorOps(opts);
+        const clean = m?.ops.length ? sanitizeOps(m.ops, store().project, store().assets).ops : [];
+        if (clean.length) {
+          await apply(clean, { delayMs: 120 });
+          colorGraded = true;
+          opts.onLog?.('Cor do material casada com a do modelo');
+        }
+      } catch (e) {
+        if (isRunAbort(e)) throw e;
+        warnings.push(`cor do modelo: ${errText(e)}`);
+      }
+    }
+
     // 2) legendas reais (Whisper local, grátis)
     const media = sources.filter((a) => a.kind !== 'image');
     if (!store().project.captions.segments.length && !/sem legenda/i.test(brief)) {
@@ -372,6 +391,8 @@ export async function runFirstEdit(opts: PipelineOptions & { brief: string }): P
       const userText = brief || 'Edite este vídeo de forma profissional.';
       const fin = await claudeOps(res, userText, opts);
       let ops = fin.ops;
+      // modelo/pedido sem pancada: rampas de zoom curtas viram aproximações suaves (≥0,6 s, easeInOut)
+      if (!wantsPunchMotion(brief, store().project.style)) ops = smoothMotionOps(store().project, ops);
       let reply = fin.reply;
       const before = store().project;
       // pediu música e não mandou arquivo: faixa do catálogo gerado por código
@@ -395,8 +416,8 @@ export async function runFirstEdit(opts: PipelineOptions & { brief: string }): P
     const nSil = Object.values(silences).reduce((n, r) => n + r.length, 0);
     opts.onLog?.(nSil ? `Áudio analisado: ${nSil} pausa${nSil > 1 ? 's' : ''} encontrada${nSil > 1 ? 's' : ''}` : 'Áudio analisado');
     opts.onStatus?.('Planejando a edição…');
-    const plan = planFirstEdit({ project: store().project, assets: store().assets, brief, silencesByAsset: silences, style });
-    const first = sanitizeOps(plan.ops, store().project, store().assets);
+    const plan = planFirstEdit({ project: store().project, assets: store().assets, brief, silencesByAsset: silences, style, colorGraded });
+    const first = sanitizeOps(plan.ops, store().project, store().assets, MAX_AI_OPS);
     let ops = first.ops;
     let reply = plan.reply;
     // estilo CapCut: vícios de linguagem (pelas palavras) e cortes na batida, quando fizer sentido
@@ -477,11 +498,10 @@ async function demoChat(text: string, apply: NonNullable<PipelineOptions['apply'
     // cor: combina com as cores medidas do modelo (ColorGrade); sem modelo legível, usa o preset do perfil
     const grade = scope === 'all' || scope === 'colors' ? await matchColorOps(opts) : null;
     const graded = !!grade?.ops.length;
-    const styled = styleOps(store().project, st, scope);
-    const rest = graded ? styled.ops.filter((o) => !(o.op === 'update_clip' && 'colorPreset' in o.patch)) : styled.ops;
-    const raw = graded ? [...grade!.ops, ...rest] : rest;
-    const said = graded ? ['cor combinada com o modelo', ...styled.said.filter((x) => !/^cores |cores naturais/.test(x))] : styled.said;
-    const { ops } = sanitizeOps(raw, store().project, store().assets);
+    const styled = styleOps(store().project, st, scope, { graded });
+    const raw = graded ? [...grade!.ops, ...styled.ops] : styled.ops;
+    const said = graded ? ['cor combinada com o modelo', ...styled.said] : styled.said;
+    const { ops } = sanitizeOps(raw, store().project, store().assets, MAX_AI_OPS);
     const appliedIds = ops.length ? await apply(ops) : [];
     const msg = said.length ? said.join(', ') : 'nada a mudar';
     return { reply: ops.length ? `Feito, no estilo do modelo: ${msg}.` : `${msg.charAt(0).toUpperCase()}${msg.slice(1)}.`, ops, appliedIds, provider: 'demo', warnings: [] };
@@ -717,9 +737,10 @@ async function localFeature(text: string, apply: NonNullable<PipelineOptions['ap
   // zoom automático nas frases de ênfase
   if (RE.emphasis.test(t)) {
     if (!(await ensureWords(opts, apply, warnings))) return { reply: 'Para achar as frases de ênfase eu preciso transcrever a fala primeiro (ligue o CC).', ops: [], appliedIds: [], provider, warnings };
-    const { ops, count } = emphasisZoomOps(store().project);
+    const punch = /punch|pancada|rapid|seco/.test(t) || store().project.style?.motion?.kind === 'punch';
+    const { ops, count } = emphasisZoomOps(store().project, 8, undefined, punch);
     if (!ops.length) return { reply: 'Não achei frases de ênfase dentro do vídeo.', ops: [], appliedIds: [], provider, warnings };
-    return done(ops, `Coloquei zoom punch-in em ${count} frase${count > 1 ? 's' : ''} de ênfase.`);
+    return done(ops, `Coloquei ${punch ? 'zoom punch-in' : 'zoom suave'} em ${count} frase${count > 1 ? 's' : ''} de ênfase.`);
   }
 
   // combinar a cor com o vídeo modelo (ColorGrade calculado das cores médias)

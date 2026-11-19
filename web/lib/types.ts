@@ -562,6 +562,74 @@ export interface StyleProfile {
   textOverlays?: { present: boolean; examples?: string[] };
   hook?: string; // como o vídeo prende nos 3 primeiros segundos
   structure?: string[]; // ex.: ['gancho', 'problema', 'solução', 'CTA']
+  /** (aditivo 2026-11-19, sessão modelo) resumo do movimento de câmera do modelo */
+  motion?: StyleMotion;
+  /** (aditivo 2026-11-19, sessão modelo) o modelo MEDIDO quadro a quadro (lib/ai/motion.ts): o molde definitivo */
+  template?: ReferenceTemplate;
+}
+
+/* ---------- vídeo modelo medido (aditivo, sessão modelo) ---------- */
+
+/**
+ * Movimento de câmera dominante no modelo:
+ * static = parado · smooth-push = aproximação lenta contínua · push-pull = alterna aproximar/afastar ·
+ * punch = zoom em pancada (<0,25 s) · pan = desliza de lado · handheld = tremido de mão · mixed = misto
+ */
+export type MotionMode = 'static' | 'smooth-push' | 'push-pull' | 'punch' | 'pan' | 'handheld' | 'mixed';
+
+export interface StyleMotion {
+  kind: MotionMode;
+  /** escala total média por tomada (1.06 = aproxima 6% ao longo da tomada; <1 = afasta) */
+  zoomPerShot?: number;
+  easing?: Easing;
+  /** zooms em pancada por minuto */
+  punchRate?: number;
+}
+
+/** movimento medido de uma tomada (tempos do modelo) */
+export interface ShotMotion {
+  start: Seconds;
+  end: Seconds;
+  /** escala acumulada na tomada: exp(Σ log s) (1 = parado) */
+  zoomTotal: number;
+  /** deslocamento total (fração da largura/altura) */
+  panX: number;
+  panY: number;
+  /** pico/média da velocidade de zoom: ~1,5–2 = suave, >4 = pancada */
+  peakOverMean: number;
+  easing: Easing;
+  /** quantos zooms em pancada dentro da tomada */
+  punches: number;
+}
+
+export interface ReferenceTemplate {
+  shots: { start: Seconds; end: Seconds }[];
+  shotStats: { median: Seconds; p10: Seconds; p90: Seconds };
+  motion: {
+    mode: MotionMode;
+    avgZoomPerShot: number;
+    easing: Easing;
+    /** sentido do zoom entre tomadas */
+    direction?: 'in' | 'out' | 'alternate';
+    /** fração das tomadas com pancada (0..1) */
+    punchFrequency?: number;
+    perShot: ShotMotion[];
+  };
+  /** transições medidas; corte seco = kind 'cut' */
+  transitions: { kind: TransitionKind; duration: Seconds; frequency: number }[];
+  /** faixa de legenda detectada (y em 0..1 do quadro) */
+  captions?: {
+    region: { y0: number; y1: number };
+    textColor: string;
+    boxColor: string | null;
+    /** altura do texto em px num quadro de 1920 de altura */
+    heightPx1920: number;
+    uppercase?: boolean;
+    wordsPerChunk?: number;
+  };
+  color: { r: number; g: number; b: number; sat: number; lum: number; lumSd?: number; hist16?: number[][] };
+  /** fração dos cortes que caem na batida (±80 ms), quando o modelo tem áudio */
+  cutsOnBeats?: number;
 }
 
 /* ---------- projeto ---------- */
