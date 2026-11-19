@@ -10,13 +10,13 @@ import { useEditor } from '@/lib/store';
 import { findClip, type EditOp } from '@/lib/ops';
 import type { TextClip } from '@/lib/types';
 import { FONT_CATEGORY_LABELS, ensureFont, fontStack, nearestWeight, searchFonts, type FontCategory, type FontDef } from '@/lib/library/fonts';
-import { PillRow, SearchPill } from './shared';
+import { PillRow, SearchPill, FavButton, usePrefs, withPrefPills, FAV, REC } from './shared';
 import { useVisible } from './mini';
 
 type Cat = FontCategory | 'todas';
 const CATS: { id: Cat; label: string }[] = [{ id: 'todas', label: 'Todas' }, ...(Object.keys(FONT_CATEGORY_LABELS) as FontCategory[]).map((id) => ({ id, label: FONT_CATEGORY_LABELS[id] }))];
 
-function FontRow({ f, selected, sample, onPick }: { f: FontDef; selected: boolean; sample: string; onPick: (f: FontDef) => void }) {
+function FontRow({ f, selected, sample, onPick, fav, onFav }: { f: FontDef; selected: boolean; sample: string; onPick: (f: FontDef) => void; fav: boolean; onFav: () => void }) {
   const ref = useRef<HTMLButtonElement>(null);
   const visible = useVisible(ref);
   const [ready, setReady] = useState(false);
@@ -27,21 +27,25 @@ function FontRow({ f, selected, sample, onPick }: { f: FontDef; selected: boolea
     return () => { alive = false; };
   }, [visible, f.family, f.display]);
   return (
-    <button ref={ref} type="button" className={`ep-row ep-lib-fontrow${selected ? ' on' : ''}`} onClick={() => onPick(f)} aria-pressed={selected}>
-      <span className="ep-lib-fontname" style={{ fontFamily: ready ? fontStack(f.family) : undefined, fontWeight: f.display }}>
-        {sample || f.family}
-      </span>
-      <span className="ep-lib-fontmeta">
-        <span className="meta">{f.family !== sample && sample ? `${f.family} · ` : ''}{FONT_CATEGORY_LABELS[f.category]}</span>
-        {selected && <Icon name="check" size={18} />}
-      </span>
-    </button>
+    <div className={`ep-row ep-lib-fontrow${selected ? ' on' : ''}`}>
+      <button ref={ref} type="button" className="ep-lib-fontbtn" onClick={() => onPick(f)} aria-pressed={selected}>
+        <span className="ep-lib-fontname" style={{ fontFamily: ready ? fontStack(f.family) : undefined, fontWeight: f.display }}>
+          {sample || f.family}
+        </span>
+        <span className="ep-lib-fontmeta">
+          <span className="meta">{f.family !== sample && sample ? `${f.family} · ` : ''}{FONT_CATEGORY_LABELS[f.category]}</span>
+          {selected && <Icon name="check" size={18} />}
+        </span>
+      </button>
+      <FavButton on={fav} onToggle={onFav} label={f.family} />
+    </div>
   );
 }
 
 export default function FontPicker({ value, onChange, sample: sampleProp, query }: { value?: string; onChange?: (family: string, weight: number) => void; sample?: string; query?: string }) {
   const [q, setQ] = useState('');
-  const [cat, setCat] = useState<Cat>('todas');
+  const [cat, setCat] = useState<string>('todas');
+  const prefs = usePrefs('font');
   const selection = useEditor((s) => s.selection);
   const project = useEditor((s) => s.project);
   const dispatch = useEditor((s) => s.dispatch);
@@ -55,9 +59,17 @@ export default function FontPicker({ value, onChange, sample: sampleProp, query 
   const sample = sampleProp ?? (target === 'texts' ? selectedTexts[0]?.text.split('\n')[0].slice(0, 22) : '') ?? '';
 
   const effQ = query ?? q;
-  const list = useMemo(() => searchFonts(effQ, cat), [effQ, cat]);
+  const list = useMemo(() => {
+    if (cat === FAV || cat === REC) {
+      const ids = cat === FAV ? prefs.favs : prefs.recents;
+      const all = searchFonts(effQ);
+      return ids.map((id) => all.find((f) => f.family === id)).filter((f): f is FontDef => !!f);
+    }
+    return searchFonts(effQ, cat as Cat);
+  }, [effQ, cat, prefs.favs, prefs.recents]);
 
   const pick = (f: FontDef) => {
+    prefs.recent(f.family);
     if (onChange) { onChange(f.family, f.display); return; }
     if (target === 'texts') {
       const ops: EditOp[] = selectedTexts.map((c) => ({
@@ -75,12 +87,12 @@ export default function FontPicker({ value, onChange, sample: sampleProp, query 
   return (
     <div className="ep-lib ep-lib-fonts">
       {query === undefined && <SearchPill value={q} onChange={setQ} placeholder="Buscar fonte" />}
-      <PillRow value={cat} options={CATS} onChange={setCat} label="Categorias de fonte" />
+      <PillRow value={cat} options={withPrefPills(CATS, prefs.favs, prefs.recents)} onChange={setCat} label="Categorias de fonte" />
       {target !== 'custom' && (
         <div className="ep-lib-target">Aplicando em: <b>{target === 'texts' ? (selectedTexts.length > 1 ? `${selectedTexts.length} textos` : 'texto selecionado') : 'legendas'}</b></div>
       )}
       <div className="ep-lib-fontlist">
-        {list.map((f) => <FontRow key={f.family} f={f} selected={current === f.family} sample={sample} onPick={pick} />)}
+        {list.map((f) => <FontRow key={f.family} f={f} selected={current === f.family} sample={sample} onPick={pick} fav={prefs.isFav(f.family)} onFav={() => prefs.toggle(f.family)} />)}
         {!list.length && <div className="ep-lib-empty">Nenhuma fonte encontrada.</div>}
       </div>
       <p className="ep-lib-note">Fontes de licença aberta (OFL/Apache) do Google Fonts.</p>
