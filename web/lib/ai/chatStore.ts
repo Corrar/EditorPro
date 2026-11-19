@@ -14,6 +14,7 @@ import { AI_CURSOR_STEP_MS } from '../aiCursor';
 import { orderForViewing, shortExplain } from './order';
 import { SCOPE_LABELS, styleScopeFromText, wantsApplyNow, type StyleScope } from './model';
 import { explainChanges, HELP_TEXT, isExplainRequest, isHelpRequest } from './suggest';
+import { DEMO_HELP } from './demo';
 import { analyzeModel, applyComments, applyModelStyle, chatEdit, generateCaptions, runFirstEdit, type AskOption, type PipelineOptions, type PipelineResult } from './pipeline';
 
 export type StepState = 'pending' | 'active' | 'done' | 'skipped';
@@ -295,7 +296,7 @@ export const useAIChat = create<AIChatState>((set, get) => {
       if (!text || get().busy) return;
       if (isHelpRequest(text)) {
         editor().pushMessage({ role: 'user', text, status: 'done' });
-        editor().pushMessage({ role: 'assistant', text: HELP_TEXT, status: 'done' });
+        editor().pushMessage({ role: 'assistant', text: get().status && !get().status!.configured ? `${HELP_TEXT}\n\n${DEMO_HELP}` : HELP_TEXT, status: 'done' });
         return;
       }
       // "o que você mudou?" -> explica a última edição sem mexer no projeto

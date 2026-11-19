@@ -144,7 +144,7 @@ async function materialize(res: EditResponse, base: Project, o: FinalizeOptions)
         const asset = await o.createGraphic(d.svg, d.name, sim);
         const assets = { ...o.getAssets(), [asset.id]: asset };
         const trackId = graphicTrack(sim, d.start, d.start + d.duration, d.trackId);
-        const clip = { label: d.name, ...d.clip, type: 'image', assetId: asset.id, start: d.start, duration: d.duration };
+        const clip = { label: d.name, fit: 'contain', ...d.clip, type: 'image', assetId: asset.id, start: d.start, duration: d.duration };
         const s = sanitizeOps([{ op: 'add_clip', trackId, clip, explain: d.explain ?? `Gráfico “${d.name}”` }], sim, assets);
         errors.push(...dropReasons(`add_graphic "${d.name}" — `, s.dropped));
         ops.push(...s.ops);

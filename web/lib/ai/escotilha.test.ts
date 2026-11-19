@@ -210,3 +210,15 @@ describe('exemplos de run_script do prompt rodam e geram ops válidas', () => {
     });
   }
 });
+
+describe('demo: pedido não entendido sugere os 3 comandos mais parecidos', () => {
+  it('similarCommands acha o comando certo mesmo com erro de digitação', async () => {
+    const { similarCommands, chatIntent } = await import('./demo');
+    expect(similarCommands('deixa preto e brnco')).toContain('deixa preto e branco');
+    expect(similarCommands('quero uma legenda karaoke')[0]).toMatch(/karaok/);
+    const r = chatIntent('faz um negócio esquisito xyz', { project: base(), assets });
+    expect(r.ops).toEqual([]);
+    expect(r.reply).toMatch(/Você quis dizer “.+”, “.+” ou “.+”\?/);
+    expect(r.reply.length).toBeLessThan(300);
+  });
+});
