@@ -352,7 +352,8 @@
 .ep-hslide-name { font-size:16px; font-weight:700; margin-top:10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .ep-homebody { max-width:1080px; margin:0 auto; padding:4px 28px 60px; }
 .ep-qa { position:relative; }
-.ep-qa-tag { position:absolute; top:-9px; left:50%; transform:translateX(-50%); z-index:1; }
+.ep-qa-tag { margin:-4px 0 -6px; height:20px; padding:0 9px; font-size:10.5px; }
+.ep-qa:has(.ep-qa-tag) { gap:8px; }
 .ep-home-ai { width:100%; margin-top:24px; }
 .ep-home-ai > svg:last-child { margin-left:auto; opacity:.7; flex:none; }
 .ep-tile-em { font-size:30px; line-height:1; }
@@ -417,7 +418,8 @@
   .ep-hh-top .ep-circle.ep-hh-ai { display:grid; }
   .ep-hh-hello { font-size:20px; }
   .ep-homebody { padding:0 16px calc(150px + env(safe-area-inset-bottom)); }
-  .ep-homecta { display:inline-flex; }
+  .ep-homecta { display:inline-flex; opacity:0; transform:translateY(16px) scale(.96); pointer-events:none; transition:opacity .2s, transform .2s; }
+  .ep-homecta.show { opacity:1; transform:none; pointer-events:auto; }
   .ep-tiles { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .ep-wiz { padding:max(10px, env(safe-area-inset-top)) 14px calc(130px + env(safe-area-inset-bottom)); }
   .ep-wblock { padding:18px 16px; }

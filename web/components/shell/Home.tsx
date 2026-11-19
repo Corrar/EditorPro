@@ -281,11 +281,22 @@ export default function Home({ onStart, onEmpty, onOpen, onTemplate, onTool, onI
   const [tip, setTip] = useState(false);
   const [help, setHelp] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
+  const qaRef = useRef<HTMLDivElement>(null);
+  const [showCta, setShowCta] = useState(false);
   const tplRef = useRef<HTMLHeadingElement>(null);
   const reload = () => listProjects().then(setItems).catch(() => setItems([]));
   useEffect(() => { void reload(); }, [busy]);
   useEffect(() => { if (focusWizard) setWizard(true); }, [focusWizard]);
   useEffect(() => { try { setTip(localStorage.getItem(TIP_KEY) !== '1'); } catch {} }, []);
+
+  // CTA flutuante "Novo vídeo" só depois que as ações rápidas saem da tela (não cobre nada na 1ª dobra)
+  useEffect(() => {
+    const el = qaRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(([e]) => setShowCta(!e.isIntersecting && e.boundingClientRect.top < 0), { threshold: 0 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [wizard]);
 
   const ql = q.trim().toLowerCase();
   const toolHits = useMemo(() => (ql ? TOOLS.filter((t) => t.id !== 'edit' && t.label.toLowerCase().includes(ql)) : []), [ql]);
@@ -330,8 +341,8 @@ export default function Home({ onStart, onEmpty, onOpen, onTemplate, onTool, onI
         )}
 
         <h2 className="ep-h-section">Comece por aqui</h2>
-        <div className="ep-qa-row">
-          <button type="button" className="ep-qa on" onClick={() => setWizard(true)}><span className="ep-tag accent ep-qa-tag">IA</span><span className="ic"><IconSpark size={26} /></span><span className="lb">Novo com IA</span></button>
+        <div className="ep-qa-row" ref={qaRef}>
+          <button type="button" className="ep-qa on" onClick={() => setWizard(true)}><span className="ic"><IconSpark size={26} /></span><span className="ep-tag ep-qa-tag">IA</span><span className="lb">Novo com IA</span></button>
           <button type="button" className="ep-qa" onClick={() => importRef.current?.click()}><span className="ic"><IconUpload size={26} /></span><span className="lb">Importar mídia</span></button>
           <button type="button" className="ep-qa" onClick={() => onTool('audio')}><span className="ic"><IconMic size={26} /></span><span className="lb">Gravar narração</span></button>
           <button type="button" className="ep-qa" onClick={() => tplRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}><span className="ic"><IconLayout size={26} /></span><span className="lb">Modelos</span></button>
@@ -367,7 +378,7 @@ export default function Home({ onStart, onEmpty, onOpen, onTemplate, onTool, onI
           : <ProjectRows items={items} reload={reload} onOpen={onOpen} />}
       </main>
 
-      <button type="button" className="ep-cta accent ep-homecta" onClick={() => setWizard(true)}><IconSpark size={20} /> Novo vídeo</button>
+      <button type="button" className={`ep-cta accent ep-homecta${showCta ? ' show' : ''}`} onClick={() => setWizard(true)} tabIndex={showCta ? 0 : -1} aria-hidden={!showCta}><IconSpark size={20} /> Novo vídeo</button>
       {help && <HelpSheet onClose={() => setHelp(false)} />}
     </div>
   );
