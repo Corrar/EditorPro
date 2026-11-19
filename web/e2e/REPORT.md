@@ -1,0 +1,202 @@
+# Relatório E2E — EditorPro
+
+- Commit: `1f4260e` · 2026-11-19T11:24:13.756Z
+- Alvo: http://localhost:3100 (`next start`, modo demo da IA)
+- Navegador: Chromium 157.0.8103.78 (headless, sem GPU)
+- Perfis: Desktop 1440×900 · Pixel 7 (escuro) · iPhone SE (claro)
+- Duração da rodada: 313 s
+
+## Resumo
+
+| Caso | Desktop 1440×900 | Pixel 7 (escuro) | iPhone SE (claro) |
+|---|---|---|---|
+| 1. Fluxo principal | ✅ ok | ✅ ok | ✅ ok |
+| 2. Reprodução sem tela preta | ✅ ok | ✅ ok | ✅ ok |
+| 2b. Reprodução no editor (pós-IA) | ✅ ok | ✅ ok | ✅ ok |
+| 3. Fluidez (play 5 s) | ✅ ok | ℹ️ info | ℹ️ info |
+| 4. Export | ✅ ok | ✅ ok | ✅ ok |
+| 5. Layout (menus + scroll horizontal) | ✅ ok | ✅ ok | ✅ ok |
+| 6. Cursor da IA | ✅ ok | ✅ ok | ✅ ok |
+| 7. Pop-up da IA | ✅ ok | ✅ ok | ✅ ok |
+| 8. Mídia 4K H.264 | ✅ ok | · | · |
+| 8. Mídia HEVC 1080×1920 | ✅ ok | · | · |
+| 9. FX: efeito 'snow' + transição 'cube-left' | ✅ ok | ✅ ok | ✅ ok |
+| 10. COR: colorGrade gain R −0,4 | ✅ ok | ✅ ok | ✅ ok |
+
+## Detalhes
+
+### 1. Fluxo principal
+
+| Perfil | Resultado | Métricas | Capturas | Observações |
+|---|---|---|---|---|
+| Desktop 1440×900 | ✅ ok | até Pronto (s): 10.5<br>pulou legendas: false<br>pageerrors: 0<br>console.error: 0 | [desktop-wizard.png](shots/desktop-wizard.png)<br>[desktop-pronto.png](shots/desktop-pronto.png) |  |
+| Pixel 7 (escuro) | ✅ ok | até Pronto (s): 6.9<br>pulou legendas: true<br>pageerrors: 0<br>console.error: 0 | [pixel7-wizard.png](shots/pixel7-wizard.png)<br>[pixel7-pronto.png](shots/pixel7-pronto.png) |  |
+| iPhone SE (claro) | ✅ ok | até Pronto (s): 6.8<br>pulou legendas: true<br>pageerrors: 0<br>console.error: 0 | [iphonese-wizard.png](shots/iphonese-wizard.png)<br>[iphonese-pronto.png](shots/iphonese-pronto.png) |  |
+
+### 2. Reprodução sem tela preta
+
+| Perfil | Resultado | Métricas | Capturas | Observações |
+|---|---|---|---|---|
+| Desktop 1440×900 | ✅ ok | pretos play: 0/261<br>pretos cutsPlaying: 0/182<br>pretos cutsPaused: 0/217<br>pretos applyLive: 0/247<br>pretos endOfPlayback: 0/172<br>pretos seekEnd: 0/72<br>held total: 8<br>held play: 0<br>held cutsPlaying: 0<br>held cutsPaused: 0<br>held applyLive: 2<br>held endOfPlayback: 6<br>held seekEnd: 0 | [desktop-harness-play.png](shots/desktop-harness-play.png)<br>[desktop-harness-cuts.png](shots/desktop-harness-cuts.png)<br>[desktop-harness-fim.png](shots/desktop-harness-fim.png) |  |
+| Pixel 7 (escuro) | ✅ ok | pretos play: 0/257<br>pretos cutsPlaying: 0/196<br>pretos cutsPaused: 0/219<br>pretos applyLive: 0/300<br>pretos endOfPlayback: 0/176<br>pretos seekEnd: 0/72<br>held total: 14<br>held play: 0<br>held cutsPlaying: 6<br>held cutsPaused: 0<br>held applyLive: 2<br>held endOfPlayback: 6<br>held seekEnd: 0 | [pixel7-harness-play.png](shots/pixel7-harness-play.png)<br>[pixel7-harness-cuts.png](shots/pixel7-harness-cuts.png)<br>[pixel7-harness-fim.png](shots/pixel7-harness-fim.png) |  |
+| iPhone SE (claro) | ✅ ok | pretos play: 0/258<br>pretos cutsPlaying: 0/204<br>pretos cutsPaused: 0/219<br>pretos applyLive: 0/301<br>pretos endOfPlayback: 0/179<br>pretos seekEnd: 0/72<br>held total: 8<br>held play: 0<br>held cutsPlaying: 1<br>held cutsPaused: 0<br>held applyLive: 2<br>held endOfPlayback: 5<br>held seekEnd: 0 | [iphonese-harness-play.png](shots/iphonese-harness-play.png)<br>[iphonese-harness-cuts.png](shots/iphonese-harness-cuts.png)<br>[iphonese-harness-fim.png](shots/iphonese-harness-fim.png) |  |
+
+### 2b. Reprodução no editor (pós-IA)
+
+| Perfil | Resultado | Métricas | Capturas | Observações |
+|---|---|---|---|---|
+| Desktop 1440×900 | ✅ ok | amostras: 242<br>pretos: 0<br>held: 0<br>p95 draw (ms): 33.5 | [desktop-editor-play.png](shots/desktop-editor-play.png) |  |
+| Pixel 7 (escuro) | ✅ ok | amostras: 242<br>pretos: 0<br>held: 0<br>p95 draw (ms): 33.5 | [pixel7-editor-play.png](shots/pixel7-editor-play.png) |  |
+| iPhone SE (claro) | ✅ ok | amostras: 243<br>pretos: 0<br>held: 0<br>p95 draw (ms): 33.5 | [iphonese-editor-play.png](shots/iphonese-editor-play.png) |  |
+
+### 3. Fluidez (play 5 s)
+
+| Perfil | Resultado | Métricas | Capturas | Observações |
+|---|---|---|---|---|
+| Desktop 1440×900 | ✅ ok | p95 (ms): 48.8<br>p50 (ms): 33.3<br>maior intervalo (ms): 68<br>draws: 149<br>held: 0 |  | meta p95 ≤ 50 ms |
+| Pixel 7 (escuro) | ℹ️ info | p95 (ms): 50<br>p50 (ms): 33.4<br>maior intervalo (ms): 85<br>draws: 148<br>held: 0 |  | meta só p/ desktop (CPU emulada não reflete o aparelho) |
+| iPhone SE (claro) | ℹ️ info | p95 (ms): 50.1<br>p50 (ms): 33.4<br>maior intervalo (ms): 174<br>draws: 142<br>held: 0 |  | meta só p/ desktop (CPU emulada não reflete o aparelho) |
+
+### 4. Export
+
+| Perfil | Resultado | Métricas | Capturas | Observações |
+|---|---|---|---|---|
+| Desktop 1440×900 | ✅ ok | qualidade: fhd<br>tempo (s): 7.7<br>duração: 5.02/5.00 s<br>vídeo: h264 1080×1920<br>áudio: opus -21.1 dB<br>preto (s): 0<br>quadros escuros (Y<20): 0<br>Y mín: 111.4<br>webcodecs: true | [desktop-export-mid.png](shots/desktop-export-mid.png)<br>[desktop-export.mp4](shots/desktop-export.mp4) | obs.: áudio Opus dentro de MP4 (Chromium sem AAC) — ver compatibilidade |
+| Pixel 7 (escuro) | ✅ ok | qualidade: hd<br>tempo (s): 4.8<br>duração: 5.02/5.00 s<br>vídeo: h264 720×1280<br>áudio: opus -21.1 dB<br>preto (s): 0<br>quadros escuros (Y<20): 0<br>Y mín: 111.3<br>webcodecs: true | [pixel7-export-mid.png](shots/pixel7-export-mid.png)<br>[pixel7-export.mp4](shots/pixel7-export.mp4) | obs.: áudio Opus dentro de MP4 (Chromium sem AAC) — ver compatibilidade |
+| iPhone SE (claro) | ✅ ok | qualidade: hd<br>tempo (s): 4.8<br>duração: 5.02/5.00 s<br>vídeo: h264 720×1280<br>áudio: opus -21.1 dB<br>preto (s): 0<br>quadros escuros (Y<20): 0<br>Y mín: 111.3<br>webcodecs: true | [iphonese-export-mid.png](shots/iphonese-export-mid.png)<br>[iphonese-export.mp4](shots/iphonese-export.mp4) | obs.: áudio Opus dentro de MP4 (Chromium sem AAC) — ver compatibilidade |
+
+### 5. Layout (menus + scroll horizontal)
+
+| Perfil | Resultado | Métricas | Capturas | Observações |
+|---|---|---|---|---|
+| Desktop 1440×900 | ✅ ok | menus: 6<br>ok: 3<br>falhas: 0<br>sem pop-up: 0<br>scroll horizontal: não |  | pilula-resolucao:n/a, dialogo-exportar:ok, timeline-mais:ok, timeline-trilha:n/a, timeline-velocidade:ok, ia-fab2:n/a |
+| Pixel 7 (escuro) | ✅ ok | menus: 22<br>ok: 19<br>falhas: 0<br>sem pop-up: 0<br>scroll horizontal: não |  | pilula-resolucao:ok, dialogo-exportar:ok, timeline-mais:ok, preview-mais:ok, ia-fab2:ok, barra-Editar:nível 2, barra-Áudio:nível 2, barra-Texto:nível 2, barra-Efeitos:ok, barra-Legendas:ok, barra-Filtros:ok, barra-Ajustar:ok, barra-Cor:ok, barra-Stickers:ok, barra-Modelos:ok, barra-Gerar com IA:ok, barra-Proporção:ok, barra-Fundo:ok, barra-Transições:ok, barra-Mídia:ok, barra-Revisão:ok, barra-Mais:ok |
+| iPhone SE (claro) | ✅ ok | menus: 22<br>ok: 19<br>falhas: 0<br>sem pop-up: 0<br>scroll horizontal: não |  | pilula-resolucao:ok, dialogo-exportar:ok, timeline-mais:ok, preview-mais:ok, ia-fab2:ok, barra-Editar:nível 2, barra-Áudio:nível 2, barra-Texto:nível 2, barra-Efeitos:ok, barra-Legendas:ok, barra-Filtros:ok, barra-Ajustar:ok, barra-Cor:ok, barra-Stickers:ok, barra-Modelos:ok, barra-Gerar com IA:ok, barra-Proporção:ok, barra-Fundo:ok, barra-Transições:ok, barra-Mídia:ok, barra-Revisão:ok, barra-Mais:ok |
+
+### 6. Cursor da IA
+
+| Perfil | Resultado | Métricas | Capturas | Observações |
+|---|---|---|---|---|
+| Desktop 1440×900 | ✅ ok | amostras: 100<br>visível: 29<br>fora da tela: 0<br>balão fora: 0 |  |  |
+| Pixel 7 (escuro) | ✅ ok | amostras: 65<br>visível: 28<br>fora da tela: 0<br>balão fora: 0 |  |  |
+| iPhone SE (claro) | ✅ ok | amostras: 64<br>visível: 27<br>fora da tela: 0<br>balão fora: 0 |  |  |
+
+### 7. Pop-up da IA
+
+| Perfil | Resultado | Métricas | Capturas | Observações |
+|---|---|---|---|---|
+| Desktop 1440×900 | ✅ ok | variante: chat lateral (desktop)<br>opened: true<br>typed: true<br>sent: true<br>replyMs: 1824<br>cursor: {"polls":18,"seen":18,"out":0,"outs":[],"running":0}<br>edited: true<br>newPronto: false | [desktop-chat-resposta.png](shots/desktop-chat-resposta.png) |  |
+| Pixel 7 (escuro) | ✅ ok | opened: true<br>textarea: true<br>typed: true<br>sent: true<br>replyMs: 1535<br>cursor: {"polls":15,"seen":15,"out":0,"outs":[],"running":0}<br>edited: true<br>minimized: true<br>fabOrBadgeBack: true | [pixel7-popup-aberto.png](shots/pixel7-popup-aberto.png)<br>[pixel7-popup-min.png](shots/pixel7-popup-min.png) |  |
+| iPhone SE (claro) | ✅ ok | opened: true<br>textarea: true<br>typed: true<br>sent: true<br>replyMs: 1537<br>cursor: {"polls":16,"seen":16,"out":0,"outs":[],"running":0}<br>edited: true<br>minimized: true<br>fabOrBadgeBack: true | [iphonese-popup-aberto.png](shots/iphonese-popup-aberto.png)<br>[iphonese-popup-min.png](shots/iphonese-popup-min.png) |  |
+
+### 8. Mídia 4K H.264
+
+| Perfil | Resultado | Métricas | Capturas | Observações |
+|---|---|---|---|---|
+| Desktop 1440×900 | ✅ ok | até Pronto (s): 11.8<br>pretos: 0/212<br>held: 0<br>menor luminância: 125.7<br>pageerrors: 0<br>vídeo decodificado: 720×1280<br>aviso ao usuário: nenhum | [desktop-k4-editor-play.png](shots/desktop-k4-editor-play.png)<br>[desktop-k4-final.png](shots/desktop-k4-final.png) |  |
+
+### 8. Mídia HEVC 1080×1920
+
+| Perfil | Resultado | Métricas | Capturas | Observações |
+|---|---|---|---|---|
+| Desktop 1440×900 | ✅ ok | até Pronto (s): 7.3<br>pretos: 212/212<br>held: 105<br>menor luminância: 0<br>pageerrors: 0<br>vídeo decodificado: 0×0<br>aviso ao usuário: Este aparelho não consegue ler "hevc_1080x1920.mp4" (formato como HEVC/HDR). Grave em H.26 | [desktop-hevc-editor-play.png](shots/desktop-hevc-editor-play.png)<br>[desktop-hevc-final.png](shots/desktop-hevc-final.png) | playheads pretos: +0ms,+16ms,+33ms,+50ms,+67ms |
+
+### 9. FX: efeito 'snow' + transição 'cube-left'
+
+| Perfil | Resultado | Métricas | Capturas | Observações |
+|---|---|---|---|---|
+| Desktop 1440×900 | ✅ ok | pixels mudados pelo efeito (%): 2<br>pretos pausado na transição: 0/3<br>pretos tocando: 0/86<br>modo do preview: canvas<br>export: preto 0 s, escuros 0<br>pageerrors: 0 | [desktop-fx-snow.png](shots/desktop-fx-snow.png)<br>[desktop-fx-cube.png](shots/desktop-fx-cube.png) |  |
+| Pixel 7 (escuro) | ✅ ok | pixels mudados pelo efeito (%): 1.7<br>pretos pausado na transição: 0/3<br>pretos tocando: 0/93<br>modo do preview: canvas<br>export: preto 0 s, escuros 0<br>pageerrors: 0 | [pixel7-fx-snow.png](shots/pixel7-fx-snow.png)<br>[pixel7-fx-cube.png](shots/pixel7-fx-cube.png) |  |
+| iPhone SE (claro) | ✅ ok | pixels mudados pelo efeito (%): 4<br>pretos pausado na transição: 0/3<br>pretos tocando: 0/93<br>modo do preview: canvas<br>export: preto 0 s, escuros 0<br>pageerrors: 0 | [iphonese-fx-snow.png](shots/iphonese-fx-snow.png)<br>[iphonese-fx-cube.png](shots/iphonese-fx-cube.png) |  |
+
+### 10. COR: colorGrade gain R −0,4
+
+| Perfil | Resultado | Métricas | Capturas | Observações |
+|---|---|---|---|---|
+| Desktop 1440×900 | ✅ ok | queda R preview: 48.7<br>queda G preview: -0.2<br>queda R export: 47<br>queda G export: -0.1<br>preview R/G/B: 77.4/129.5/125.1<br>export R/G/B: 80.8/130.9/126.5 | [desktop-cor-gainR.png](shots/desktop-cor-gainR.png) |  |
+| Pixel 7 (escuro) | ✅ ok | queda R preview: 48.8<br>queda G preview: 0.1<br>queda R export: 47<br>queda G export: -0.1<br>preview R/G/B: 78.6/130/124.9<br>export R/G/B: 80.8/130.9/126.5 | [pixel7-cor-gainR.png](shots/pixel7-cor-gainR.png) |  |
+| iPhone SE (claro) | ✅ ok | queda R preview: 47.8<br>queda G preview: 0<br>queda R export: 47.1<br>queda G export: -0.1<br>preview R/G/B: 77.9/130.3/123.9<br>export R/G/B: 80.7/130.9/126.5 | [iphonese-cor-gainR.png](shots/iphonese-cor-gainR.png) |  |
+
+## Como rodar
+
+```
+cd web && npm run build && npm run e2e
+# só alguns: node e2e/run.js --profiles=pixel7 --cases=flow,layout
+```
+
+Critérios: quadro preto = luminância média < 6 e máxima < 24 (0–255) no canvas `[data-ep-preview]` amostrado a cada rAF; `held` = quadros segurados (`__epPreviewStats.held`); fluidez = intervalos entre *draws* do preview (resolução de 1 rAF); export = `blackdetect` (pix_th 0.10, pic_th 0.98, ≥ 0,03 s), `volumedetect` e duração ±0,25 s.
+
+## Bugs encontrados (rodada 5 — `d3e295e`; anteriores: `5c3b0e6`, `48c7e7e`, `71e9ee2`, `70b8304`)
+
+> Rodada 5: regressão 31/32 ok nos 3 perfis; personas 20/20 passos. **Corrigidos:** B1, B2, B3 (menu ⋯ virou bottom-sheet), B4 (aviso na importação), B5, B6, B7, B8.
+> **Ainda presentes:** B9 (importar no desktop) e fluidez p95 no desktop no limite (50,6 ms; oscila 50–56 entre rodadas, maior intervalo 84–134 ms).
+> Fricções restantes em `USABILIDADE.md` (catálogo de músicas, música importada fora da timeline, padrão 1080p vs. "recomendado 720p" no celular, IA demo ignora "música" no brief).
+> Não confirmado: "Desfazer" de edição antiga — a persona P4 só achou 1 botão "Desfazer" (o da última edição) também na conversa completa; precisa checagem manual de onde fica o desfazer das anteriores.
+
+> QA só documenta: nenhum destes foi corrigido aqui. Arquivo:linha é o ponto provável.
+
+### ✅ B1 (corrigido na rodada 3) — Preview fica PRETO ao terminar a reprodução (e ao arrastar a agulha até o fim) · alta
+- **Passos:** abrir qualquer projeto → ▶ e deixar tocar até o fim (ou arrastar o playhead até o final da timeline).
+- **Esperado:** o último quadro fica na tela. **Obtido:** canvas preto (luminância 0) e fica preto até o usuário mexer no playhead.
+- **Evidência:** caso 2, fases `endOfPlayback` e `seekEnd` (harness: 72/72 amostras pretas com `playhead = 5.00 s`, sem fade-out no projeto);
+  caso 8 (4K no app real): toca normal e fica preto a partir de +3,15 s = fim do clipe de 3 s. Capturas `*-harness-fim.png`, `desktop-k4-editor-play.png`.
+- **Causa provável:** no fim, `tick` faz `st.setPlayhead(d)` + `setPlaying(false)` (`components/preview/Preview.tsx:294-299` na rodada 2); a mudança
+  dispara `requestStill()` (`Preview.tsx:178`) que desenha em `t = d`, e o engine só considera clipes com `t < start + duration`
+  (`lib/engine/index.ts:74`, `lib/engine/timing.ts:60`) → nenhum clipe ativo → quadro preto. O `draw(d - 1/fps)` do fim é sobrescrito
+  pelo still. Mesmo efeito com `setPlayhead(duração)` pausado. (Sugestão: desenhar o still em `min(playhead, d - 1/fps)`.)
+- Provável parte das "telas pretas" relatadas pelo Bruno no Android (vídeo curto → chega ao fim toda hora).
+- Rodada 2: confirmado também por captura real da área do preview (luminância 0 com `playhead = 5.00`, modo `canvas`). Dono: **engine**.
+
+### ✅ B2 (corrigido na rodada 5) — Balão do cursor da IA sai pela borda esquerda no celular · média
+- **Passos:** celular (Pixel 7 / iPhone SE) → wizard → "Editar com IA" → observar o balão de explicação do cursor.
+- **Obtido:** balão com `left = -16 px` (Pixel 7, 412 px) e `-21 px` (iPhone SE, 320 px) em ~19 de 28 amostras; texto cortado.
+- **Causa provável:** `components/shell/AiCursor.tsx:144` — `flip` só testa se cabe à direita; ao virar (`right:6px`,
+  `styles/shell.css:641`) não testa se cabe à esquerda. Com o cursor no meio de tela estreita, nenhum dos dois lados cabe
+  (balão até `min(240px, 62vw)`). Precisa limitar/clampar a posição horizontal do balão. Dono: **shell**.
+
+### ✅ B3 (corrigido na rodada 5) — Menu "⋯" do preview sai da tela · alta (piorou na rodada 3)
+- Rodada 3/4: o menu cresceu (Velocidade, Zoom, Repetir, Antes/depois, Grade, Zonas, Mostrar desempenho) e abre para cima sem limite: Pixel 7 top −43 px; iPhone SE top −134 px e direita +7 px; a pílula "IA: N edições feitas" fica por cima. Sem `max-height`/rolagem. Captura `pixel7-menu-preview_mais.png`.
+- **Passos:** iPhone SE (320 px) → editor → faixa sob o vídeo → "⋯ Mais opções".
+- **Obtido:** `.ep-pv-menu` vai de x=54 a x=327 (viewport 320) — "ou toque longo" cortado. Captura `iphonese-menu-preview_mais.png`.
+- **Causa provável:** `styles/preview.css:214` — `left:0` ancorado no botão (que está a ~54 px da borda) + `min-width:260px`;
+  o `max-width: calc(100vw - 24px)` não desconta o deslocamento do botão. Dono: **engine** (preview).
+
+### ✅ B4 (corrigido na rodada 5) — Vídeo que o navegador não decodifica (HEVC) entra calado e fica preto · média
+- **Passos:** wizard com um MP4 HEVC (`hvc1`) num navegador sem HEVC (Chromium do container; Chrome em aparelho sem decodificador HEVC).
+- **Obtido:** "Pronto!", clipe na timeline, miniatura e preview pretos; `videoWidth = 0`. Nenhum aviso ao usuário.
+- **Causa provável:** `lib/media/ingest.ts:163` aceita `videoWidth = 0` (grava `width: undefined`) sem avisar nem tentar alternativa.
+  Vídeos do iPhone costumam ser HEVC. (O proxy de preview — `lib/media/proxy.ts` — ainda não tem `makePreviewProxy` publicado pelo engine,
+  então hoje nenhum proxy é gerado para HEVC/4K.) Rodada 2: o proxy 720p já existe e funciona para o 4K (vídeo decodificado 720×1280),
+  mas o HEVC continua 0×0 e 100% preto (o proxy também precisa decodificar). Dono: **shell** (ingestão) / **export** (proxy).
+
+### ✅ B5 (corrigido na rodada 5) — IA demo não entende o imperativo "corte/tire/remova" · alta (rodada 2, usabilidade P4)
+- **Passos:** pop-up da IA → "corte os primeiros 2 segundos".
+- **Obtido:** resposta com a lista de comandos e nada muda — embora a própria IA sugira "corta os primeiros 2 s".
+- **Causa:** `lib/ai/demo.ts:784-785` aceita só `corta|cortar|tira|tirar|remove|remover|apaga|apagar`. Dono: **ai**.
+
+### ✅ B6 (corrigido na rodada 4) — Sem caminho para aplicar transição no celular · alta (rodada 2, usabilidade P1)
+- **Passos:** celular → barra "Transições" → gaveta diz "Selecione um clipe"; selecionar o clipe troca a barra para a do clipe (Dividir, Velocidade, Volume, Animações…), que não tem "Transições".
+- **Causa provável:** `components/shell/MobileToolbar.tsx:135-170` (itens do clipe sem `transitions`); timeline sem botão entre clipes. Dono: **shell** (+ **timeline**).
+
+### ✅ B7 (corrigido na rodada 4) — Mudar "Escala" com keyframes não cria/atualiza keyframe · alta (rodada 2, usabilidade P2)
+- **Passos:** desktop → selecionar clipe → K em 2 s → cursor em 3 s → Editar › Posição › Escala.
+- **Obtido:** continua 1 keyframe; o slider muda o transform base (sobreposto pelos keyframes): zoom animado só pelo "Zoom punch-in aqui".
+- **Causa provável:** `components/panels/ClipSections.tsx:406` (`setTf` → `patch({ transform })`). Dono: **shell** (painéis).
+
+### ✅ B8 (corrigido na rodada 5) — "Gerar legendas com IA" (gaveta Legendas) pergunta num pop-up que não abre · alta (rodada 2, usabilidade P3)
+- **Passos:** celular → Legendas → "Gerar legendas com IA".
+- **Obtido:** a gaveta continua na frente; só aparece a pílula "IA aguardando você" (a pergunta "Transcrever (~41 MB)?" está no pop-up fechado).
+- **Arquivo provável:** `components/panels/CaptionsTab.tsx` (emite generate-captions) / `components/shell/AiPopupHost.tsx`. Dono: **shell**.
+
+### B9 — Desktop: "Importar" no editor vazio não põe as mídias na timeline · média (rodada 4)
+- **Passos:** desktop → Começar → Abrir editor vazio → Importar → escolher 2 vídeos.
+- **Obtido:** cards "Pronto para editar" na biblioteca; timeline vazia 25 s depois. É preciso passar o mouse em cada card e achar o "+" (title "Adicionar no fim da timeline").
+- **Arquivo provável:** `components/media/MediaBin.tsx` (importFiles) / `lib/media/ingest.ts`. Dono: **shell**. (No celular o seletor "Adicionar mídia" já coloca na timeline.)
+
+### Observações (não são falhas)
+- Export no Chromium sai com **áudio Opus dentro de MP4** (sem encoder AAC). Toca no Chrome/Android; pode não tocar em players
+  do iOS/WhatsApp antigos. Conferir no aparelho real se o Chrome do Android oferece AAC (`AudioEncoder.isConfigSupported`).
+- Fluidez no Chromium headless (sem GPU): p95 ≈ 38–43 ms, dentro da meta no desktop. No celular a CPU não é emulada: métrica só informativa.
+- A suíte de regressão pula a transcrição ("Pular legendas") para ser rápida; a de usabilidade aceita transcrever e o Whisper funciona no container (vídeos de teste sem fala → "Não encontrei fala").
+- Detalhes de usabilidade (tempo, toques, alvos < 44 px, fricções por dono): `USABILIDADE.md`.
+

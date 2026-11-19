@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "e2e": "node e2e/run.js",
+    "e2e:ux": "node e2e/usability.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.10.0",
