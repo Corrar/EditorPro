@@ -372,7 +372,8 @@ describe('grupos', () => {
     const { ops, newIds } = duplicateWithGroups(p, ['t1', 'v1']);
     const q = applyOps(p, ops).project;
     const copies = newIds.map((id) => findClip(q, id)!.clip);
-    expect(copies.map((c) => c.start).sort()).toEqual([5, 6]); // deslocados pela largura do grupo (5s)
+    // deslocamento ≥ largura do grupo (5 s); em 5 s a cópia do vídeo bateria no v2 [8,12] → 1ª posição livre: 12 s
+    expect(copies.map((c) => c.start).sort((a, b) => a - b)).toEqual([12, 13]);
     expect(new Set(copies.map((c) => c.groupId)).size).toBe(1);
     expect(copies[0].groupId).not.toBe('g1');
   });
