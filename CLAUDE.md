@@ -78,7 +78,10 @@
   no quadro), 80 estilos de legenda, IA com catálogo completo + vídeo modelo + cor do modelo (`COLOR_GRADE_LIVE = true`).
 - Contrato corrigido (2026-11-19): split/trim/ripple preservam reverso/curva/keyframes e tiram fades nas bordas do corte;
   applyLive fecha o lote certo com Parar/desfazer/edição manual/troca de projeto (testes em `ops.cuts.test.ts`, `store.test.ts`).
-- Pendências conhecidas: biblioteca (modelos ≥60, fontes ≥60, SFX ≥100, catálogo de músicas), Deliver do export (presets
+- Música (2026-11-19): catálogo de 45 trilhas geradas por código (13 gêneros, −14 LUFS, sem direitos autorais) em Áudio →
+  "Músicas livres" (`components/music/MusicCatalog`); a IA usa o catálogo quando o pedido tem música e não veio arquivo
+  (`lib/ai/catalogMusic.ts`: 1ª edição e chat "coloca/troca a música"). 94 modelos de texto em 12 categorias.
+- Pendências conhecidas: biblioteca (fontes ≥60, SFX ≥100), Deliver do export (presets
   por plataforma, GIF, trecho in/out), transições em shader no modo nativo (pico ~110 ms na troca nativo↔canvas),
   export mais lento com efeitos/cor (passar filtros para WebGL), gestão de projetos/histórico visível (shell).
 - Testes E2E da principal ficam no scratchpad (blink2.js = tela preta por captura real; exp.js; fxcor.js; pvmenu.js…);

@@ -15,6 +15,12 @@ import { VolumeSection } from './ClipSections';
 import { Section, Seg } from './controls';
 import { isSound } from './clipkit';
 import { useSelectedClip } from './hooks';
+import dynamic from 'next/dynamic';
+/* catálogo de músicas geradas por código (sessão "musica"); import dinâmico protegido */
+const MusicCatalog = dynamic(() => import('@/components/music/MusicCatalog').catch(() => ({ default: () => null })), {
+  ssr: false,
+  loading: () => <p className="ep-pnote"><span className="ep-spin xs" /> Carregando músicas…</p>,
+});
 
 function MusicLibrary() {
   const music = useEditor(useShallow((s) => Object.values(s.assets).filter((a) => a.kind === 'audio')));
@@ -126,6 +132,7 @@ export default function AudioTab() {
   return (
     <>
       <Seg value={view} onChange={(v) => useAudioView.setState({ view: v })} options={AUDIO_VIEWS} />
+      <Section title="Músicas livres"><MusicCatalog /></Section>
       <div className="ep-audioacts">
         <button type="button" className="ep-btn primary ep-wide" onClick={() => input.current?.click()}><IconUpload size={16} /> Importar música</button>
         <input ref={input} type="file" hidden multiple accept="audio/*" onChange={(e) => { void importMusic(Array.from(e.target.files ?? [])); e.target.value = ''; }} />

@@ -20,6 +20,7 @@ import { trackSubject } from './reframe';
 import { distributeWords } from './sanitize';
 import { describeStyle, modelRequestText, styleOps, styleScopeFromText, type StyleScope } from './model';
 import { materializeSfx, sanitizeSfxRequests, type SfxRequest } from './library';
+import { backgroundMusicClips, catalogIdOf, catalogMusicOps, chatMusicRequest, needsCatalogMusic, userMusic } from './catalogMusic';
 
 /** acrescenta às ops os AudioClips dos efeitos sonoros pedidos (gera o WAV no aparelho) */
 async function withSfx(ops: EditOp[], sfx: SfxRequest[] | undefined, onStatus?: (s: string) => void): Promise<EditOp[]> {
@@ -272,10 +273,20 @@ export async function runFirstEdit(opts: PipelineOptions & { brief: string }): P
         userText: brief || 'Edite este vídeo de forma profissional.',
       });
       const san = sanitizeOps(res.ops, store().project, store().assets);
-      const ops = await withSfx(san.ops, [...(res.sfx ?? []), ...san.sfx], opts.onStatus);
+      let ops = await withSfx(san.ops, [...(res.sfx ?? []), ...san.sfx], opts.onStatus);
+      let reply = res.reply;
+      // pediu música e não mandou arquivo: faixa do catálogo gerado por código
+      const simC = applyOps(store().project, ops).project;
+      if (needsCatalogMusic(brief, simC, store().assets)) {
+        const m = await catalogMusicOps(brief, simC, { onStatus: opts.onStatus });
+        if (m) {
+          const r = sanitizeOps(m.ops, simC, store().assets);
+          if (r.ops.length) { ops = [...ops, ...r.ops]; reply = `${reply}\nColoquei a música “${m.name}” do catálogo de músicas livres (sem direitos autorais). Para trocar, diga "troca a música" ou escolha outra em Áudio → Músicas livres.`; }
+        }
+      }
       opts.onStatus?.('Editando…');
       const appliedIds = ops.length ? await apply(ops) : [];
-      return { reply: res.reply, ops, appliedIds, provider: 'anthropic' as const, warnings };
+      return { reply, ops, appliedIds, provider: 'anthropic' as const, warnings };
     }
 
     // ----- modo demo -----
@@ -292,6 +303,18 @@ export async function runFirstEdit(opts: PipelineOptions & { brief: string }): P
     const b = norm(brief);
     const fast = /dinamic|rapid|tiktok|reels|shorts|viral/.test(b) || style?.pacing === 'fast' || style?.pacing === 'very-fast';
     let sim = first.project;
+    // pediu música e não mandou arquivo: faixa do catálogo (antes do "na batida", que usa as batidas dela)
+    if (needsCatalogMusic(brief, sim, store().assets)) {
+      const m = await catalogMusicOps(brief, sim, { onStatus: opts.onStatus });
+      if (m) {
+        const r = sanitizeOps(m.ops, sim, store().assets);
+        if (r.ops.length) {
+          ops = [...ops, ...r.ops]; sim = r.project;
+          reply = reply.replace(/\s*Você pediu música, mas não recebi nenhuma trilha[^\n]*?(abaixando na fala\.)/, '').replace(/\nObs\.:\s*$/, '');
+          reply = `${reply}\nColoquei a música “${m.name}” do catálogo de músicas livres (sem direitos autorais).`;
+        }
+      }
+    }
     if ((fast || /vicio|muleta|limp/.test(b)) && !/sem cort/.test(b)) {
       const f = fillerOps(sim);
       if (f.ops.length) {
@@ -495,6 +518,18 @@ async function localFeature(text: string, apply: NonNullable<PipelineOptions['ap
     const appliedIds = clean.length ? await apply(clean) : [];
     return { reply, ops: clean, appliedIds, provider, warnings };
   };
+
+  // pôr/trocar música sem arquivo do usuário → catálogo de músicas geradas por código
+  const musicReq = chatMusicRequest(text);
+  if (musicReq && !userMusic(store().assets).length) {
+    const cur = backgroundMusicClips(store().project, store().assets);
+    const exclude = (await Promise.all(cur.map((c) => catalogIdOf(c.type === 'audio' ? store().assets[c.assetId] : undefined)))).filter((x): x is string => !!x);
+    const removeOps: EditOp[] = cur.map((c) => ({ op: 'remove_clip', clipId: c.id, explain: 'Tirando a música anterior' }));
+    const sim = removeOps.length ? applyOps(store().project, removeOps).project : store().project;
+    opts.onStatus?.('Escolhendo uma música do catálogo…');
+    const m = await catalogMusicOps(text, sim, { exclude, onStatus: opts.onStatus });
+    if (m) return done([...removeOps, ...m.ops], `${cur.length ? 'Troquei a música por' : 'Coloquei a música'} “${m.name}” do catálogo de músicas livres (sem direitos autorais)${store().project.captions.segments.length ? ', baixinha e abaixando na fala' : ''}.`);
+  }
 
   // auto-reframe (rosto/assunto) — no navegador
   if (RE.reframe.test(t)) {
