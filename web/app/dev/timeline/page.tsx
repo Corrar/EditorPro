@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import Timeline from '@/components/timeline/Timeline';
 import { useEditor } from '@/lib/store';
+import { useTimelineUi } from '@/lib/timeline/ui';
 import { on } from '@/lib/events';
 import { applyOps, projectDuration, type EditOp } from '@/lib/ops';
 import { createProject, makeAdjustmentClip, makeAudioClip, makeImageClip, makeShapeClip, makeStickerClip, makeTextClip, makeVideoClip } from '@/lib/defaults';
@@ -153,6 +154,7 @@ export default function TimelineHarness() {
     if (q.get('zoom')) st.setZoom(+q.get('zoom')!);
     setReady(true);
     (window as unknown as { __ep: typeof useEditor }).__ep = useEditor;
+    (window as unknown as { __tlui: typeof useTimelineUi }).__tlui = useTimelineUi;
     return on('ep:toast', (d) => {
       setToast(d.text);
       setTimeout(() => setToast(''), 2200);
