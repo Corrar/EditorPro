@@ -149,7 +149,8 @@ export class OfflineMediaPool implements MediaSources {
           this.byClip.set(clip.id, el);
         }
         const dur = Number.isFinite(el.duration) ? el.duration : asset.duration;
-        const target = Math.max(0, Math.min(time, Math.max(0, dur - 0.001)));
+        // +1 ms: t = i/fps exato às vezes arredonda p/ antes do quadro e o seek mostra o anterior
+        const target = Math.max(0, Math.min(time + 0.001, Math.max(0, dur - 0.001)));
         if (Math.abs(el.currentTime - target) > 0.0005 || el.readyState < 2) {
           await this.seek(el, target);
         }
