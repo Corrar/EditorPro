@@ -110,3 +110,19 @@ describe('rhythmFor / casos sintéticos', () => {
     expect(chunkCaptions([s], 3).map((c) => c.words.length)).toEqual([3, 1]);
   });
 });
+
+describe('ritmo respeita a legenda encurtada/movida (regressão r2 biblioteca #2, igual a textR2.test.ts)', () => {
+  const words = ['a', 'b', 'c', 'd', 'e', 'f'].map((text, i) => ({ id: 'w' + i, text, start: i * 0.5, end: i * 0.5 + 0.4 }));
+  const seg = (start: number, end: number): CaptionSegment => ({ id: 's', start, end, text: 'a b c d e f', words });
+  it('fim puxado para 1,5 s: nada aparece depois de 1,5 s', () => {
+    const ch = chunkCaptionsFor([seg(0, 1.5)], { maxWords: 3 });
+    expect(ch[ch.length - 1].end).toBeLessThanOrEqual(1.5 + 1e-9);
+    for (const c of ch) for (const w of c.words) expect(w.end).toBeLessThanOrEqual(1.5 + 1e-9);
+    expect(ch.flatMap((c) => c.words.map((w) => w.text)).join(' ')).toBe('a b c d e f');
+  });
+  it('início puxado para 2 s: nada aparece antes de 2 s', () => {
+    const ch = chunkCaptionsFor([seg(2, 3)], { maxWords: 3 });
+    expect(ch[0].start).toBeGreaterThanOrEqual(2 - 1e-9);
+    expect(ch[ch.length - 1].end).toBeLessThanOrEqual(3 + 1e-9);
+  });
+});

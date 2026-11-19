@@ -753,7 +753,7 @@ export function planFirstEdit(input: FirstEditInput): DemoResult {
   }
 
   const base = ops.length
-    ? `Pronto! Editei no modo demonstração: ${said.join(', ')}.${said.includes('legendas de exemplo nos trechos de fala') ? ' As legendas são de exemplo (a transcrição foi pulada).' : ''} Me diga o que ajustar (ex.: "legenda maior", "tira o zoom", "corta os primeiros 2 s").`
+    ? `Pronto! Editei no modo demonstração: ${said.join(', ')}.${said.includes('legendas de exemplo nos trechos de fala') ? ' As legendas são de EXEMPLO (só para teste) e não vêm da fala.' : ''} Me diga o que ajustar (ex.: "legenda maior", "tira o zoom", "corta os primeiros 2 s").`
     : Object.values(assets).some((a) => a.role === 'source')
       ? 'Coloquei o material na timeline, mas não achei pausas para cortar nem fala para legendar. Me diga o que fazer (ex.: "deixa mais dinâmico", "corta a cada 2 s", "coloca música animada", "look cinema").'
       : 'Não encontrei nada para editar ainda. Envie o material bruto (vídeo) e descreva o que você quer.';

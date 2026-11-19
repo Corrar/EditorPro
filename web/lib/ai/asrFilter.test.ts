@@ -175,3 +175,19 @@ describe('frase de fim de vídeo sobre música (medido no navegador: "Acompanha 
     expect(filterAsr(words, [{ start: 0, end: 20 }], { duration: 20 }).length).toBe(words.length);
   });
 });
+
+/* frases gravadas (SRT e o que vai para a IA): equilibradas, sem sobra de 1–2 palavras */
+import { wordsToSegments } from './words';
+describe('wordsToSegments equilibra frases longas', () => {
+  const mk = (txt: string, t0: number, step = 0.32) => txt.split(' ').map((t, i) => ({ text: ` ${t}`, timestamp: [t0 + i * step, t0 + i * step + 0.28] as [number, number] }));
+  it('"…me segue para mais receitas." não deixa "receitas." sozinha', () => {
+    const segs = wordsToSegments(mk('Se você gostou, deixa o seu like e me segue para mais receitas.', 1), { duration: 30 });
+    expect(segs.length).toBe(1);
+  });
+  it('frase de 20 palavras quebra na vírgula, com partes de ≥ 3 palavras', () => {
+    const segs = wordsToSegments(mk('Primeiro, separe três ovos, uma xícara de açúcar e duas xícaras de farinha, depois misture tudo muito bem e leve ao forno.', 1), { duration: 30 });
+    expect(segs.length).toBeGreaterThan(1);
+    for (const s of segs) expect(s.words!.length).toBeGreaterThanOrEqual(3);
+    expect(segs[0].text.endsWith(',')).toBe(true);
+  });
+});
