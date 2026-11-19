@@ -15,7 +15,7 @@ import { sourceTime, clipSpeed, trackLayers } from '@/lib/engine/timing';
 import { clipGainAt } from '@/lib/engine/audio';
 import { buildAudioChain, chainKey, needsAudioChain, type FxChain } from '@/lib/engine/audioFx';
 import { nativeGeometry, geometryTransform, geometryClip, layerFilter, type NativePlan } from './hybrid';
-import { driftDecision, frameReady, prerollPlan, warmPosition, type LeadState } from './syncPolicy';
+import { driftDecision, frameReady, prerollPlan, warmPosition, type FrameProof, type LeadState } from './syncPolicy';
 
 /** roteamento de um elemento pelo grafo WebAudio (efeitos de voz / tom) */
 interface Route { source: MediaElementAudioSourceNode; gain: GainNode; chain: FxChain | null; key: string }
@@ -31,6 +31,9 @@ export interface SyncState {
 const MAX_IDLE_PER_ASSET = 3;
 
 type AV = HTMLVideoElement | HTMLAudioElement;
+
+/** opacidade de um <video> fora de cena (imperceptível, mas ainda composto) */
+const HIDDEN = '0.001';
 
 /** URL usada no PREVIEW: o proxy leve (MediaAsset.proxyUrl) quando existe; o export usa a original */
 export function mediaUrl(asset: MediaAsset): string {
@@ -51,6 +54,18 @@ export class LiveMediaPool implements MediaSources {
   private kicks = new WeakMap<AV, number>();
   /** contadores p/ o painel "Mostrar desempenho" */
   readonly stats = { waiting: 0, seeks: 0 };
+  /** último quadro apresentado (requestVideoFrameCallback) e último seeked/loadeddata, por elemento */
+  private presented = new WeakMap<AV, number>();
+  private settledAt = new WeakMap<AV, number>();
+  /** prova de quadro p/ frameReady (undefined = navegador sem rVFC: confia no readyState) */
+  private proof(el: AV): FrameProof | undefined {
+    if (!(el instanceof HTMLVideoElement) || !('requestVideoFrameCallback' in el)) return undefined;
+    return { presented: this.presented.get(el), sinceSettleMs: performance.now() - (this.settledAt.get(el) ?? 0) };
+  }
+  /** o quadro do alvo já pode ir para a tela/canvas? */
+  ready(el: AV, target: Seconds): boolean {
+    return frameReady(el, target, this.proof(el));
+  }
   /** elementos de uma fonte antiga, mantidos visíveis até o substituto apresentar */
   private retiring: AV[] = [];
   private retire(el: AV) {
@@ -94,7 +109,18 @@ export class LiveMediaPool implements MediaSources {
     el.dataset.asset = asset.id;
     el.dataset.url = mediaUrl(asset);
     el.src = mediaUrl(asset);
-    const ping = () => this.onFrame();
+    const ping = () => { this.settledAt.set(el, performance.now()); this.onFrame(); };
+    // Android: 'seeked' pode vir antes do quadro estar disponível; o rVFC confirma o quadro real
+    if (el instanceof HTMLVideoElement && 'requestVideoFrameCallback' in el) {
+      const v = el as HTMLVideoElement;
+      const onVf = (_now: number, md: VideoFrameCallbackMetadata) => {
+        const first = !this.presented.has(v);
+        this.presented.set(v, md.mediaTime);
+        if (first || v.paused) this.onFrame(); // pausado: redesenha com o quadro de verdade
+        if (v.isConnected) v.requestVideoFrameCallback(onVf);
+      };
+      v.requestVideoFrameCallback(onVf);
+    }
     el.addEventListener('seeked', ping);
     el.addEventListener('waiting', () => { this.stats.waiting++; });
     el.addEventListener('seeking', () => { this.stats.seeks++; });
@@ -163,6 +189,9 @@ export class LiveMediaPool implements MediaSources {
   private seek(el: AV, to: Seconds, now: number) {
     el.currentTime = to;
     this.kicks.set(el, now);
+    // até o 'seeked' (se ele nunca vier, a carência vence em ~2,4 s e não trava o preview)
+    this.settledAt.set(el, now + 2000);
+    this.presented.delete(el);
   }
 
   private play(el: AV, now: number) {
@@ -249,7 +278,7 @@ export class LiveMediaPool implements MediaSources {
       }
       // conferido DEPOIS do play/seek: um seek recém-pedido derruba o readyState na hora;
       // conferir antes deixava desenhar com o vídeo sem quadro (tela preta após cada corte)
-      if (clip.type === 'video' && el instanceof HTMLVideoElement && !frameReady(el, target)) pending = true;
+      if (clip.type === 'video' && el instanceof HTMLVideoElement && !this.ready(el, target)) pending = true;
     }
     // pré-carga: o próximo clipe ganha elemento próprio, pausado no ponto de entrada
     if (playing) {
@@ -364,7 +393,7 @@ export class LiveMediaPool implements MediaSources {
       const els: HTMLVideoElement[] = [];
       for (const l of plan.layers) {
         const el = this.byClip.get(l.clip.id);
-        if (!(el instanceof HTMLVideoElement) || el.readyState < 2 || !el.videoWidth) return false;
+        if (!(el instanceof HTMLVideoElement) || !el.videoWidth || !this.ready(el, sourceTime(l.clip, t))) return false;
         els.push(el);
       }
       plan.layers.forEach((l, i) => {
@@ -383,7 +412,8 @@ export class LiveMediaPool implements MediaSources {
         show.add(el);
       });
     }
-    const hide = (e: AV) => { if (!show.has(e as HTMLVideoElement) && e instanceof HTMLVideoElement && e.style.opacity !== '0') e.style.opacity = '0'; };
+    // 'escondido' = 0.001, não 0: camada continua no compositor (rVFC segue confirmando quadros)
+    const hide = (e: AV) => { if (!show.has(e as HTMLVideoElement) && e instanceof HTMLVideoElement && e.style.opacity !== HIDDEN) e.style.opacity = HIDDEN; };
     this.byClip.forEach(hide);
     this.idle.forEach((l) => l.forEach(hide));
     this.shown = show.size ? [...show].at(-1)! : null;
