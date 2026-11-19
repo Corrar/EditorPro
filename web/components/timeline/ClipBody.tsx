@@ -6,7 +6,6 @@ import { thumbIndexAt, waveformSlice } from '@/lib/timeline/edit';
 import { clipBadges } from '@/lib/timeline/clip';
 import { IAudio, ICaptions, IChroma, IImage, IMask, IMute, IReverse, IShape, ISliders, ISparkle, ISticker, IText, IVideo } from './icons';
 
-const MAX_TILES = 360;
 
 function hash(s: string): number {
   let h = 2166136261;
@@ -28,31 +27,42 @@ function fakePeaks(seed: string, n: number): number[] {
   return out;
 }
 
+/** nº de miniaturas em potência de 2 (zooms próximos reaproveitam o mesmo DOM; cada uma ocupa 1/n da largura) */
+export function thumbCount(width: number, tileW: number): number {
+  const ideal = Math.max(1, width / Math.max(1, tileW));
+  return Math.max(1, Math.min(256, Math.pow(2, Math.round(Math.log2(ideal)))));
+}
+
+const ThumbTiles = memo(function ThumbTiles({ count, srcs }: { count: number; srcs: string }) {
+  const list = srcs.split('\n');
+  const tiles = [];
+  for (let i = 0; i < count; i++) {
+    const src = list[i] || list[0];
+    tiles.push(<span key={i} className="ep-tl-tile" style={{ width: `${100 / count}%`, backgroundImage: src ? `url("${src}")` : undefined }} />);
+  }
+  return <div className="ep-tl-thumbs">{tiles}</div>;
+});
+
 function Thumbs({ clip, asset, width, height }: { clip: Extract<Clip, { type: 'video' | 'image' }>; asset?: MediaAsset; width: number; height: number }) {
   const thumbs = asset?.thumbnails ?? [];
   const still = clip.type === 'image' ? thumbs[0] ?? asset?.url : undefined;
   const ratio = asset?.width && asset?.height ? asset.width / asset.height : 9 / 16;
-  let tileW = Math.max(28, Math.round(height * ratio));
-  if (width / tileW > MAX_TILES) tileW = Math.ceil(width / MAX_TILES);
-  const count = Math.max(1, Math.ceil(width / tileW));
-
+  const tileW = Math.max(28, Math.round(height * ratio));
+  const count = thumbCount(width, tileW);
   if (!thumbs.length && !still) return <div className="ep-tl-film" />;
-
-  const tiles = [];
+  // fontes das miniaturas como string estável (memo do mosaico só muda quando count/trecho mudam)
+  const srcs: string[] = [];
   for (let i = 0; i < count; i++) {
-    let src = still;
-    if (!src && clip.type === 'video') {
-      const tTimeline = ((i + 0.5) * tileW) / Math.max(width, 1) * clip.duration;
-      const srcT = clip.in + tTimeline * (clip.speed || 1);
-      src = thumbs[thumbIndexAt(srcT, asset?.duration ?? 0, thumbs.length)];
-    }
-    tiles.push(<span key={i} className="ep-tl-tile" style={{ width: tileW, backgroundImage: src ? `url("${src}")` : undefined }} />);
+    if (still) { srcs.push(still); continue; }
+    const srcT = clip.type === 'video' ? clip.in + ((i + 0.5) / count) * clip.duration * (clip.speed || 1) : 0;
+    srcs.push(thumbs[thumbIndexAt(srcT, asset?.duration ?? 0, thumbs.length)] ?? '');
   }
-  return <div className="ep-tl-thumbs">{tiles}</div>;
+  return <ThumbTiles count={count} srcs={srcs.join('\n')} />;
 }
 
 function Wave({ clip, asset, width }: { clip: Extract<Clip, { type: 'audio' | 'video' }>; asset?: MediaAsset; width: number }) {
-  const buckets = Math.max(4, Math.min(1200, Math.floor(width / 3)));
+  // potência de 2: o desenho é reaproveitado entre zooms próximos (o SVG estica)
+  const buckets = Math.pow(2, Math.max(3, Math.min(10, Math.round(Math.log2(Math.max(8, width / 3))))));
   const real = !!asset?.waveform?.length;
   const peaks = useMemo(() => {
     if (real && asset?.waveform) return waveformSlice(asset.waveform, asset.duration, clip.in, clip.duration * (clip.speed || 1), buckets);

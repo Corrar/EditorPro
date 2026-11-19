@@ -327,3 +327,13 @@ describe('batidas e marcadores', () => {
     expect(markerSnapPoints(p, {}, ['mk1'])).toEqual([]);
   });
 });
+
+describe('virtualização', () => {
+  it('visibleWindow cobre a tela + 1 tela de cada lado, em segundos', async () => {
+    const { visibleWindow } = await import('./ui');
+    expect(visibleWindow(0, 1000, 184, 100)).toEqual([0, 20]);
+    const [a, b] = visibleWindow(3, 1000, 184, 100);
+    expect(a).toBeCloseTo((2000 - 184) / 100);
+    expect(b).toBe(50);
+  });
+});

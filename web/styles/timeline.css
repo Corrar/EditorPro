@@ -502,3 +502,9 @@
 @container ep-tl (max-width: 960px) {
   .ep-tl-bar:not(.compact) .ep-tl-time > span { display: none; } /* só o tempo atual */
 }
+
+/* ---------- prévia de zoom (gesto contínuo): estica trilhas/régua por transform, sem render ---------- */
+.ep-tl.zooming .ep-tl-lane, .ep-tl.zooming .ep-tl-scale { will-change: transform; }
+.ep-tl.zooming .ep-tl-lane { transition: none; }
+.ep-tl.zooming .ep-tl-pline, .ep-tl.zooming .ep-tl-phead, .ep-tl.zooming .ep-tl-mline, .ep-tl.zooming .ep-tl-range,
+.ep-tl.zooming .ep-tl-snapline, .ep-tl.zooming .ep-tl-kf, .ep-tl.zooming .ep-tl-thandle, .ep-tl.zooming .ep-tl-tick { visibility: hidden; }

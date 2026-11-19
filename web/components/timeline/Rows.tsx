@@ -4,7 +4,7 @@ import { memo, useEffect, useRef, useState } from 'react';
 import type { Clip, Project, Track, TrackKind } from '@/lib/types';
 import { useEditor } from '@/lib/store';
 import { findClip } from '@/lib/ops';
-import { type RowInfo, useDims, useTimelineUi } from '@/lib/timeline/ui';
+import { type RowInfo, useDims, useTimelineUi, useVisibleWindow } from '@/lib/timeline/ui';
 import { assetOf } from '@/lib/timeline/clip';
 import { keyframesOf } from '@/lib/timeline/keyframes';
 import { ClipView } from './ClipView';
@@ -135,10 +135,11 @@ function CaptionHeader({ height }: { height: number }) {
 /* ---------------- faixas ---------------- */
 
 function TrackLaneInner({ track, zoom, height, width }: { track: Track; zoom: number; height: number; width: number }) {
+  const [w0, w1] = useVisibleWindow(zoom);
   const hint = useTimelineUi((s) => s.dropHint?.rowId === track.id || (s.drag?.mode === 'move' && s.drag.trackId === track.id && !s.drag.newTrack));
   return (
     <div className={`ep-tl-lane k-${track.kind}${track.hidden ? ' hidden' : ''}${track.locked ? ' locked' : ''}${hint ? ' hint' : ''}`} style={{ width, height }} data-row={track.id}>
-      {track.clips.map((c) => (
+      {track.clips.filter((c) => c.start <= w1 && c.start + c.duration >= w0).map((c) => (
         <ClipView key={c.id} clip={c} kind={track.kind} zoom={zoom} height={height} locked={!!track.locked} />
       ))}
     </div>
@@ -147,13 +148,15 @@ function TrackLaneInner({ track, zoom, height, width }: { track: Track; zoom: nu
 const TrackLane = memo(TrackLaneInner);
 
 function CaptionLane({ zoom, height, width }: { zoom: number; height: number; width: number }) {
-  const segs = useEditor((s) => s.project.captions.segments);
+  const allSegs = useEditor((s) => s.project.captions.segments);
+  const [w0, w1] = useVisibleWindow(zoom);
+  const segs = allSegs.filter((s) => s.start <= w1 && s.end >= w0);
   const enabled = useEditor((s) => s.project.captions.enabled);
   const sel = useTimelineUi((s) => s.captionSel);
   const drag = useTimelineUi((s) => (s.drag && s.drag.mode.startsWith('cap') ? (s.drag as { id: string; start: number; end: number }) : null));
   return (
     <div className={`ep-tl-lane k-captions${enabled ? '' : ' hidden'}`} style={{ width, height }} data-row="captions">
-      {!segs.length && <span className="ep-tl-lanehint">Sem legendas — gere pelo painel Legendas ou peça no chat</span>}
+      {!allSegs.length && <span className="ep-tl-lanehint">Sem legendas — gere pelo painel Legendas ou peça no chat</span>}
       {segs.map((s) => {
         const st = drag?.id === s.id ? drag.start : s.start;
         const en = drag?.id === s.id ? drag.end : s.end;
