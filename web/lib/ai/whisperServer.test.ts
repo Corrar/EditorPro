@@ -69,3 +69,17 @@ describe('serverChunks', () => {
     await expect(serverChunks(audio, jobs, { signal: ctrl.signal }, { fetch: fakeFetch({ 3: ['ok'], 4: ['ok'], 5: ['ok'], 6: ['ok'] }, {}), sleep: async () => {} })).rejects.toThrow(/cancelada/);
   });
 });
+
+import { wordsToSegments } from './words';
+describe('frases sem sobra solta', () => {
+  const mk = (txt: string, t0 = 0, step = 0.3) => txt.split(' ').map((w, i) => ({ text: ` ${w}`, timestamp: [t0 + i * step, t0 + i * step + 0.25] as [number, number] }));
+  it('frase longa quebra na vírgula e não deixa 1 palavra sozinha no fim', () => {
+    const segs = wordsToSegments(mk('Se você gostou, deixe o seu like e me segue para mais receitas.'), { duration: 10, maxWords: 12, maxDur: 6, pauseGap: 0.45 });
+    expect(segs.every((s) => s.text.split(' ').length >= 3)).toBe(true);
+    expect(segs.map((s) => s.text).join(' ')).toBe('Se você gostou, deixe o seu like e me segue para mais receitas.');
+  });
+  it('quebra no ponto bom da 2ª metade', () => {
+    const segs = wordsToSegments(mk('Primeiro, separe três ovos, uma xícara de açúcar e duas xícaras de farinha.'), { duration: 10, maxWords: 12, maxDur: 6, pauseGap: 0.45 });
+    expect(segs.some((s) => s.text.split(' ').length <= 2)).toBe(false);
+  });
+});

@@ -37,13 +37,39 @@ export function wordsToSegments(chunks: WhisperChunk[], opts: { duration: number
     segs.push({ start: cur[0].start, end: cur[cur.length - 1].end, text: cur.map((w) => w.text).join(' '), words: cur });
     cur = [];
   };
+  /** frase longa demais: quebra no MELHOR ponto da segunda metade (vírgula > maior pausa), não onde o limite bateu */
+  const splitLong = () => {
+    const n = cur.length;
+    let best = -1;
+    let bestScore = -Infinity;
+    // cabeça e rabo com ≥2 palavras; vírgula e pausa valem, desequilíbrio pesa; nunca quebra depois de artigo/preposição/número
+    for (let i = 1; i < n - 2; i++) {
+      const pause = cur[i + 1].start - cur[i].end;
+      const glue = /^(o|a|os|as|um|uma|de|da|do|das|dos|em|no|na|nos|nas|e|ou|que|com|por|para|pra|ao|à|\d+)$/i.test(cur[i].text.replace(/[^\p{L}\d]/gu, ''));
+      const score = (/[,;:—–]$/.test(cur[i].text) ? 1.2 : 0) + Math.min(1, pause / 0.3) - 1.2 * Math.abs((i + 1) / n - 0.5) - (glue ? 1.5 : 0);
+      if (score > bestScore) { bestScore = score; best = i; }
+    }
+    if (best < 0) return flush();
+    const rest = cur.slice(best + 1);
+    cur = cur.slice(0, best + 1);
+    flush();
+    cur = rest;
+  };
   for (const w of words) {
     const last = cur[cur.length - 1];
-    if (last && (w.start - last.end > gap || cur.length >= maxWords || w.end - cur[0].start > maxDur)) flush();
+    if (last && w.start - last.end > gap) flush();
+    else if (last && (cur.length >= maxWords || w.end - cur[0].start > maxDur)) splitLong();
     cur.push(w);
     if (/[.!?…]$/.test(w.text)) flush();
   }
   flush();
+  // sobra de 1–2 palavras colada na frase anterior (sem pausa entre elas) → junta: nada de "receitas." sozinha
+  for (let i = segs.length - 1; i > 0; i--) {
+    const a = segs[i - 1], b = segs[i];
+    if (b.words.length > 2 || /[.!?…]$/.test(a.text) || b.start - a.end > gap) continue;
+    if (a.words.length + b.words.length > maxWords + 3 || b.end - a.start > maxDur + 2) continue;
+    segs.splice(i - 1, 2, { start: a.start, end: b.end, text: `${a.text} ${b.text}`, words: [...a.words, ...b.words] });
+  }
   return sanitizeTranscript({ segments: segs }, { duration: opts.duration, maxSegment: maxDur + 2, maxWordsPerSegment: maxWords + 3 });
 }
 
