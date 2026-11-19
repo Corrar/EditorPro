@@ -425,6 +425,8 @@ export interface Project {
   /** fundo quando a mídia não preenche o quadro (CapCut: "Tela de fundo") */
   canvas?: { type: 'color' | 'blur' | 'image'; color?: string; blur?: number; assetId?: Id };
   markers?: Marker[];
+  /** tempo do quadro usado como capa/thumbnail (CapCut: "Capa") */
+  coverTime?: Seconds;
   style?: StyleProfile;
   createdAt: number;
   updatedAt: number;
