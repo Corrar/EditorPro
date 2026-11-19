@@ -48,6 +48,21 @@ export function segmentWords(seg: CaptionSegment): { text: string; start: Second
 const SENTENCE_END = /[.!?…]["')\]]*$/;
 
 /**
+ * Palavras com tempo (Whisper) que escapam de [seg.start, seg.end] — o usuário encurtou/moveu a legenda
+ * pelos puxadores ou pelos campos Início/Fim, que só mudam start/end — são reescaladas linearmente
+ * para dentro do intervalo. Só no desenho: os tempos gravados (usados p/ cortar a mídia) não mudam.
+ */
+export function fitWordsToSegment<T extends { start: Seconds; end: Seconds }>(words: T[], seg: { start: Seconds; end: Seconds }): T[] {
+  if (!words.length) return words;
+  const a = words[0].start, b = words[words.length - 1].end;
+  const eps = 1e-3;
+  if (a >= seg.start - eps && b <= seg.end + eps) return words;
+  const span = Math.max(1e-6, b - a), target = Math.max(0, seg.end - seg.start);
+  const map = (t: Seconds) => seg.start + ((t - a) / span) * target;
+  return words.map((w) => ({ ...w, start: map(w.start), end: Math.max(map(w.start), map(w.end)) }));
+}
+
+/**
  * Agrupa as palavras de cada segmento em blocos de até maxWords (quebra também
  * em fim de frase). Cada bloco vai do início da 1ª palavra até o início do
  * próximo bloco do mesmo segmento (o último vai até o fim do segmento), para
@@ -59,7 +74,7 @@ export function chunkCaptions(segments: CaptionSegment[], maxWords: number): Cap
   const sorted = [...segments].sort((a, b) => a.start - b.start);
   for (const seg of sorted) {
     const emph = new Set((seg.emphasis ?? []).map(normWord).filter(Boolean));
-    const words = segmentWords(seg).map((w) => ({ ...w, emphasis: emph.has(normWord(w.text)) }));
+    const words = fitWordsToSegment(segmentWords(seg), seg).map((w) => ({ ...w, emphasis: emph.has(normWord(w.text)) }));
     const groups: ChunkWord[][] = [];
     let cur: ChunkWord[] = [];
     for (const w of words) {
@@ -70,12 +85,13 @@ export function chunkCaptions(segments: CaptionSegment[], maxWords: number): Cap
       }
     }
     if (cur.length) groups.push(cur);
-    const segEnd = Math.max(seg.end, words.length ? words[words.length - 1].end : seg.end);
+    // o fim é o do segmento (antes: max com a última palavra → encurtar o fim não mudava nada)
+    const segEnd = seg.end;
     groups.forEach((g, i) => {
       const next = groups[i + 1];
       out.push({
         segmentId: seg.id,
-        start: g[0].start,
+        start: i === 0 ? Math.max(seg.start, Math.min(g[0].start, segEnd)) : g[0].start,
         end: next ? next[0].start : segEnd,
         words: g,
       });

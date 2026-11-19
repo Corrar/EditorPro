@@ -127,9 +127,21 @@ export function unitFx(anim: TextAnimation, kind: UnitKind, i: number, count: nu
 }
 
 /** índices globais de letra: offset inicial de cada palavra (sem contar espaços) */
+/** separa em grafemas (❤️, 👍🏽, 👨‍👩‍👧, 🇧🇷 = 1 letra cada); sem Intl.Segmenter cai em code points */
+const segmenter: { segment(s: string): Iterable<{ segment: string }> } | null =
+  typeof Intl !== 'undefined' && 'Segmenter' in Intl
+    ? new (Intl as unknown as { Segmenter: new (l?: string, o?: { granularity: string }) => { segment(s: string): Iterable<{ segment: string }> } }).Segmenter(undefined, { granularity: 'grapheme' })
+    : null;
+export function graphemes(s: string): string[] {
+  if (!s) return [];
+  // atalho: só ASCII/latim sem marcas combinantes → 1 code unit por letra
+  if (!/[^\u0000-\u02FF]/.test(s)) return s.split('');
+  return segmenter ? Array.from(segmenter.segment(s), (x) => x.segment) : [...s];
+}
+
 export function charOffsets(words: string[]): number[] {
   const out: number[] = [];
   let acc = 0;
-  for (const w of words) { out.push(acc); acc += [...w].length; }
+  for (const w of words) { out.push(acc); acc += graphemes(w).length; }
   return out;
 }
