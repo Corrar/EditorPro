@@ -1,3 +1,4 @@
+import { placeAtPoint } from './floating';
 import { describe, expect, it } from 'vitest';
 import { collectSnapPoints, nearestPoint, snapSpan, snapThreshold, snapTime } from './snap';
 import {
@@ -383,5 +384,31 @@ describe('capa', () => {
     const q = applyOps(p, [{ op: 'set_project', patch: { coverTime: 3 } }, { op: 'remove_marker', markerId: 'cover' }]).project;
     expect(q.coverTime).toBe(3);
     expect(q.markers?.some((m) => m.id === 'cover')).toBe(false);
+  });
+});
+
+describe('placeAtPoint (menus flutuantes)', () => {
+  const view = { width: 390, height: 664 };
+  it('abre abaixo do ponto quando cabe', () => {
+    expect(placeAtPoint(100, 100, 240, 300, view)).toEqual({ top: 100, left: 100, maxH: 556 });
+  });
+  it('abre acima quando não cabe abaixo', () => {
+    const b = placeAtPoint(100, 600, 240, 300, view);
+    expect(b.top).toBe(300);
+    expect(b.top + 300).toBeLessThanOrEqual(664 - 8);
+  });
+  it('sem espaço suficiente: ocupa a altura visível com rolagem', () => {
+    const b = placeAtPoint(100, 330, 240, 900, view);
+    expect(b.top).toBeGreaterThanOrEqual(8);
+    expect(b.top + b.maxH).toBeLessThanOrEqual(664 - 8 + 0.01);
+  });
+  it('lado pequeno demais (<220px) vira tela cheia', () => {
+    expect(placeAtPoint(10, 200, 240, 600, { width: 390, height: 400 })).toEqual({ top: 8, left: 10, maxH: 384 });
+  });
+  it('nunca passa da borda direita e respeita o deslocamento do visualViewport', () => {
+    const b = placeAtPoint(380, 100, 240, 100, { ...view, offsetLeft: 0, offsetTop: 50 });
+    expect(b.left).toBe(390 - 240 - 8);
+    expect(b.top).toBe(100);
+    expect(placeAtPoint(380, 100, 500, 100, view).left).toBe(8);
   });
 });

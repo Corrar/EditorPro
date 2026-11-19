@@ -12,6 +12,8 @@ import { useEditor } from '@/lib/store';
 import { emit } from '@/lib/events';
 import { useAIBridge } from '@/lib/ai/bridge';
 import { FastButton } from './FastButton';
+import AttachMenu, { filesFromTransfer } from './AttachMenu';
+import { ModelActions, ModelAttachment, ModelChip } from './ModelBits';
 import { useAIChat, type RunState } from '@/lib/ai/chatStore';
 import type { ChatMessage } from '@/lib/types';
 
@@ -84,6 +86,7 @@ function AssistantBubble({ m, run, canUndo, onUndo, onAnswer, onSkip }: { m: Cha
         ) : null}
         {run ? <Steps run={run} /> : null}
         {m.text ? <p className="ep-ch-text">{m.text}</p> : null}
+        {run?.model && run.done && !run.error ? <ModelActions assetId={run.model.assetId} /> : null}
         {canUndo ? (
           <button className="ep-ch-undo" onClick={onUndo}>
             <Icon name="undo" size={13} /> Desfazer esta edição
@@ -106,7 +109,8 @@ export default function ChatPanel() {
   const [text, setText] = useState('');
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [pending, setPending] = useState<File[]>([]);
+  const [dragging, setDragging] = useState(false);
 
   useEffect(() => { loadStatus(); }, [loadStatus]);
 
@@ -143,19 +147,30 @@ export default function ChatPanel() {
     send(v);
   };
 
-  const onFiles = (list: FileList | null) => {
-    const files = list ? Array.from(list) : [];
+  const onMedia = (files: File[]) => {
     if (!files.length) return;
     emit('ep:attach-files', { files });
     useEditor.getState().pushMessage({ role: 'user', text: `📎 ${files.map((f) => f.name).join(', ')}`, status: 'done' });
-    if (fileRef.current) fileRef.current.value = '';
   };
+  const onModel = (files: File[]) => {
+    const said = text;
+    setText('');
+    useAIChat.getState().attachModel(files, said);
+  };
+  // arrastar/colar arquivos no chat abre o mesmo menu (modelo × mídia)
+  const dropProps = {
+    onDragOver: (e: React.DragEvent) => { if (Array.from(e.dataTransfer.types).includes('Files')) { e.preventDefault(); setDragging(true); } },
+    onDragLeave: (e: React.DragEvent) => { if (e.currentTarget === e.target) setDragging(false); },
+    onDrop: (e: React.DragEvent) => { const f = filesFromTransfer(e.dataTransfer); setDragging(false); if (f.length) { e.preventDefault(); setPending(f); } },
+  };
+  const onPaste = (e: React.ClipboardEvent) => { const f = filesFromTransfer(e.clipboardData); if (f.length) { e.preventDefault(); setPending(f); } };
 
   const claude = status?.configured;
   const empty = messages.length === 0;
 
   return (
-    <div className="ep-ch">
+    <div className={`ep-ch${dragging ? ' dragging' : ''}`} {...dropProps}>
+      {dragging ? <div className="ep-ch-drop"><Icon name="attach" size={22} /> Solte para anexar</div> : null}
       <header className="ep-ch-head">
         <div className="ep-aicard ep-ch-aicard">
           <div className="spark"><Icon name="ai" size={20} /></div>
@@ -176,6 +191,7 @@ export default function ChatPanel() {
             {status ? (claude ? 'Claude' : 'Demo') : '…'}
           </span>
         </div>
+        <ModelChip />
       </header>
 
       <div className="ep-ch-list" ref={listRef}>
@@ -197,6 +213,7 @@ export default function ChatPanel() {
                 <div key={m.id} className="ep-ch-msg me">
                   <div className="ep-ch-bubble">
                     {m.context ? <span className="ep-ch-ctxtag"><Icon name="point" size={11} /> {m.context.label}</span> : null}
+                    {m.attachments?.length ? <ModelAttachment ids={m.attachments} /> : null}
                     {m.text}
                   </div>
                 </div>
@@ -238,11 +255,9 @@ export default function ChatPanel() {
           ))}
         </div>
         <div className={`ep-ch-input${busy ? ' busy' : ''}`}>
-          <button className="ep-ch-attach" title="Anexar mídia" aria-label="Anexar mídia" onClick={() => fileRef.current?.click()}>
-            <Icon name="attach" size={17} />
-          </button>
-          <input ref={fileRef} type="file" multiple accept="video/*,audio/*,image/*" hidden onChange={(e) => onFiles(e.target.files)} />
+          <AttachMenu onModel={onModel} onMedia={onMedia} pending={pending} onPendingDone={() => setPending([])} />
           <textarea
+            onPaste={onPaste}
             ref={inputRef}
             rows={1}
             value={text}

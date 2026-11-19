@@ -7,6 +7,7 @@ import { useTimelineUi } from '@/lib/timeline/ui';
 import { beatTimes } from '@/lib/timeline/edit';
 import { MARKER_COLORS, addMarker, askAiAboutRange } from '@/lib/timeline/actions';
 import { formatTime } from '@/lib/util';
+import { useFloatAt } from '@/lib/timeline/floating';
 import { IAsk, IComment, IFlag, ITrash } from './icons';
 
 /* ---------------- na régua ---------------- */
@@ -112,10 +113,6 @@ function useOutsideClose(open: boolean, ref: React.RefObject<HTMLElement>, close
   }, [open, ref, close, ignoreSel]);
 }
 
-function place(x: number, y: number, w: number, h: number) {
-  return { left: Math.max(8, Math.min(x - 16, window.innerWidth - w - 8)), top: Math.max(8, Math.min(y, window.innerHeight - h - 8)) };
-}
-
 export function MarkerPop() {
   const pop = useTimelineUi((s) => s.markerPop);
   const setUi = useTimelineUi((s) => s.set);
@@ -132,12 +129,13 @@ export function MarkerPop() {
     setUi({ markerPop: null });
   };
   useOutsideClose(!!pop, ref, close, '[data-marker-id]');
+  const floatStyle = useFloatAt(ref, !!pop && !!marker, pop?.x ?? 0, pop?.y ?? 0, -16, [pop, marker?.kind]);
   if (!pop || !marker) return null;
   const kind = marker.kind ?? 'user';
   const isComment = kind === 'comment';
   const upd = (patch: Partial<Marker>) => dispatch({ op: 'update_marker', markerId: marker.id, patch });
   return (
-    <div ref={ref} className="ep-tl-menu ep-tl-mpop" style={place(pop.x, pop.y, 270, 260)} role="dialog" aria-label={isComment ? 'Comentário de revisão' : 'Marcador'}>
+    <div ref={ref} className="ep-tl-menu ep-tl-mpop" style={floatStyle} role="dialog" aria-label={isComment ? 'Comentário de revisão' : 'Marcador'}>
       <div className="ep-tl-menuhead">
         {isComment ? <IComment size={12} /> : <IFlag size={12} />} {isComment ? 'Comentário' : 'Marcador'} · {formatTime(marker.t, { decimals: true })}
         {marker.end != null && `–${formatTime(marker.end, { decimals: true })}`}
@@ -203,10 +201,11 @@ export function RangePop() {
   const setUi = useTimelineUi((s) => s.set);
   const ref = useRef<HTMLDivElement>(null);
   useOutsideClose(!!pop, ref, () => setUi({ rangePop: null }), '.ep-tl-scale');
+  const floatStyle = useFloatAt(ref, !!pop && !!range, pop?.x ?? 0, pop?.y ?? 0, -16, [pop]);
   if (!pop || !range) return null;
   const run = (fn: () => void) => () => { fn(); setUi({ rangePop: null }); };
   return (
-    <div ref={ref} className="ep-tl-menu" style={place(pop.x, pop.y, 240, 220)} role="menu">
+    <div ref={ref} className="ep-tl-menu" style={floatStyle} role="menu">
       <div className="ep-tl-menuhead">Trecho {formatTime(range.start, { decimals: true })}–{formatTime(range.end, { decimals: true })}</div>
       <button role="menuitem" onClick={run(() => askAiAboutRange(range.start, range.end))}><IAsk size={15} /> Perguntar à IA sobre isto</button>
       <button

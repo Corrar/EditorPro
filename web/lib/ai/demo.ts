@@ -141,9 +141,12 @@ export function silenceCutOps(p: Project, silencesByAsset: Record<Id, Range[]>):
 /** detecta cortes a partir de diferenças entre quadros consecutivos (0..1) amostrados em `times` */
 export function cutsFromDiffs(diffs: number[], times: Seconds[]): Seconds[] {
   if (diffs.length < 3) return [];
-  const mean = diffs.reduce((a, b) => a + b, 0) / diffs.length;
-  const sd = Math.sqrt(diffs.reduce((a, b) => a + (b - mean) ** 2, 0) / diffs.length);
-  const th = Math.max(0.18, mean + 2.2 * sd);
+  // limiar robusto (mediana + MAD): funciona com poucos OU muitos cortes
+  const sorted = [...diffs].sort((a, b) => a - b);
+  const med = sorted[Math.floor(sorted.length / 2)];
+  const mad = [...diffs.map((x) => Math.abs(x - med))].sort((a, b) => a - b)[Math.floor(diffs.length / 2)];
+  // teto: em vídeos com cortes muito frequentes a mediana já é um corte
+  const th = Math.max(0.06, Math.min(med + 5 * mad, 0.3));
   const cuts: Seconds[] = [];
   for (let i = 0; i < diffs.length; i++) {
     if (diffs[i] >= th && (!cuts.length || times[i] - cuts[cuts.length - 1] > 0.3)) cuts.push(times[i]);
@@ -159,7 +162,20 @@ function aspectOf(w?: number, h?: number): AspectRatio | undefined {
 }
 
 /** perfil de estilo heurístico a partir dos cortes detectados no exemplo */
-export function styleFromCuts(cuts: Seconds[], duration: Seconds, size: { width?: number; height?: number } = {}): StyleProfile {
+/** cor média -> preset de cor do exemplo (heurística local) */
+export function colorPresetFromStats(c?: { r: number; g: number; b: number; sat: number; lum: number }): ColorPreset | undefined {
+  if (!c) return undefined;
+  if (c.sat < 0.07) return 'bw';
+  if (c.lum < 0.28) return 'moody';
+  if (c.sat > 0.5) return 'vibrant';
+  const warm = c.r - c.b;
+  if (warm > 0.08) return 'warm';
+  if (warm < -0.06) return 'cool';
+  if (c.sat < 0.18 && c.lum > 0.35) return 'vintage';
+  return undefined;
+}
+
+export function styleFromCuts(cuts: Seconds[], duration: Seconds, size: { width?: number; height?: number } = {}, color?: { r: number; g: number; b: number; sat: number; lum: number }): StyleProfile {
   const shots = cuts.length + 1;
   const avg = r3(duration > 0 ? duration / shots : 3);
   const pacing: StyleProfile['pacing'] = avg < 1.2 ? 'very-fast' : avg < 2.5 ? 'fast' : avg < 5 ? 'medium' : 'slow';
@@ -175,6 +191,7 @@ export function styleFromCuts(cuts: Seconds[], duration: Seconds, size: { width?
     zoomPunchIns: fast,
     captions: fast ? { present: true, preset: 'bold-pop', maxWords: 2, uppercase: true } : { present: true, preset: 'classic', maxWords: 5 },
     hook: fast ? 'Começa direto na ação, sem introdução' : undefined,
+    ...(colorPresetFromStats(color) ? { colorPreset: colorPresetFromStats(color) } : {}),
   };
 }
 

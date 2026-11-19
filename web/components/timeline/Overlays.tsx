@@ -8,6 +8,7 @@ import { ISliders, IAsk, IAudioSplit, IClipboard, ICopy, IDiamond, IEye, IEyeOff
 import { askAiAboutCaption, askAiAboutClips, copyClips, detachAudio, freezeFrame, pasteClips, removeClips, setSpeed, toggleKeyframe } from '@/lib/timeline/actions';
 import { supportsKeyframes } from '@/lib/timeline/keyframes';
 import { expandGroups } from '@/lib/timeline/edit';
+import { useFloatAt } from '@/lib/timeline/floating';
 
 export function LiveBanner() {
   const running = useEditor((s) => s.live.running);
@@ -68,6 +69,7 @@ export function ClipMenu({ actions }: { actions: MenuActions }) {
       window.removeEventListener('resize', close);
     };
   }, [menu, setUi]);
+  const floatStyle = useFloatAt(ref, !!menu, menu?.x ?? 0, menu?.y ?? 0, 0, [menu]);
 
   if (!menu) return null;
   const { project, playhead, selection } = useEditor.getState();
@@ -76,15 +78,13 @@ export function ClipMenu({ actions }: { actions: MenuActions }) {
     setUi({ menu: null });
     fn();
   };
-  const x = Math.max(8, Math.min(menu.x, window.innerWidth - 248));
-  const y = Math.max(8, Math.min(menu.y, window.innerHeight - 420));
 
   // ----- legenda -----
   if (menu.capId) {
     const seg = project.captions.segments.find((s) => s.id === menu.capId);
     if (!seg) return null;
     return (
-      <div ref={ref} className="ep-tl-menu" style={{ left: x, top: y }} role="menu" onContextMenu={(e) => e.preventDefault()}>
+      <div ref={ref} className="ep-tl-menu" style={floatStyle} role="menu" onContextMenu={(e) => e.preventDefault()}>
         <div className="ep-tl-menuhead">Legenda · {seg.text.slice(0, 26)}</div>
         <button role="menuitem" onClick={run(() => askAiAboutCaption(seg.id))}><IAsk size={14} /> Perguntar à IA sobre isto</button>
         <div className="ep-tl-menusep" />
@@ -110,7 +110,7 @@ export function ClipMenu({ actions }: { actions: MenuActions }) {
   const hasSpeed = c.type === 'video' || c.type === 'audio';
   const curSpeed = hasSpeed ? (c as { speed: number }).speed : 1;
   return (
-    <div ref={ref} className="ep-tl-menu" style={{ left: x, top: y }} role="menu" onContextMenu={(e) => e.preventDefault()}>
+    <div ref={ref} className="ep-tl-menu" style={floatStyle} role="menu" onContextMenu={(e) => e.preventDefault()}>
       <div className="ep-tl-menuhead">{ids.length > 1 ? `${ids.length} clipes selecionados` : found.track.name}</div>
       <button role="menuitem" onClick={run(() => askAiAboutClips(ids))}><IAsk size={14} /> Perguntar à IA sobre isto</button>
       {c.groupId && (ids.length > 1 ? (
@@ -182,6 +182,7 @@ export function TrackPop() {
       window.removeEventListener('resize', close);
     };
   }, [pop, setUi]);
+  const floatStyle = useFloatAt(ref, !!pop && !!track, pop?.x ?? 0, pop?.y ?? 0, 0, [pop, track]);
 
   if (!pop || !track) return null;
   const upd = (patch: Record<string, unknown>) => dispatch({ op: 'update_track', trackId: track.id, patch });
@@ -189,10 +190,8 @@ export function TrackPop() {
     const n = name.trim();
     if (n && n !== track.name) upd({ name: n });
   };
-  const x = Math.min(pop.x, window.innerWidth - 228);
-  const y = Math.max(8, Math.min(pop.y, window.innerHeight - 220));
   return (
-    <div ref={ref} className="ep-tl-menu ep-tl-trackpop" style={{ left: x, top: y }} role="dialog" aria-label={`Opções da trilha ${track.name}`}>
+    <div ref={ref} className="ep-tl-menu ep-tl-trackpop" style={floatStyle} role="dialog" aria-label={`Opções da trilha ${track.name}`}>
       <input
         className="ep-tl-rename"
         value={name}

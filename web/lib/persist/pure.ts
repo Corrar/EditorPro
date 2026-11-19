@@ -85,8 +85,9 @@ export function isBlank(p: Project, assets: Record<string, MediaAsset>, messages
 }
 
 /** blobs que não são mais referenciados por nenhum projeto */
-export function orphanBlobIds(allBlobIds: string[], records: Pick<ProjectRecord, 'assets'>[]): string[] {
+export function orphanBlobIds(allBlobIds: string[], records: Pick<ProjectRecord, 'assets'>[], extraKeep: string[] = []): string[] {
   const keep = new Set<string>();
+  for (const id of extraKeep) { keep.add(id); keep.add(proxyBlobId(id)); }
   for (const r of records) for (const a of r.assets) { keep.add(a.id); keep.add(proxyBlobId(a.id)); }
   return allBlobIds.filter((id) => !keep.has(id));
 }
@@ -138,4 +139,32 @@ export function relativeTime(ts: number, now = Date.now()): string {
   if (d < 7) return `há ${d} dias`;
   const dt = new Date(ts);
   return `${String(dt.getDate()).padStart(2, '0')}/${String(dt.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/* ---------- mídia recente (seletor dentro do app, entre projetos) ---------- */
+
+/** item da galeria "Recentes": metadados do asset + quando entrou. O blob é o mesmo do asset (id). */
+export interface RecentMedia { asset: StoredAsset; addedAt: number }
+
+export const RECENTS_KEY = 'recentMedia';
+export const RECENTS_MAX = 80;
+
+/** coloca no topo (sem duplicar pelo id) e corta no máximo; devolve também os que saíram */
+export function upsertRecent(list: RecentMedia[], item: RecentMedia, max = RECENTS_MAX): { list: RecentMedia[]; dropped: RecentMedia[] } {
+  const rest = list.filter((r) => r.asset.id !== item.asset.id);
+  const all = [item, ...rest];
+  return { list: all.slice(0, max), dropped: all.slice(max) };
+}
+
+/** cabe guardar mais `size` bytes? deixa folga de 20% da cota (ou 200 MB, o que for menor) */
+export function canKeep(estimate: { usage?: number; quota?: number } | null | undefined, size: number): boolean {
+  if (!estimate?.quota) return true; // sem estimativa: o navegador decide
+  const free = estimate.quota - (estimate.usage ?? 0);
+  const reserve = Math.min(estimate.quota * 0.2, 200 * 1024 * 1024);
+  return free - size > reserve;
+}
+
+/** recentes de um tipo (vídeo/foto/áudio), mais novos primeiro; vídeo Modelo não entra */
+export function recentsOf(list: RecentMedia[], kind: MediaAsset['kind']): RecentMedia[] {
+  return list.filter((r) => r.asset.kind === kind && r.asset.role !== 'reference').sort((a, b) => b.addedAt - a.addedAt);
 }
