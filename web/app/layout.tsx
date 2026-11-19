@@ -6,6 +6,7 @@ import '../styles/preview.css';
 import '../styles/chat.css';
 import '../styles/panels.css';
 import '../styles/media.css';
+import '../styles/library.css';
 
 import PwaRegister from './pwa-register';
 
