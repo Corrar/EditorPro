@@ -9,6 +9,8 @@ const FILES = {
   h264: { name: 'h264_1080x1920.mp4', args: (o) => ['-f', 'lavfi', '-i', 'testsrc2=duration=10:size=1080x1920:rate=30', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=10', '-shortest', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'veryfast', '-c:a', 'aac', '-movflags', '+faststart', o] },
   hevc: { name: 'hevc_1080x1920.mp4', args: (o) => ['-f', 'lavfi', '-i', 'testsrc2=duration=4:size=1080x1920:rate=30', '-f', 'lavfi', '-i', 'sine=frequency=660:duration=4', '-shortest', '-c:v', 'libx265', '-tag:v', 'hvc1', '-pix_fmt', 'yuv420p', '-preset', 'ultrafast', '-c:a', 'aac', o] },
   k4: { name: '4k_2160x3840.mp4', args: (o) => ['-f', 'lavfi', '-i', 'testsrc2=duration=3:size=2160x3840:rate=30', '-f', 'lavfi', '-i', 'sine=frequency=550:duration=3', '-shortest', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'ultrafast', '-c:a', 'aac', o] },
+  clip2: { name: 'b_1080x1920_6s.mp4', args: (o) => ['-f', 'lavfi', '-i', 'testsrc=duration=6:size=1080x1920:rate=30', '-f', 'lavfi', '-i', 'sine=frequency=880:duration=6', '-shortest', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'veryfast', '-c:a', 'aac', '-movflags', '+faststart', o] },
+  music: { name: 'musica_20s.m4a', args: (o) => ['-f', 'lavfi', '-i', 'sine=frequency=262:duration=20', '-f', 'lavfi', '-i', 'sine=frequency=392:duration=20:beep_factor=4', '-filter_complex', 'amix=inputs=2', '-c:a', 'aac', o] },
 };
 
 function ensureMedia() {

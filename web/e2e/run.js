@@ -367,7 +367,7 @@ async function chatSideCase(page, tag) {
   if (!steps.opened) return { status: 'falha', steps, shot: await L.shot(page, `${tag}-chat-sem-texto`) };
   const before = await page.locator('.ep-chat').innerText();
   const nPronto = (before.match(/Pronto!/g) || []).length;
-  const nUndo = (before.match(/Desfazer esta edição/g) || []).length;
+  const nUndo = (before.match(/Edições aplicadas/g) || []).length;
   await ta.fill('deixe a legenda maior e corte os primeiros 2 segundos');
   steps.typed = (await ta.inputValue()).length > 10;
   await installCursorProbe(page);
@@ -377,7 +377,7 @@ async function chatSideCase(page, tag) {
   let answered = false;
   while (Date.now() - t0 < 60000) {
     const txt = await page.locator('.ep-chat').innerText().catch(() => '');
-    const nu = (txt.match(/Desfazer esta edição/g) || []).length;
+    const nu = (txt.match(/Edições aplicadas/g) || []).length;
     if (Date.now() - t0 > 1000 && !/está editando/i.test(txt) && nu > nUndo) { answered = true; break; }
     await L.sleep(300);
   }
