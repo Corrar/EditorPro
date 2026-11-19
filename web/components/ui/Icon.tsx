@@ -14,7 +14,7 @@ import {
   Search, SendHorizontal, Settings, Shapes, Share, Shuffle, SkipBack, SlidersHorizontal, Smartphone,
   Snowflake, Sparkles, Square, Sticker, Sun, Timer, Trash2, Type, Undo2, Upload, UserRound, Video,
   Volume2, VolumeX, Wand, WandSparkles, X, ZoomIn, ZoomOut, Flame, RectangleVertical,
-  PanelLeft, ChevronsUpDown, Pencil, ArrowLeft, Replace, Rewind,
+  PanelLeft, FastForward, ChevronsUpDown, Pencil, ArrowLeft, Replace, Rewind,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -38,7 +38,7 @@ export const ICONS = {
   marker: Bookmark, shuffle: Shuffle, loop: Repeat, rotate: RotateCw, flip: FlipHorizontal2,
   chroma: Droplet, picker: Pipette, user: UserRound, timer: Timer,
   // (aditivo, shell)
-  sidebar: PanelLeft, expand: ChevronsUpDown, rename: Pencil, arrowLeft: ArrowLeft, replace: Replace, reverse: Rewind,
+  sidebar: PanelLeft, expand: ChevronsUpDown, rename: Pencil, arrowLeft: ArrowLeft, replace: Replace, reverse: Rewind, extend: FastForward,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;

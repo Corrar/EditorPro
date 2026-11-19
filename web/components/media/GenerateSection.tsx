@@ -22,7 +22,7 @@ const AI_KIND: Record<GenKind, AiGenKind> = { broll: 'text-to-video', 'animate-p
 const CARDS: { id: GenKind; title: string; desc: string; icon: IconName }[] = [
   { id: 'broll', title: 'B-roll por texto', desc: 'Descreva a cena e a IA cria um clipe', icon: 'video' as const },
   { id: 'animate-photo', title: 'Animar foto', desc: 'Dá movimento a uma imagem', icon: 'image' as const },
-  { id: 'extend-clip', title: 'Estender clipe', desc: 'Continua o vídeo por mais alguns segundos', icon: 'next' as const },
+  { id: 'extend-clip', title: 'Estender clipe', desc: 'Continua o vídeo por mais alguns segundos', icon: 'extend' as const },
   { id: 'avatar', title: 'Avatar falando', desc: 'Foto + áudio viram uma pessoa falando', icon: 'mic' as const },
 ];
 
