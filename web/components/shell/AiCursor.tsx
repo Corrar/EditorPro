@@ -24,11 +24,22 @@ function visibleRect(el: Element | null): DOMRect | null {
   return r.width > 0 && r.height > 0 && r.bottom > 0 && r.right > 0 && r.top < innerHeight && r.left < innerWidth ? r : null;
 }
 
+/** algo (pop-up, sheet, menu) cobre este ponto? o overlay não conta: pointer-events:none */
+const COVERS = '.ep-aipop, .ep-toolsheet, .ep-menusheet-bg, .ep-modal-bg';
+function covered(p: ScreenPoint, own?: Element): boolean {
+  const top = document.elementFromPoint(p.x, p.y);
+  if (!top) return true;
+  if (own) return !own.contains(top) && !top.contains(own);
+  return !!top.closest(COVERS);
+}
+
 /** botão de ferramenta visível (pode haver vários: rail, barra do celular, abas, menu) */
 function toolPoint(tool: string): ScreenPoint | null {
   for (const el of document.querySelectorAll<HTMLElement>(`[data-ep-tool="${CSS.escape(tool)}"]`)) {
     const r = visibleRect(el);
-    if (r && getComputedStyle(el).visibility !== 'hidden') return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    if (!r || getComputedStyle(el).visibility === 'hidden') continue;
+    const p = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    if (!covered(p, el)) return p;
   }
   return null;
 }
@@ -41,7 +52,8 @@ function previewPoint(x = 0.5, y = 0.5): ScreenPoint | null {
 
 function targetPoint(t: AiTarget): ScreenPoint | null {
   const p = resolveAiTarget(t);
-  if (p) return p;
+  if (p && !covered(p)) return p;
+  if (p) return previewPoint(); // alvo atrás do pop-up/sheet: fica no vídeo
   if (t.kind === 'clip') {
     const r = visibleRect(document.querySelector(`[data-clip-id="${CSS.escape(t.clipId)}"]`));
     if (r) return { x: r.left + Math.min(r.width / 2, 48), y: r.top + r.height / 2 };
@@ -130,12 +142,13 @@ export default function AiCursor() {
 
   if (!shown) return null;
   const flip = pos.x > innerWidth - 200;
+  const up = pos.y > innerHeight - 120;
   const style = { transform: `translate3d(${Math.round(pos.x)}px, ${Math.round(pos.y)}px, 0)` };
   return (
     <div className={`ep-aicursor-layer${running ? '' : ' leaving'}`} aria-hidden="true">
       <div className={`ep-aicursor-trail${instant ? ' instant' : ''}`} style={style} />
       {clicks.map((c) => <span key={c.id} className="ep-aicursor-click" style={{ left: c.x, top: c.y }} />)}
-      <div className={`ep-aicursor${instant ? ' instant' : ''}${flip ? ' flip' : ''}`} style={style}>
+      <div className={`ep-aicursor${instant ? ' instant' : ''}${flip ? ' flip' : ''}${up ? ' up' : ''}`} style={style}>
         <svg width="22" height="24" viewBox="0 0 22 24" className="ep-aicursor-arrow"><path d="M2 2 L19 11.5 L11.2 13.4 L7.6 21.5 Z" /></svg>
         <span className="ep-aicursor-tag">✦ IA</span>
         {label && <span className="ep-aicursor-bubble" role="status">{label}</span>}
