@@ -1,1 +1,120 @@
-/* estilos da biblioteca (dono: sessão biblioteca) — prefixo .ep-lib- */
+/* =====================================================================
+   Biblioteca profissional (dono: sessão biblioteca) — prefixo .ep-lib-
+   Design v2: blocos --tile raio 24, pílulas, Plus Jakarta Sans, sem bordas.
+   Tudo por toque (alvos ≥44px), nada depende de hover.
+   ===================================================================== */
+.ep-lib { display:flex; flex-direction:column; gap:14px; min-width:0; color:var(--ink); font-family:var(--font-ui); }
+.ep-lib-hub { display:flex; flex-direction:column; gap:14px; min-width:0; }
+.ep-lib-tabs { display:flex; gap:8px; overflow-x:auto; scrollbar-width:none; padding:2px 2px 4px; margin:0 -2px; -webkit-overflow-scrolling:touch; }
+.ep-lib-tabs::-webkit-scrollbar { display:none; }
+.ep-lib-tabs .ep-pill2 { flex:none; height:44px; padding:0 16px; font-size:14px; gap:8px; }
+.ep-lib-tabs .ep-pill2.on { background:var(--green); color:#fff; box-shadow:0 6px 16px rgba(242,104,31,.28); }
+.ep-lib-body { min-width:0; }
+
+/* pílulas de categoria */
+.ep-lib-pills { display:flex; gap:8px; overflow-x:auto; scrollbar-width:none; padding:2px; margin:0 -2px; -webkit-overflow-scrolling:touch; }
+.ep-lib-pills::-webkit-scrollbar { display:none; }
+.ep-lib-pill { flex:none; min-height:44px; padding:0 16px; border-radius:999px; border:0; background:var(--tile); color:var(--sub); font:inherit; font-size:14px; font-weight:600; cursor:pointer; transition:background .15s, color .15s; touch-action:manipulation; }
+.ep-lib-pill:active { transform:scale(.97); }
+.ep-lib-pill.on { background:var(--inverse); color:var(--inverseInk); }
+
+/* busca */
+.ep-lib-search { flex:none; }
+.ep-lib-clear { border:0; background:none; color:var(--muted); display:grid; place-items:center; width:32px; height:32px; border-radius:50%; cursor:pointer; }
+
+/* cabeçalhos e textos */
+.ep-lib-head { display:flex; align-items:center; gap:12px; }
+.ep-lib-headic { width:40px; height:40px; border-radius:13px; background:var(--tile); display:grid; place-items:center; color:var(--green); flex:none; }
+.ep-lib-headtx { flex:1; min-width:0; }
+.ep-lib-title { font-size:16px; font-weight:800; letter-spacing:-0.01em; }
+.ep-lib-hint { font-size:13px; color:var(--muted); margin-top:2px; line-height:1.35; }
+.ep-lib-note { font-size:12px; color:var(--faint); margin:2px 4px 0; }
+.ep-lib-target { font-size:13px; color:var(--muted); padding:0 4px; }
+.ep-lib-target b { color:var(--ink); font-weight:700; }
+.ep-lib-empty { background:var(--tile); border-radius:var(--r-md); padding:14px 16px; font-size:13.5px; color:var(--sub); line-height:1.45; }
+.ep-lib-sect { display:flex; flex-direction:column; gap:10px; }
+.ep-lib-secttl { font-size:13px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; padding:4px 4px 0; }
+
+/* grade de cartões com miniatura */
+.ep-lib-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(min(140px, 100%), 1fr)); gap:12px; }
+.ep-lib-grid.wide { grid-template-columns:repeat(auto-fill, minmax(min(170px, 100%), 1fr)); }
+.ep-lib-grid.sm { grid-template-columns:repeat(auto-fill, minmax(92px, 1fr)); gap:10px; }
+.ep-lib-card { display:flex; flex-direction:column; gap:8px; padding:6px 6px 10px; border:0; border-radius:var(--r-lg); background:var(--tile); color:var(--ink); font:inherit; text-align:left; cursor:pointer; min-width:0; transition:background .15s, transform .12s, box-shadow .15s; touch-action:manipulation; -webkit-tap-highlight-color:transparent; }
+.ep-lib-card:active { transform:scale(.975); }
+.ep-lib-card.on { background:var(--tintG); box-shadow:inset 0 0 0 2px var(--green); }
+.ep-lib-card.sm { border-radius:20px; padding:5px 5px 8px; gap:6px; }
+.ep-lib-thumb { position:relative; display:block; width:100%; border-radius:18px; overflow:hidden; background:#1B1C20; }
+.ep-lib-card.sm .ep-lib-thumb { border-radius:15px; }
+.ep-lib-thumb.wide { aspect-ratio:16/9; }
+.ep-lib-thumb.tall { aspect-ratio:4/5; }
+.ep-lib-thumb.portrait { aspect-ratio:4/5; }
+.ep-lib-thumb.square { aspect-ratio:1/1; }
+.ep-lib-canvas { position:absolute; inset:0; width:100%; height:100%; display:block; }
+.ep-lib-cardlb { font-size:13.5px; font-weight:600; line-height:1.25; padding:0 6px; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+.ep-lib-card.sm .ep-lib-cardlb { font-size:12.5px; text-align:center; padding:0 2px; }
+.ep-lib-badge { position:absolute; top:7px; right:7px; width:26px; height:26px; border-radius:50%; background:var(--green); color:#fff; display:grid; place-items:center; box-shadow:0 2px 8px rgba(0,0,0,.3); }
+.ep-lib-card.sm .ep-lib-badge { width:22px; height:22px; top:5px; right:5px; }
+.ep-lib-emoji { position:absolute; top:6px; left:8px; font-size:20px; filter:drop-shadow(0 2px 3px rgba(0,0,0,.4)); }
+.ep-lib-none { position:absolute; inset:0; display:grid; place-items:center; color:#9a9ca2; background:#232428; }
+
+/* fontes */
+.ep-lib-fontlist { display:flex; flex-direction:column; gap:10px; }
+.ep-lib-fontrow { min-height:64px; padding:10px 20px; gap:12px; }
+.ep-lib-fontrow.on { background:var(--tintG); box-shadow:inset 0 0 0 2px var(--green); }
+.ep-lib-fontrow.on .ep-lib-fontmeta { color:var(--green); }
+.ep-lib-fontname { flex:1; min-width:0; font-size:22px; line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ep-lib-fontmeta { display:flex; align-items:center; gap:8px; flex:none; max-width:45%; }
+.ep-lib-fontmeta .meta { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+/* formulário de parâmetros do modelo */
+.ep-lib-form { display:flex; flex-direction:column; gap:12px; padding:18px; border-radius:var(--r-lg); background:var(--card); box-shadow:0 0 0 1px var(--line), 0 10px 30px rgba(0,0,0,.08); }
+.ep-lib-formhead { display:flex; align-items:flex-start; gap:12px; justify-content:space-between; }
+.ep-lib-field { display:flex; flex-direction:column; gap:6px; font-size:13px; font-weight:600; color:var(--sub); }
+.ep-lib-field .ep-input, .ep-lib-field .ep-textarea { border-radius:var(--r-md); min-height:48px; font-size:16px; background:var(--tile); border-color:transparent; }
+.ep-lib-colors { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.ep-lib-color { display:inline-flex; align-items:center; gap:8px; min-height:44px; padding:0 14px 0 6px; border-radius:999px; background:var(--tile); font-size:13.5px; font-weight:600; cursor:pointer; }
+.ep-lib-color input[type=color] { width:34px; height:34px; border:0; padding:0; border-radius:50%; background:none; cursor:pointer; overflow:hidden; }
+.ep-lib-color input[type=color]::-webkit-color-swatch-wrapper { padding:0; }
+.ep-lib-color input[type=color]::-webkit-color-swatch { border:0; border-radius:50%; }
+.ep-lib-color input[type=color]::-moz-color-swatch { border:0; border-radius:50%; }
+.ep-lib-link { border:0; background:none; color:var(--green); font:inherit; font-size:13.5px; font-weight:700; cursor:pointer; min-height:44px; padding:0 6px; }
+.ep-lib-insert { justify-content:center; width:100%; height:54px; font-size:16px; box-shadow:0 8px 20px rgba(242,104,31,.28); }
+
+/* segmentado e intensidade */
+.ep-lib-seg { display:flex; gap:4px; padding:4px; border-radius:999px; background:var(--tile); }
+.ep-lib-seg button { flex:1; min-height:42px; border:0; border-radius:999px; background:none; color:var(--sub); font:inherit; font-size:14px; font-weight:700; cursor:pointer; }
+.ep-lib-seg button.on { background:var(--card); color:var(--ink); box-shadow:0 2px 10px rgba(0,0,0,.08); }
+.ep-lib-seg button:disabled { opacity:.45; cursor:default; }
+.ep-lib-range { display:flex; flex-direction:column; gap:6px; padding:12px 16px; border-radius:var(--r-md); background:var(--tile); }
+.ep-lib-rangetop { display:flex; justify-content:space-between; font-size:13.5px; font-weight:600; color:var(--sub); }
+.ep-lib-rangetop b { color:var(--ink); font-family:'JetBrains Mono', monospace; font-size:13px; }
+.ep-lib-range input[type=range] { width:100%; height:28px; accent-color:var(--green); touch-action:pan-y; }
+
+/* sons */
+.ep-lib-sfxrows { gap:10px; }
+.ep-lib-sfxrow { padding:0 10px 0 10px; gap:12px; cursor:default; }
+.ep-lib-sfxrow:hover { background:var(--tile); }
+.ep-lib-play.on { background:var(--green); color:#fff; }
+.ep-lib-sfxrow .ep-circle { width:44px; height:44px; background:var(--card); }
+.ep-lib-sfxrow .ep-circle.on { background:var(--green); color:#fff; }
+.ep-lib-add { color:var(--green); }
+.ep-lib-sfxtx { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; padding:10px 0; }
+.ep-lib-sfxname { font-size:15px; font-weight:700; }
+.ep-lib-sfxtx .meta { font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ep-lib-dur { flex:none; font-family:'JetBrains Mono', monospace; font-size:12px; }
+.ep-lib-spin { width:18px; height:18px; border-radius:50%; border:2.5px solid currentColor; border-right-color:transparent; animation:ep-lib-spin .8s linear infinite; }
+@keyframes ep-lib-spin { to { transform:rotate(360deg); } }
+
+/* telas pequenas */
+@media (max-width: 480px) {
+  .ep-lib-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px; }
+  .ep-lib-grid.wide { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+  .ep-lib-grid.sm { grid-template-columns:repeat(3, minmax(0, 1fr)); }
+  .ep-lib-fontname { font-size:20px; }
+  .ep-lib-sfxtx .meta { display:none; }
+  .ep-lib-form { padding:14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ep-lib-card, .ep-lib-pill { transition:none; }
+  .ep-lib-spin { animation-duration:2s; }
+}

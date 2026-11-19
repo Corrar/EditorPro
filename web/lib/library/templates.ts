@@ -278,8 +278,8 @@ export const TEMPLATES: TemplateDef[] = [
       const sub = ts({ fontFamily: 'Cormorant Garamond', fontWeight: 600, fontSize: 46, color: 'rgba(244,241,234,.85)', italic: true });
       const bar = f.portrait ? 0.1 : 0.12;
       return [
-        { kind: 'shape', shape: 'rect', fill: '#000000', box: { cx: 0.5, cy: bar / 2, w: 1.02, h: bar }, animIn: 'slide-down', animInDur: 0.6, animOut: 'slide-up', label: 'Faixa' },
-        { kind: 'shape', shape: 'rect', fill: '#000000', box: { cx: 0.5, cy: 1 - bar / 2, w: 1.02, h: bar }, animIn: 'slide-up', animInDur: 0.6, animOut: 'slide-down', label: 'Faixa' },
+        { kind: 'shape', shape: 'line', fill: '#000000', box: { cx: 0.5, cy: bar / 2, w: 1.4, h: bar }, animIn: 'slide-down', animInDur: 0.6, animOut: 'slide-up', label: 'Faixa' },
+        { kind: 'shape', shape: 'line', fill: '#000000', box: { cx: 0.5, cy: 1 - bar / 2, w: 1.4, h: bar }, animIn: 'slide-up', animInDur: 0.6, animOut: 'slide-down', label: 'Faixa' },
         { kind: 'text', text: v.titulo, style: big, x: 0.5, y: 0.48, t0: 0.4, animation: 'blur-in', animationOut: 'fade' },
         { kind: 'text', text: v.sub, style: sub, x: 0.5, y: 0.48 + fy(big.fontSize!) * 0.7, t0: 1, animation: 'fade', animationOut: 'fade' },
       ];
@@ -339,7 +339,7 @@ export const TEMPLATES: TemplateDef[] = [
       const role = ts({ fontFamily: 'Montserrat', fontWeight: 600, fontSize: 40, color: 'rgba(255,255,255,.9)', align: 'left', shadowColor: 'rgba(0,0,0,.55)', shadowBlur: 12 });
       const y = ly(f);
       return [
-        { kind: 'shape', shape: 'rect', fill: f.brand.primary, box: { cx: mx(f), cy: y + 0.02, w: 0.012, h: fy(64 + 40) * 1.5 }, animIn: 'slide-up', animOut: 'fade', animInDur: 0.35 },
+        { kind: 'shape', shape: 'line', fill: f.brand.primary, box: { cx: mx(f), cy: y + 0.02, w: 0.012, h: fy(64 + 40) * 1.5 }, animIn: 'slide-up', animOut: 'fade', animInDur: 0.35 },
         { kind: 'text', text: v.nome, style: name, x: leftX(f, left, v.nome, name), y, t0: 0.15, animation: 'slide-right', animationOut: 'fade' },
         { kind: 'text', text: v.funcao, style: role, x: leftX(f, left, v.funcao, role), y: y + fy(64) * 1.05, t0: 0.3, animation: 'fade', animationOut: 'fade' },
       ];
@@ -471,9 +471,9 @@ export const TEMPLATES: TemplateDef[] = [
     description: 'Balão de fala pedindo um comentário.',
     params: [P('texto', 'Texto', 'Comente “EU QUERO”')],
     build: (v, f) => {
-      const st = ts({ fontFamily: 'Poppins', fontWeight: 800, fontSize: 56, color: f.brand.dark });
-      const w = Math.min(0.9, f.textW(v.texto, st) + 0.14);
-      const h = (w * f.W) / 1.9 / f.H;
+      const st = ts({ fontFamily: 'Poppins', fontWeight: 800, fontSize: 50, color: f.brand.dark });
+      const w = Math.min(0.8, f.textW(v.texto, st) + 0.1);
+      const h = (w * f.W) / 2.6 / f.H;
       const y = f.portrait ? 0.66 : 0.7;
       return [
         { kind: 'shape', shape: 'speech-bubble', fill: '#FFFFFF', box: { cx: 0.5, cy: y, w, h }, animIn: 'pop', animOut: 'zoom-out', animLoop: 'swing' },
@@ -577,13 +577,13 @@ export const TEMPLATES: TemplateDef[] = [
       const tag = (bg: string, color: string) => ts({ fontFamily: 'Montserrat', fontWeight: 900, fontSize: 48, color, uppercase: true, background: bg, backgroundRadius: 40, backgroundPadding: 14, letterSpacing: 3 });
       if (f.portrait) {
         return [
-          { kind: 'shape', shape: 'rect', fill: '#FFFFFF', box: { cx: 0.5, cy: 0.5, w: 1.02, h: 0.005 }, animIn: 'slide-right', animOut: 'fade' },
+          { kind: 'shape', shape: 'line', fill: '#FFFFFF', box: { cx: 0.5, cy: 0.5, w: 1.3, h: 0.005 }, animIn: 'slide-right', animOut: 'fade' },
           { kind: 'text', text: v.antes, style: tag('rgba(0,0,0,.7)', '#FFFFFF'), x: 0.5, y: 0.08, t0: 0.2, animation: 'pop', animationOut: 'fade' },
           { kind: 'text', text: v.depois, style: tag(f.brand.primary, '#FFFFFF'), x: 0.5, y: 0.58, t0: 0.35, animation: 'pop', animationOut: 'fade' },
         ];
       }
       return [
-        { kind: 'shape', shape: 'rect', fill: '#FFFFFF', box: { cx: 0.5, cy: 0.5, w: 0.004, h: 1.02 }, animIn: 'slide-down', animOut: 'fade' },
+        { kind: 'shape', shape: 'line', fill: '#FFFFFF', box: { cx: 0.5, cy: 0.5, w: 0.004, h: 1.3 }, animIn: 'slide-down', animOut: 'fade' },
         { kind: 'text', text: v.antes, style: tag('rgba(0,0,0,.7)', '#FFFFFF'), x: 0.25, y: 0.1, t0: 0.2, animation: 'pop', animationOut: 'fade' },
         { kind: 'text', text: v.depois, style: tag(f.brand.primary, '#FFFFFF'), x: 0.75, y: 0.1, t0: 0.35, animation: 'pop', animationOut: 'fade' },
       ];
