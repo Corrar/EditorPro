@@ -179,7 +179,7 @@ describe('responsivo', () => {
     const { dimsFor, rowLayout } = await import('./ui');
     const desk = dimsFor(1200, 400, false);
     expect(desk.compact).toBe(false);
-    expect(desk.headerW).toBe(184);
+    expect(desk.headerW).toBe(204);
     const phone = dimsFor(390, 300, true);
     expect(phone.compact).toBe(true);
     expect(phone.headerW).toBeLessThan(64);
