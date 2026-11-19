@@ -5,14 +5,15 @@
    narração por mensagem, passos ao vivo (op.explain), desfazer por edição.
    ===================================================================== */
 import { create } from 'zustand';
-import type { ChatContext, Id, Project } from '../types';
+import type { ChatContext, Id, MediaAsset, Project } from '../types';
 import type { EditOp } from '../ops';
 import { useEditor } from '../store';
 import { emit } from '../events';
 import { getStatus, type AIStatus } from './client';
 import { AI_CURSOR_STEP_MS } from '../aiCursor';
 import { orderForViewing, shortExplain } from './order';
-import { applyComments, chatEdit, generateCaptions, runFirstEdit, type AskOption, type PipelineOptions, type PipelineResult } from './pipeline';
+import { SCOPE_LABELS, styleScopeFromText, wantsApplyNow, type StyleScope } from './model';
+import { analyzeModel, applyComments, applyModelStyle, chatEdit, generateCaptions, runFirstEdit, type AskOption, type PipelineOptions, type PipelineResult } from './pipeline';
 
 export type StepState = 'pending' | 'active' | 'done' | 'skipped';
 export interface LiveStep { id: Id; text: string; state: StepState }
@@ -29,6 +30,8 @@ export interface RunState {
   after?: Project;
   error?: string;
   done: boolean;
+  /** resposta da análise de um vídeo modelo (mostra "Aplicar este estilo" + chips) */
+  model?: { assetId: Id };
   /** pergunta pendente ao usuário (botões no chat) */
   question?: { text: string; options: AskOption[] };
   /** etapa em andamento que pode ser pulada (ex.: "Pular transcrição") */
@@ -58,6 +61,25 @@ interface AIChatState {
   /** ritmo da edição ao vivo: false = 900 ms por passo (dá para ver o cursor da IA), true = 350 ms */
   fast: boolean;
   setFast: (on: boolean) => void;
+  /** anexa vídeo(s) modelo: ingere como 'reference', analisa o estilo e (se o texto pedir) aplica */
+  attachModel: (files: File[], text?: string) => Promise<void>;
+  /** aplica o estilo do modelo ativo (tudo ou só legendas/ritmo/cores) */
+  applyModel: (scope?: StyleScope) => Promise<void>;
+  /** deixa de usar o modelo ativo */
+  clearModel: () => void;
+}
+
+/** espera o shell ingerir o arquivo (asset novo com o mesmo nome e url pronta) */
+export function waitForAsset(name: string, before: Set<Id>, ms = 30000): Promise<MediaAsset | undefined> {
+  return new Promise((resolve) => {
+    const find = () => Object.values(useEditor.getState().assets).find((a) => !before.has(a.id) && a.name === name && !!a.url);
+    const hit = find();
+    if (hit) return resolve(hit);
+    let done = false;
+    const finish = (a?: MediaAsset) => { if (done) return; done = true; unsub(); clearTimeout(timer); resolve(a); };
+    const unsub = useEditor.subscribe(() => { const a = find(); if (a) finish(a); });
+    const timer = setTimeout(() => finish(undefined), ms);
+  });
 }
 
 /** ms por passo do applyLive: lento p/ ver o cursor; "Mais rápido" encurta (lido a cada passo) */
@@ -86,10 +108,10 @@ export const useAIChat = create<AIChatState>((set, get) => {
     });
 
   /** roda uma tarefa da IA narrando numa mensagem nova do assistente */
-  async function run(intro: string, task: (o: PipelineOptions) => Promise<PipelineResult>, context?: ChatContext) {
+  async function run(intro: string, task: (o: PipelineOptions) => Promise<PipelineResult>, context?: ChatContext, onDone?: (msgId: Id, res: PipelineResult) => void): Promise<boolean> {
     if (get().busy) {
       emit('ep:toast', { text: 'A IA ainda está trabalhando — aguarde terminar.', kind: 'info' });
-      return;
+      return false;
     }
     set({ busy: true });
     const msgId = editor().pushMessage({ role: 'assistant', text: '', status: 'pending' });
@@ -150,10 +172,13 @@ export const useAIChat = create<AIChatState>((set, get) => {
       const changed = !res.undo && after !== get().runs[msgId]?.before;
       patchRun(msgId, { phase: undefined, progress: undefined, done: true, after: changed ? after : undefined });
       editor().updateMessage(msgId, { text: res.reply, status: 'done', opIds: res.appliedIds });
+      onDone?.(msgId, res);
+      return true;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       patchRun(msgId, { phase: undefined, progress: undefined, done: true, error: msg });
       editor().updateMessage(msgId, { text: `Não consegui concluir: ${msg}`, status: 'error' });
+      return false;
     } finally {
       answers.delete(msgId);
       skips.delete(msgId);
@@ -170,6 +195,44 @@ export const useAIChat = create<AIChatState>((set, get) => {
 
     fast: false,
     setFast: (on) => set({ fast: on }),
+
+    attachModel: async (files, text = '') => {
+      const videos = files.filter((f) => f.type.startsWith('video/') || /\.(mp4|mov|webm|m4v|mkv)$/i.test(f.name));
+      if (!videos.length) {
+        emit('ep:toast', { text: 'O vídeo modelo precisa ser um arquivo de vídeo.', kind: 'error' });
+        return;
+      }
+      if (get().busy) {
+        emit('ep:toast', { text: 'A IA ainda está trabalhando — aguarde terminar.', kind: 'info' });
+        return;
+      }
+      const before = new Set(Object.keys(editor().assets));
+      emit('ep:attach-files', { files: videos, role: 'reference' });
+      // vale mais de um: analisa na ordem; o último vira o modelo ativo
+      for (const file of videos) {
+        const userId = editor().pushMessage({ role: 'user', text: `🎬 Vídeo modelo: ${file.name}${text.trim() && file === videos[videos.length - 1] ? `\n${text.trim()}` : ''}`, status: 'done' });
+        const asset = await waitForAsset(file.name, before);
+        if (!asset) {
+          editor().pushMessage({ role: 'assistant', text: `Não consegui abrir “${file.name}” como vídeo modelo.`, status: 'error' });
+          continue;
+        }
+        editor().updateMessage(userId, { attachments: [asset.id] });
+        await run('Analisando o estilo do modelo…', (o) => analyzeModel(asset.id, o), undefined, (msgId) => patchRun(msgId, { model: { assetId: asset.id } }));
+      }
+      if (wantsApplyNow(text) && editor().project.style) await get().applyModel(styleScopeFromText(text) ?? 'all');
+    },
+
+    applyModel: async (scope = 'all') => {
+      if (get().busy) return;
+      const label = scope === 'all' ? 'Aplicar este estilo ao meu vídeo' : SCOPE_LABELS[scope];
+      editor().pushMessage({ role: 'user', text: label, status: 'done' });
+      await run('Aplicando o estilo do modelo…', (o) => applyModelStyle(scope, o));
+    },
+
+    clearModel: () => {
+      editor().dispatch({ op: 'set_project', patch: { referenceAssetId: undefined, style: undefined } }, { history: false });
+      editor().pushMessage({ role: 'system', text: 'Modelo removido — sigo sem estilo de referência.', status: 'done' });
+    },
 
     setWhisper: (on) => {
       try { localStorage.setItem(WHISPER_KEY, on ? 'on' : 'off'); } catch {}

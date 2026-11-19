@@ -10,6 +10,8 @@ import { emit } from '@/lib/events';
 import { ingestFiles, useIngestQueue } from '@/lib/media/ingest';
 import { placeAssetOp } from '@/lib/media/place';
 import { cancelPreviewProxy, useProxyProgress } from '@/lib/media/proxy';
+import { openMediaPicker } from './pickerStore';
+import { useFilePickers } from './pickers';
 import { ROLE_LABEL, formatBytes } from '@/lib/media/pure';
 import { useEditor } from '@/lib/store';
 import type { MediaAsset, MediaKind, MediaRole } from '@/lib/types';
@@ -27,7 +29,6 @@ function useAsModel(a: MediaAsset) {
 }
 
 export const ASSET_MIME = 'application/x-ep-asset';
-const ACCEPT = 'video/*,audio/*,image/*';
 type Filter = 'all' | MediaKind;
 
 const KIND_ICON = { video: IconVideo, image: IconImage, audio: IconMusic } as const;
@@ -130,7 +131,6 @@ export default function MediaBin() {
   const [filter, setFilter] = useState<Filter>('all');
   const [over, setOver] = useState(false);
   const depth = useRef(0);
-  const input = useRef<HTMLInputElement>(null);
 
   const list = useMemo(() => Object.values(assets).filter((a) => filter === 'all' || a.kind === filter), [assets, filter]);
   const counts = useMemo(() => {
@@ -144,6 +144,7 @@ export default function MediaBin() {
     const done = await ingestFiles(files);
     if (done.length) emit('ep:toast', { text: done.length === 1 ? `“${done[0].name}” importado` : `${done.length} arquivos importados`, kind: 'ok' });
   };
+  const pickers = useFilePickers((files) => void importFiles(files));
 
   const add = (a: MediaAsset) => {
     const st = useEditor.getState();
@@ -165,10 +166,15 @@ export default function MediaBin() {
     >
       <div className="ep-panelhead">
         <h3>Mídia</h3>
-        <button type="button" className="ep-btn primary ep-btn-sm" onClick={() => input.current?.click()}>
+        <button type="button" className="ep-btn primary ep-btn-sm" onClick={pickers.openGallery} data-ep-import>
           <IconUpload size={15} /> Importar
         </button>
-        <input ref={input} type="file" multiple accept={ACCEPT} hidden onChange={(e) => { void importFiles(Array.from(e.target.files ?? [])); e.target.value = ''; }} />
+        {pickers.inputs}
+      </div>
+      <div className="ep-msrc">
+        <button type="button" onClick={pickers.openCamera}><UiIcon name="video" size={18} />Câmera</button>
+        <button type="button" onClick={pickers.openAudio}><UiIcon name="music" size={18} />Música/Áudio</button>
+        <button type="button" onClick={() => openMediaPicker()}><UiIcon name="grid" size={18} />Recentes</button>
       </div>
 
       {counts.all > 0 && (
@@ -183,10 +189,10 @@ export default function MediaBin() {
       )}
 
       {!counts.all && !jobs.length ? (
-        <button type="button" className="ep-mdrop" onClick={() => input.current?.click()}>
+        <button type="button" className="ep-mdrop" onClick={pickers.openGallery}>
           <span className="ic"><IconUpload size={22} /></span>
-          <b>Solte vídeos, fotos e músicas aqui</b>
-          <span>ou clique para escolher arquivos</span>
+          <b>Toque para abrir a galeria</b>
+          <span>ou solte vídeos, fotos e músicas aqui</span>
         </button>
       ) : (
         <div className="ep-mgrid">

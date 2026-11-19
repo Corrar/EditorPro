@@ -10,6 +10,7 @@
 import { create } from 'zustand';
 import { emit, on } from '../events';
 import { putBlob } from '../persist/db';
+import { rememberRecent } from '../persist/recents';
 import { useEditor } from '../store';
 import type { MediaAsset, MediaRole } from '../types';
 import { uid } from '../util';
@@ -175,6 +176,7 @@ export async function ingestFile(file: File, role?: MediaRole): Promise<MediaAss
       if (waveform) { asset = { ...asset, waveform }; updateAsset(id, { waveform }); }
     }
     await blobSaved;
+    void rememberRecent(asset); // galeria "Recentes" do seletor dentro do app
     return asset;
   } catch (e) {
     if (!useEditor.getState().assets[id]) URL.revokeObjectURL(url);

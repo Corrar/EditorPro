@@ -19,6 +19,7 @@ import type { Clip } from '@/lib/types';
 import { DEFAULT_TRANSFORM } from '@/lib/types';
 import { uid } from '@/lib/util';
 import ToolSheet, { type SheetKind } from './ToolSheet';
+import { openMediaPicker } from '@/components/media/pickerStore';
 import { useAudioView } from '@/components/panels/AudioTab';
 import type { ToolId } from './tools';
 
@@ -103,7 +104,7 @@ export default function MobileToolbar({ onTool, onAi, onMenu, tool, toolOpen }: 
     { id: 'format', label: 'Proporção', icon: 'formats', run: () => openPanel('canvas'), on: isOn('canvas') },
     { id: 'bg', label: 'Fundo', icon: 'background', run: () => openPanel('canvas') },
     { id: 'transitions', label: 'Transições', icon: 'transitions', run: () => openPanel('transitions'), on: isOn('transitions') },
-    { id: 'media', label: 'Mídia', icon: 'media', run: () => openPanel('media') },
+    { id: 'media', label: 'Mídia', icon: 'media', run: () => openMediaPicker() },
     { id: 'review', label: 'Revisão', icon: 'review', run: () => openPanel('review'), on: isOn('review') },
     { id: 'more', label: 'Mais', icon: 'grid', run: onMenu },
   ];
