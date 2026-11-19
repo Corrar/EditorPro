@@ -270,7 +270,7 @@ export default function EditorShell() {
           {view === 'editor' && !chatOpen && (
             <>
               <MobileToolbar tool={tool} toolOpen={sideOpen} onTool={(t) => { if (aiMode === 'open') setAiModeRaw('min'); pickTool(t); }} onAi={() => setAiMode('open')} onMenu={() => setMenuOpen(true)} />
-              <AiPopupHost fabHidden={sideOpen} prompt={aiPrompt} mode={aiMode} setMode={setAiMode} onOpenChat={() => openChat(true)} />
+              <AiPopupHost fabHidden={sideOpen} focus={!!aiPrompt} mode={aiMode} setMode={setAiMode} onOpenChat={() => openChat(true)} />
             </>
           )}
         </div>
