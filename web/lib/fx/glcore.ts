@@ -28,6 +28,11 @@ interface State {
 
 let st: State | null | undefined;
 let failures = 0;
+/** chave do programa rodando agora: se o contexto cair durante ele, o shader vai p/ a lista negra */
+let lastCustom: { key: string; at: number } | null = null;
+const blacklist = new Set<string>();
+/** programas "descartáveis" (código da IA) com prefixo 'c:' — LRU p/ não acumular */
+const CUSTOM_MAX = 24;
 
 /** só p/ testes/diagnóstico */
 export const glStats = { inits: 0, programs: 0, lost: 0, runs: 0 };
@@ -62,6 +67,8 @@ function init(): State | null {
     const lost = (e: Event) => {
       e.preventDefault();
       glStats.lost++;
+      // a perda chega assíncrona: culpa o último shader da IA rodado nos últimos 3 s (pesado/infinito)
+      if (lastCustom && Date.now() - lastCustom.at < 3000) blacklist.add(lastCustom.key);
       st = undefined; // recria na próxima chamada (programas antigos morreram com o contexto)
     };
     (canvas as HTMLCanvasElement).addEventListener?.('webglcontextlost', lost as EventListener, false);
@@ -80,8 +87,21 @@ export function fxGLAvailable(): boolean {
 }
 
 function program(S: State, key: string, frag: string): Prog | null {
-  if (S.progs.has(key)) return S.progs.get(key)!;
+  if (blacklist.has(key)) return null;
+  if (S.progs.has(key)) {
+    const hit = S.progs.get(key)!;
+    if (key.startsWith('c:')) { S.progs.delete(key); S.progs.set(key, hit); } // LRU: vai p/ o fim
+    return hit;
+  }
   const { gl } = S;
+  if (key.startsWith('c:')) {
+    const customs = [...S.progs.keys()].filter((k) => k.startsWith('c:'));
+    for (const k of customs.slice(0, Math.max(0, customs.length - CUSTOM_MAX + 1))) {
+      const old = S.progs.get(k);
+      if (old) gl.deleteProgram(old.p);
+      S.progs.delete(k);
+    }
+  }
   const fs = gl.createShader(gl.FRAGMENT_SHADER)!;
   gl.shaderSource(fs, frag); gl.compileShader(fs);
   if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) {
@@ -100,7 +120,12 @@ function program(S: State, key: string, frag: string): Prog | null {
   return prog;
 }
 
-export type UniformValue = number | readonly number[];
+export type UniformValue = number | readonly number[] | Float32Array;
+
+export interface RunOpts {
+  /** false = textura sobe com alfa "reto" (shaders da IA); padrão true (pré-multiplicada) */
+  premultiply?: boolean;
+}
 
 /**
  * Roda o shader `frag` (chave de cache `key`) com até 2 texturas e devolve o
@@ -108,7 +133,7 @@ export type UniformValue = number | readonly number[];
  */
 export function runFx(
   key: string, frag: string, textures: readonly (readonly [string, TexImageSource])[], W: number, H: number,
-  uniforms: Record<string, UniformValue> = {},
+  uniforms: Record<string, UniformValue> = {}, opts: RunOpts = {},
 ): AnyCanvas | null {
   W = Math.round(W); H = Math.round(H);
   if (!(W > 0 && H > 0)) return null;
@@ -126,7 +151,7 @@ export function runFx(
   gl.enableVertexAttribArray(P.aPos);
   gl.vertexAttribPointer(P.aPos, 2, gl.FLOAT, false, 0, 0);
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, opts.premultiply !== false);
   const u = (n: string) => {
     if (!P.u.has(n)) P.u.set(n, gl.getUniformLocation(P.p, n));
     return P.u.get(n)!;
@@ -146,15 +171,49 @@ export function runFx(
     const loc = u(n);
     if (!loc) continue;
     if (typeof v === 'number') gl.uniform1f(loc, Number.isFinite(v) ? v : 0);
+    else if (v.length > 4) gl.uniform1fv(loc, v instanceof Float32Array ? v : new Float32Array(v));
     else if (v.length === 2) gl.uniform2f(loc, v[0], v[1]);
     else if (v.length === 3) gl.uniform3f(loc, v[0], v[1], v[2]);
     else if (v.length === 4) gl.uniform4f(loc, v[0], v[1], v[2], v[3]);
   }
   gl.clearColor(0, 0, 0, 0);
   gl.clear(gl.COLOR_BUFFER_BIT);
+  if (key.startsWith('c:')) lastCustom = { key, at: Date.now() };
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   glStats.runs++;
   return canvas;
+}
+
+/** true se este programa (chave) já falhou ao compilar ou derrubou o contexto */
+export function fxProgramFailed(key: string): boolean {
+  if (blacklist.has(key)) return true;
+  return !!st && st.progs.has(key) && st.progs.get(key) === null;
+}
+
+/**
+ * Compila (e liga) um fragment shader só p/ checar. null = sem WebGL (vitest, aparelho sem GPU).
+ * Não guarda o programa.
+ */
+export function glCompileCheck(frag: string): { ok: boolean; log: string } | null {
+  const S = init();
+  if (!S) return null;
+  const { gl } = S;
+  if (gl.isContextLost()) { st = undefined; return null; }
+  const fs = gl.createShader(gl.FRAGMENT_SHADER);
+  if (!fs) return null;
+  gl.shaderSource(fs, frag);
+  gl.compileShader(fs);
+  if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) {
+    const log = gl.getShaderInfoLog(fs) ?? 'erro de compilação';
+    gl.deleteShader(fs);
+    return { ok: false, log };
+  }
+  const p = gl.createProgram()!;
+  gl.attachShader(p, S.vs); gl.attachShader(p, fs); gl.linkProgram(p);
+  const ok = !!gl.getProgramParameter(p, gl.LINK_STATUS);
+  const log = ok ? '' : gl.getProgramInfoLog(p) ?? 'erro de ligação';
+  gl.deleteProgram(p); gl.deleteShader(fs);
+  return { ok, log };
 }
 
 /** '#RRGGBB' / '#RGB' → [r,g,b] 0..1 (fallback = laranja da marca) */

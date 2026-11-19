@@ -6,7 +6,8 @@
    'glitch' do original virou 'digital-glitch' (o contrato já tinha 'glitch').
    Ver web/THIRD_PARTY_NOTICES.md.
    ===================================================================== */
-import type { TransitionKind } from '../types';
+import type { Transition, TransitionKind } from '../types';
+import { runCustomTransition } from '../fx/customRender';
 import type { AnyCanvas } from './surface';
 import { fxGLAvailable, runFx } from '../fx/glcore';
 import { FX_SHADER_TRANSITION_KINDS, fxTransitionFragment } from '../fx/transitionShaders';
@@ -120,7 +121,7 @@ const FRAG: Record<LegacyShaderKind, string> = {
 /** transições em shader: as 14 portadas do HyperFrames + as escritas pela sessão fx (lib/fx/transitionShaders.ts) */
 export type ShaderTransitionKind = TransitionKind;
 
-export const SHADER_TRANSITIONS = [...Object.keys(FRAG), ...FX_SHADER_TRANSITION_KINDS] as ShaderTransitionKind[];
+export const SHADER_TRANSITIONS = [...Object.keys(FRAG), ...FX_SHADER_TRANSITION_KINDS, 'custom'] as ShaderTransitionKind[];
 const SHADER_SET = new Set<string>(SHADER_TRANSITIONS);
 
 export const SHADER_TRANSITION_LABELS = Object.fromEntries(
@@ -146,8 +147,12 @@ function fragmentOf(kind: ShaderTransitionKind): string | null {
   return fxTransitionFragment(kind);
 }
 
-/** mistura dois quadros completos W×H com o shader `kind`; devolve o canvas GL (desenhe na hora) */
-export function runShaderTransition(kind: ShaderTransitionKind, from: TexImageSource, to: TexImageSource, progress: number, W: number, H: number): AnyCanvas | null {
+/**
+ * mistura dois quadros completos W×H com o shader `kind`; devolve o canvas GL (desenhe na hora).
+ * `tr` (opcional) = a transição do clipe — necessária p/ 'custom' (código da IA; sem ela, crossfade).
+ */
+export function runShaderTransition(kind: ShaderTransitionKind, from: TexImageSource, to: TexImageSource, progress: number, W: number, H: number, tr?: Transition): AnyCanvas | null {
+  if (kind === 'custom') return runCustomTransition(tr, from, to, progress, W, H);
   const frag = fragmentOf(kind);
   if (!frag) return null;
   const p = Number.isFinite(progress) ? Math.min(1, Math.max(0, progress)) : 0;
