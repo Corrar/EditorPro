@@ -1,13 +1,14 @@
 'use client';
 
-import { useState } from 'react';
-import { useTheme } from '@/components/shell/theme';
+import { useEffect, useState } from 'react';
+import { applySystemChrome, useTheme } from '@/components/shell/theme';
 
 export default function Login() {
   const [password, setPassword] = useState('');
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(false);
   const [dark] = useTheme();
+  useEffect(() => { if (dark !== null) applySystemChrome(dark); }, [dark]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();

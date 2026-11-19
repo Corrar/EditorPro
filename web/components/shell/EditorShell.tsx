@@ -21,7 +21,7 @@ import MobileNav from './MobileNav';
 import SettingsModal from './SettingsModal';
 import Sidebar from './Sidebar';
 import Toasts from './Toasts';
-import { useTheme } from './theme';
+import { applySystemChrome, useTheme } from './theme';
 import Workspace from './Workspace';
 import type { ToolId } from './tools';
 
@@ -93,6 +93,9 @@ export default function EditorShell() {
   const selCount = useEditor((s) => s.selection.length);
   useEffect(() => { if (!selCount && tool === 'edit') setSideOpen((v) => (mq('(max-width: 1099px)') ? false : v)); }, [selCount, tool]);
   const toggleSb = () => setSbMin((v) => { try { localStorage.setItem(SB_KEY, v ? '0' : '1'); } catch {} return !v; });
+
+  // barra do sistema e fundo do documento acompanham o tema (a home pinta de laranja enquanto o hero está no topo)
+  useEffect(() => { if (themeDark !== null && view !== 'home') applySystemChrome(themeDark); }, [themeDark, view]);
 
   // ingestão pedida por outros módulos + restauração (ou wizard direto em /?novo=1)
   useEffect(() => listenAttachFiles(), []);
@@ -235,7 +238,7 @@ export default function EditorShell() {
                 canResume={hasContent ? projectName : null} onResume={() => setView('editor')}
               />
             )}
-            {view === 'editor' && <Workspace tool={tool} sideOpen={sideOpen} onCloseSide={() => setSideOpen(false)} chatOpen={chatOpen} onChat={openChat} />}
+            {view === 'editor' && <Workspace tool={tool} sideOpen={sideOpen} onCloseSide={() => setSideOpen(false)} chatOpen={chatOpen} onChat={openChat} onHome={goHome} />}
           </div>
           <MobileNav {...nav} chatOpen={chatOpen} onChat={openChat} />
         </div>

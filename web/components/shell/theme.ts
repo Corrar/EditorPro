@@ -32,3 +32,25 @@ export function useTheme(): [boolean | null, () => void] {
   }, []);
   return [dark, toggle];
 }
+
+const BASE = { light: '#FFFFFF', dark: '#0D0D0F' };
+export const HERO_COLOR = '#EC6418';
+
+/** cor da barra de status/gestos do sistema (meta theme-color) e tema no <html> */
+export function applySystemChrome(dark: boolean, heroTop = false): void {
+  if (typeof document === 'undefined') return;
+  const color = heroTop ? HERO_COLOR : dark ? BASE.dark : BASE.light;
+  const metas = Array.from(document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]'));
+  if (!metas.length) {
+    const m = document.createElement('meta');
+    m.name = 'theme-color';
+    document.head.appendChild(m);
+    metas.push(m);
+  }
+  // remove variações por media query para a cor escolhida valer sempre
+  metas.forEach((m, i) => { if (i === 0) { m.content = color; m.removeAttribute('media'); } else m.remove(); });
+  const html = document.documentElement;
+  html.classList.toggle('dark', dark);
+  html.style.colorScheme = dark ? 'dark' : 'light';
+  html.style.backgroundColor = dark ? BASE.dark : BASE.light;
+}

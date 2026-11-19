@@ -16,6 +16,7 @@ import {
 } from './icons';
 import { PROJECT_TEMPLATES } from './templates';
 import { TOOLS, type ToolId } from './tools';
+import { applySystemChrome } from './theme';
 
 export interface WizardInput { brief: string; material: File[]; reference: File | null; aspect: AspectRatio }
 
@@ -298,6 +299,19 @@ export default function Home({ onStart, onEmpty, onOpen, onTemplate, onTool, onI
     return () => io.disconnect();
   }, [wizard]);
 
+  // barra do sistema laranja só enquanto o hero laranja está no topo da tela
+  const heroRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const el = heroRef.current;
+    if (wizard || !el) { applySystemChrome(dark); return; }
+    let top = true;
+    applySystemChrome(dark, true);
+    const scroller = el.closest('.ep-home');
+    const onScroll = () => { const t = (scroller?.scrollTop ?? 0) < 24; if (t !== top) { top = t; applySystemChrome(dark, t); } };
+    scroller?.addEventListener('scroll', onScroll, { passive: true });
+    return () => { scroller?.removeEventListener('scroll', onScroll); applySystemChrome(dark); };
+  }, [dark, wizard]);
+
   const ql = q.trim().toLowerCase();
   const toolHits = useMemo(() => (ql ? TOOLS.filter((t) => t.id !== 'edit' && t.label.toLowerCase().includes(ql)) : []), [ql]);
 
@@ -305,7 +319,7 @@ export default function Home({ onStart, onEmpty, onOpen, onTemplate, onTool, onI
 
   return (
     <div className="ep-home">
-      <header className="ep-hero2 ep-homehero">
+      <header className="ep-hero2 ep-homehero" ref={heroRef}>
         <div className="ep-hh-top">
           <span className="ep-avatar2" aria-hidden="true">B</span>
           <label className="ep-searchpill">
