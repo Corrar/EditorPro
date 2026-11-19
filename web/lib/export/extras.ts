@@ -13,6 +13,8 @@ export interface AudioExportOptions {
   format: 'wav' | 'm4a';
   onProgress?: (fraction: number, stage: string) => void;
   signal?: AbortSignal;
+  /** aviso p/ o resultado (áudio de um arquivo que não entrou) */
+  onWarning?: (message: string) => void;
 }
 
 /** M4A (AAC) é possível neste navegador? */
@@ -25,7 +27,7 @@ export async function canExportM4A(): Promise<boolean> {
 
 export async function exportAudio(p: Project, assets: Record<string, MediaAsset>, opts: AudioExportOptions): Promise<Blob> {
   opts.onProgress?.(0, 'Mixando áudio');
-  const buf = await mixProjectAudio(p, assets, { signal: opts.signal, onProgress: (f) => opts.onProgress?.(f * 0.7, 'Mixando áudio') });
+  const buf = await mixProjectAudio(p, assets, { signal: opts.signal, onProgress: (f) => opts.onProgress?.(f * 0.7, 'Mixando áudio'), onWarning: opts.onWarning });
   if (!buf) throw new Error('O projeto não tem áudio para exportar.');
   const chans = [buf.getChannelData(0), buf.getChannelData(buf.numberOfChannels > 1 ? 1 : 0)];
   if (opts.format === 'm4a' && (await canExportM4A())) {
