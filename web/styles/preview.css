@@ -9,7 +9,7 @@
 /* palco: fundo neutro escuro (nos dois temas), cantos generosos */
 .ep-pv-box { flex:1; min-height:0; position:relative; display:grid; place-items:center; background:var(--pv-stage); border-radius:var(--r-lg, 24px); padding:16px; overflow:hidden; }
 .ep-pv-frame { position:relative; border-radius:18px; overflow:hidden; background:#000; box-shadow:0 18px 50px rgba(0,0,0,.45); container-type:inline-size; }
-.ep-pv-canvas { position:relative; z-index:1; display:block; width:100%; height:100%; background:transparent; cursor:pointer; touch-action:manipulation; -webkit-tap-highlight-color:transparent; }
+.ep-pv-canvas { position:relative; z-index:1; display:block; width:100%; height:100%; background:transparent; cursor:pointer; touch-action:none; -webkit-tap-highlight-color:transparent; }
 .ep-pv-canvas.pointing { cursor:crosshair; }
 /* camada de vídeo NATIVA (modo híbrido): os <video> tocam visíveis sob o canvas transparente */
 .ep-pv-host { position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:0; }
@@ -270,3 +270,12 @@
 .ep-pv-split span { position:absolute; top:10px; font-size:11px; font-weight:800; color:#fff; background:rgba(0,0,0,.55); padding:3px 9px; border-radius:999px; white-space:nowrap; pointer-events:none; }
 .ep-pv-split .l { right:calc(50% + 8px); }
 .ep-pv-split .r { left:calc(50% + 8px); }
+
+/* guias ao arrastar texto/sticker */
+.ep-pv-guides { position:absolute; inset:0; pointer-events:none; z-index:3; }
+.ep-pv-guides i { position:absolute; background:#FF3DA5; box-shadow:0 0 0 .5px rgba(0,0,0,.4); }
+.ep-pv-guides .gx { top:0; bottom:0; width:1px; }
+.ep-pv-guides .gy { left:0; right:0; height:1px; }
+.ep-pv-guides b { position:absolute; border:1.5px dashed #fff; border-radius:6px; box-shadow:0 0 0 1px rgba(0,0,0,.35); }
+/* com zoom (100%/200%), o toque no quadro rola o palco em vez de arrastar camadas */
+.ep-pv-box.zoomed .ep-pv-canvas { touch-action:pan-x pan-y pinch-zoom; }

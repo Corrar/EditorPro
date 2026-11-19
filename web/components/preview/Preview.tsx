@@ -13,6 +13,8 @@ import { formatTime } from '@/lib/util';
 import { LiveMediaPool } from './livePool';
 import { PlaybackClock, QualityGovernor, frameInterval } from './syncPolicy';
 import { nativePlan } from './hybrid';
+import { hitTest, dragPatch, type Box } from './manipulate';
+import type { Clip, Project, TextClip } from '@/lib/types';
 import { stripLooks, PLAY_RATES, rateLabel, loopRange, wrapLoop, stepFrame, zoomScale, VIEW_ZOOMS, zoomLabel, SAFE_ZONES, SAFE_LABELS, type ViewZoom, type SafePlatform } from './viewing';
 import PerfHud, { type PreviewStats } from './PerfHud';
 import ExportDialog from './ExportDialog';
@@ -448,8 +450,29 @@ export default function Preview() {
     setMarkerAt(Date.now());
     setPointMode(false);
   };
+  /* ---------- arrastar texto/sticker/forma/PiP no quadro (guias de encaixe, 1 desfazer) ---------- */
+  const measureRef = useRef<CanvasRenderingContext2D | null>(null);
+  const measure = (txt: string, px: number, clip: TextClip) => {
+    const m = measureRef.current ?? (measureRef.current = document.createElement('canvas').getContext('2d'));
+    if (!m) return txt.length * px * 0.55;
+    m.font = `${clip.style.italic ? 'italic ' : ''}${clip.style.fontWeight || 700} ${px}px "${clip.style.fontFamily}", sans-serif`;
+    return m.measureText(txt).width;
+  };
+  const dragRef = useRef<{ clip: Clip; before: Project; start: { x: number; y: number }; px: number; py: number; box: Box; started: boolean } | null>(null);
+  const suppressClickRef = useRef(false);
+  const [guides, setGuides] = useState<{ x: number | null; y: number | null; box: Box | null }>({ x: null, y: null, box: null });
   const onCanvasDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (pointMode || e.altKey) { e.preventDefault(); pointAt(e.clientX, e.clientY); pressRef.current = { x: 0, y: 0, timer: 0, fired: true }; return; }
+    // camada sob o dedo: seleciona (timeline/painéis acompanham) e prepara o arraste
+    const r = e.currentTarget.getBoundingClientRect();
+    const st = useEditor.getState();
+    const hit = r.width > 0 ? hitTest(st.project, st.playhead, (e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height, st.project.width, st.project.height, measure, 22 * (st.project.width / r.width)) : null;
+    dragRef.current = null;
+    if (hit) {
+      if (st.selection.length !== 1 || st.selection[0] !== hit.clip.id) st.select([hit.clip.id]);
+      dragRef.current = { clip: hit.clip, before: st.project, start: { x: hit.box.cx, y: hit.box.cy }, px: e.clientX, py: e.clientY, box: hit.box, started: false };
+      try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* ok */ }
+    }
     // toque longo (≥ 550 ms parado) também aponta
     const timer = window.setTimeout(() => {
       if (pressRef.current && !pressRef.current.fired) { pressRef.current.fired = true; pointAt(pressRef.current.x, pressRef.current.y); }
@@ -459,8 +482,33 @@ export default function Preview() {
   const onCanvasMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const p = pressRef.current;
     if (p && !p.fired && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 10) { clearTimeout(p.timer); pressRef.current = null; }
+    const d = dragRef.current;
+    if (!d || !(e.buttons & 1) && e.pointerType === 'mouse') return;
+    if (!d.started) {
+      if (Math.hypot(e.clientX - d.px, e.clientY - d.py) < 4) return;
+      d.started = true;
+      suppressClickRef.current = true;
+      if (p) { clearTimeout(p.timer); pressRef.current = null; }
+      const st = useEditor.getState();
+      if (st.playing) st.setPlaying(false);
+    }
+    const r = e.currentTarget.getBoundingClientRect();
+    const res = dragPatch(d.clip, d.start, (e.clientX - d.px) / r.width, (e.clientY - d.py) / r.height,
+      safe && isVertical ? SAFE_ZONES[platform] : undefined, !e.shiftKey);
+    useEditor.getState().dispatch({ op: 'update_clip', clipId: d.clip.id, patch: res.patch } as never, { history: false });
+    setGuides({ x: res.guideX, y: res.guideY, box: { ...d.box, cx: res.center.x, cy: res.center.y } });
+  };
+  const onCanvasUp = () => {
+    const d = dragRef.current;
+    dragRef.current = null;
+    if (d?.started) {
+      // o arraste inteiro vira UM passo de desfazer
+      useEditor.setState((s) => (s.project === d.before ? {} : { past: [...s.past, d.before].slice(-100), future: [] }));
+      setGuides({ x: null, y: null, box: null });
+    }
   };
   const onCanvasClick = () => {
+    if (suppressClickRef.current) { suppressClickRef.current = false; return; } // foi um arraste
     const p = pressRef.current;
     pressRef.current = null;
     if (p) clearTimeout(p.timer);
@@ -567,8 +615,8 @@ export default function Preview() {
           <div ref={hostRef} className="ep-pv-host" aria-hidden="true" />
           <canvas
             ref={canvasRef} data-ep-preview="" className={`ep-pv-canvas${pointMode ? ' pointing' : ''}`} aria-label="Pré-visualização do vídeo"
-            onClick={empty ? undefined : onCanvasClick} onPointerDown={empty ? undefined : onCanvasDown} onPointerMove={onCanvasMove}
-            onPointerCancel={() => { if (pressRef.current) clearTimeout(pressRef.current.timer); pressRef.current = null; }}
+            onClick={empty ? undefined : onCanvasClick} onPointerDown={empty ? undefined : onCanvasDown} onPointerMove={onCanvasMove} onPointerUp={onCanvasUp}
+            onPointerCancel={() => { if (pressRef.current) clearTimeout(pressRef.current.timer); pressRef.current = null; onCanvasUp(); }}
             onContextMenu={(e) => { if (pressRef.current?.fired) e.preventDefault(); }}
           />
           {glow > 0 && <i className="ep-pv-glow" key={glow} aria-hidden="true" />}
@@ -591,6 +639,13 @@ export default function Preview() {
               onKeyDown={(e) => { if (e.key === 'ArrowLeft') setSplit((v) => Math.max(0, v - 0.05)); if (e.key === 'ArrowRight') setSplit((v) => Math.min(1, v + 0.05)); }}>
               <i /><b><Icon name="prev" size={13} /><Icon name="next" size={13} /></b>
               <span className="l">Antes</span><span className="r">Depois</span>
+            </div>
+          )}
+          {(guides.x !== null || guides.y !== null || guides.box) && (
+            <div className="ep-pv-guides" aria-hidden="true">
+              {guides.x !== null && <i className="gx" style={{ left: `${guides.x * 100}%` }} />}
+              {guides.y !== null && <i className="gy" style={{ top: `${guides.y * 100}%` }} />}
+              {guides.box && <b style={{ left: `${(guides.box.cx - guides.box.w / 2) * 100}%`, top: `${(guides.box.cy - guides.box.h / 2) * 100}%`, width: `${guides.box.w * 100}%`, height: `${guides.box.h * 100}%` }} />}
             </div>
           )}
           {grid && !empty && <div className="ep-pv-grid" aria-hidden="true"><i /><i /><i /><i /></div>}
