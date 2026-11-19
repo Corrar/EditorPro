@@ -220,3 +220,21 @@ describe('1ª edição demo: gancho', () => {
     expect(t.text.length).toBeGreaterThan(3);
   });
 });
+
+describe('speechLikely (filtro antes do Whisper)', () => {
+  it('tom contínuo e silêncio não; fala sintética (sílabas) sim', async () => {
+    const { speechLikely } = await import('./words');
+    const sr = 16000, n = sr * 4;
+    const tone = new Float32Array(n).map((_, i) => 0.5 * Math.sin((2 * Math.PI * 330 * i) / sr));
+    const silence = new Float32Array(n);
+    // "sílabas": tom modulado em 5 Hz com pausas, frequência variando
+    const speech = new Float32Array(n).map((_, i) => {
+      const t = i / sr;
+      const env = Math.max(0, Math.sin(2 * Math.PI * 5 * t)) * (Math.floor(t * 1.5) % 3 === 2 ? 0.1 : 1);
+      return 0.4 * env * Math.sin(2 * Math.PI * (180 + 60 * Math.sin(2 * Math.PI * 0.7 * t)) * t);
+    });
+    expect(speechLikely(tone, sr)).toBe(false);
+    expect(speechLikely(silence, sr)).toBe(false);
+    expect(speechLikely(speech, sr)).toBe(true);
+  });
+});

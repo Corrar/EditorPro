@@ -65,6 +65,9 @@ self.onmessage = async (ev: MessageEvent) => {
         return_timestamps: 'word',
         chunk_length_s: 30,
         stride_length_s: 5,
+        // trava de segurança contra loops de alucinação (fala real de 30 s cabe folgado)
+        max_new_tokens: 220,
+        no_repeat_ngram_size: 4,
       });
       post({ type: 'result', id: msg.id, chunks: out.chunks ?? [], text: out.text });
     }
