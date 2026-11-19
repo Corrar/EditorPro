@@ -63,14 +63,29 @@ describe('combinar cor com o modelo (ColorGrade)', () => {
     expect(g.contrast!).toBeGreaterThan(0);
     expect(matchColorGrade(model, model)).toEqual({});
   });
-  it('vira update_clip {colorGrade} válido pelo validate; null remove', () => {
-    const p = base();
+  it('sem o motor de cor: filtros equivalentes, sem zerar o colorPreset', () => {
+    const p = applyOps(base(), [{ op: 'update_clip', clipId: 'c1', patch: { colorPreset: 'warm', filters: [{ kind: 'vignette', value: 0.3 }] } }]).project;
     const ops = colorGradeOps(p, { a1: matchColorGrade(model, material) });
+    const s = sanitizeOps(ops, p, { a1: src });
+    const c = s.project.tracks[0].clips[0] as VideoClip;
+    expect(c.colorPreset).toBe('warm');
+    expect(c.colorGrade).toBeUndefined();
+    expect(c.filters.find((f) => f.kind === 'vignette')).toBeTruthy();
+    expect(c.filters.find((f) => f.kind === 'temperature')!.value).toBeGreaterThan(0);
+    expect(c.filters.find((f) => f.kind === 'saturation')!.value).toBeGreaterThan(0);
+    expect(JSON.stringify(ops)).not.toContain('colorPreset');
+  });
+  it('colorGrade pedido pela IA vira filtros enquanto o motor não renderiza; null remove', () => {
+    const p = base();
+    const ops = colorGradeOps(p, { a1: matchColorGrade(model, material) }, 'x', true);
+    expect((ops[0] as { patch: { colorGrade?: unknown } }).patch.colorGrade).toBeTruthy();
     const s = sanitizeOps(ops, p, { a1: src });
     expect(s.dropped).toEqual([]);
     const c = s.project.tracks[0].clips[0] as VideoClip;
-    expect(c.colorGrade?.offset?.r).toBeGreaterThan(0);
-    const s2 = sanitizeOps([{ op: 'update_clip', clipId: 'c1', patch: { colorGrade: null } }], s.project, { a1: src });
+    expect(c.colorGrade).toBeUndefined();
+    expect(c.filters.some((f) => f.kind === 'temperature')).toBe(true);
+    const withGrade = applyOps(p, [{ op: 'update_clip', clipId: 'c1', patch: { colorGrade: { exposure: 0.2 } } }]).project;
+    const s2 = sanitizeOps([{ op: 'update_clip', clipId: 'c1', patch: { colorGrade: null } }], withGrade, { a1: src });
     expect((s2.project.tracks[0].clips[0] as VideoClip).colorGrade).toBeUndefined();
   });
   it('sanitizeColorGrade limita valores e ignora lixo', () => {
