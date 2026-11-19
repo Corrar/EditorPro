@@ -153,8 +153,11 @@ export default function Preview() {
     const el = boxRef.current;
     if (!el) return;
     const ro = new ResizeObserver(() => {
-      const r = el.getBoundingClientRect();
-      const k = Math.min(r.width / projW, r.height / projH);
+      // área útil = caixa menos o padding do palco
+      const cs = getComputedStyle(el);
+      const w = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      const h = el.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+      const k = Math.max(0, Math.min(w / projW, h / projH));
       setFit({ w: Math.max(0, Math.floor(projW * k)), h: Math.max(0, Math.floor(projH * k)) });
     });
     ro.observe(el);
@@ -388,10 +391,10 @@ export default function Preview() {
           {empty && (
             <div className="ep-pv-empty">
               <div className="ic"><IcFilm size={26} /></div>
-              <h4>Envie um vídeo para começar</h4>
-              <p>Arraste seus clipes para a biblioteca ou escolha arquivos. A IA monta a primeira edição e você ajusta pelo chat.</p>
-              <label className="ep-btn primary ep-pv-upload">
-                <IcUpload size={15} /> Escolher arquivos
+              <h4>Envie um vídeo</h4>
+              <p>A IA monta a 1ª edição e você ajusta pelo chat.</p>
+              <label className="ep-pv-upload">
+                <IcUpload size={16} /> <span>Escolher arquivos</span>
                 <input
                   type="file" accept="video/*,image/*,audio/*" multiple hidden
                   onChange={(e) => {
@@ -407,28 +410,29 @@ export default function Preview() {
         <div ref={hostRef} className="ep-pv-host" aria-hidden="true" />
       </div>
 
-      <div className="ep-pv-controls">
+      {/* controles: pílula flutuante (play em círculo laranja, demais em círculos) */}
+      <div className="ep-pv-controls" role="toolbar" aria-label="Reprodução">
+        <button className="ep-circle sm ep-pv-c ep-pv-rew" onClick={toStart} title="Voltar ao início" aria-label="Voltar ao início" disabled={empty}><IcRewind size={16} /></button>
+        <button className="ep-pv-play" onClick={togglePlay} title={playing ? 'Pausar' : 'Reproduzir'} aria-label={playing ? 'Pausar' : 'Reproduzir'} disabled={empty}>
+          {playing ? <IcPause size={20} /> : <IcPlay size={20} />}
+        </button>
+        <div className="ep-pv-time mono"><span ref={timeRef}>{fmt(0)}</span><i>/</i><span className="tot">{fmt(duration)}</span></div>
         <div className="ep-pv-scrub" onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); seekFromBar(e); }}
           onPointerMove={(e) => { if (e.buttons) seekFromBar(e); }} role="slider" aria-label="Posição"
           aria-valuemin={0} aria-valuemax={duration} aria-valuenow={0}>
           <div className="fill" ref={barRef} />
         </div>
-        <div className="ep-pv-row">
-          <button className="ep-pv-btn" onClick={toStart} title="Voltar ao início" aria-label="Voltar ao início" disabled={empty}><IcRewind size={16} /></button>
-          <button className="ep-pv-play" onClick={togglePlay} title={playing ? 'Pausar' : 'Reproduzir'} aria-label={playing ? 'Pausar' : 'Reproduzir'} disabled={empty}>
-            {playing ? <IcPause size={18} /> : <IcPlay size={18} />}
+        <div className="ep-pv-tools">
+          <button className={`ep-circle sm ep-pv-c${pointMode ? ' on' : ''}`} onClick={() => setPointMode(!pointMode)} disabled={empty}
+            title="Apontar um ponto do vídeo para o chat (ou Alt+clique / toque longo)" aria-label="Apontar" aria-pressed={pointMode}>
+            <IcTarget size={17} />
           </button>
-          <div className="ep-pv-time mono"><span ref={timeRef}>{fmt(0)}</span><i>/</i><span className="tot">{fmt(duration)}</span></div>
-          <span style={{ flex: 1 }} />
-          <button className={`ep-pv-chip${pointMode ? ' on' : ''}`} onClick={() => setPointMode(!pointMode)} disabled={empty}
-            title="Apontar um ponto do vídeo para o chat (ou Alt+clique / toque longo no vídeo)">
-            <IcTarget size={14} /> <span className="lbl">Apontar</span>
+          <button className={`ep-circle sm ep-pv-c${safe ? ' on' : ''}`} onClick={() => setSafe(!safe)} disabled={empty}
+            title="Guias de área segura (TikTok/Reels)" aria-label="Área segura" aria-pressed={safe}>
+            <IcSafe size={17} />
           </button>
-          <button className={`ep-pv-chip${safe ? ' on' : ''}`} onClick={() => setSafe(!safe)} title="Guias de área segura (TikTok/Reels)" disabled={empty}>
-            <IcSafe size={14} /> <span className="lbl">Área segura</span>
-          </button>
-          <button className="ep-pv-btn" onClick={() => emit('ep:open-export', {})} title="Exportar" aria-label="Exportar" disabled={empty}><IcExport size={16} /></button>
-          <button className="ep-pv-btn" onClick={toggleFull} title={fullscreen || cssFull ? 'Sair da tela cheia' : 'Tela cheia'} aria-label="Tela cheia"><IcFull size={16} /></button>
+          <button className="ep-circle sm ep-pv-c" onClick={() => emit('ep:open-export', {})} title="Exportar" aria-label="Exportar" disabled={empty}><IcExport size={17} /></button>
+          <button className="ep-circle sm ep-pv-c" onClick={toggleFull} title={fullscreen || cssFull ? 'Sair da tela cheia' : 'Tela cheia'} aria-label="Tela cheia"><IcFull size={17} /></button>
         </div>
       </div>
       {exportOpen && <ExportDialog onClose={() => setExportOpen(false)} />}
