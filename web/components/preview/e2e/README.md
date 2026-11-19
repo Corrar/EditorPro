@@ -11,3 +11,6 @@ Vídeo: `ffmpeg -f lavfi -i testsrc2=duration=40:size=1080x1920:rate=30 -f lavfi
 - `node fontcache.cjs <dir> [mobile]` — r2 biblioteca #1: com o CSS da fonte atrasado, o texto parado troca para
   a fonte certa quando ela chega (antes ficava no bitmap da fonte reserva: 71 → 71 px; agora 70 → 177 px).
 - `node emoji.cjs <dir> [mobile]` — r2 biblioteca #3: 'Amei ❤️' com char-fade mantém o coração colorido.
+- `node blackai.cjs <dir> [mobile] [rodadas]` — regressão "preto com a IA editando ao vivo e o vídeo pausado"
+  (cortes + applyLive de ripple_delete): o elemento exibido não pode ser destruído antes de o substituto
+  apresentar. Antes: 3–7 pretas em ~60 capturas; agora 0 (desktop) e 0 (Pixel 7, CPU 4×). `DUMP=1` mostra o estado.

@@ -91,12 +91,14 @@ export class LiveMediaPool implements MediaSources {
   private refused = new WeakSet<AV>();
   private readonly perElement = perElementGesture();
   private resumeTry = -Infinity;
+  private lastAssets: Record<string, MediaAsset> = {};
   private soundOk(el: AV) {
     return canSound({ unlocked: this.unlocked, blessed: this.blessed.has(el), perElement: this.perElement, refused: this.refused.has(el) });
   }
   /** fonte que nunca vai ter quadro (erro, sem fonte, formato não suportado) */
   isBroken(el: AV): boolean {
-    return !!el.error || el.networkState === 3 /* NETWORK_NO_SOURCE */ || this.unplayable.has(el.dataset.url ?? '');
+    // (networkState NO_SOURCE não serve: é passageiro no início da seleção de fonte de todo elemento novo)
+    return !!el.error || this.unplayable.has(el.dataset.url ?? '');
   }
   /** contadores p/ o painel "Mostrar desempenho" */
   readonly stats = { waiting: 0, seeks: 0, errors: 0 };
@@ -126,6 +128,16 @@ export class LiveMediaPool implements MediaSources {
   }
   /** elemento exibido no modo nativo */
   private shown: HTMLVideoElement | null = null;
+  /**
+   * Descarta um elemento — menos o que está NA TELA no modo nativo: esse vira 'retiring' e só sai
+   * depois que o substituto apresentar um quadro (antes, um salto do playhead com o vídeo parado
+   * — IA editando ao vivo — devolvia o elemento exibido ao pool e ele era destruído na hora → preto).
+   */
+  private drop(el: AV) {
+    if (el !== this.shown) { this.destroy(el); return; }
+    el.pause();
+    if (!this.retiring.includes(el)) { this.retiring.push(el); window.setTimeout(() => this.retire(el), 4000); }
+  }
   /** chamado quando um quadro novo fica disponível (seek terminou / dados carregaram) */
   onFrame: () => void = () => {};
 
@@ -224,7 +236,7 @@ export class LiveMediaPool implements MediaSources {
     const assetId = el.dataset.asset!;
     const list = this.idle.get(assetId) ?? [];
     list.push(el);
-    while (list.length > MAX_IDLE_PER_ASSET) this.destroy(list.shift()!);
+    while (list.length > MAX_IDLE_PER_ASSET) this.drop(list.shift()!);
     this.idle.set(assetId, list);
   }
 
@@ -278,6 +290,7 @@ export class LiveMediaPool implements MediaSources {
   /** sincroniza todos os elementos com o tempo t */
   sync(p: Project, assets: Record<string, MediaAsset>, t: Seconds, playing: boolean, fps = 30, playRate = 1): SyncState {
     this.lastPlaying = playing;
+    this.lastAssets = assets;
     const now = performance.now();
     // contexto suspenso (iOS: chamada, outro app, tela bloqueada) com elementos no GainNode = silêncio: tenta retomar
     if (playing && this.actx && this.actx.state !== 'running' && now - this.resumeTry > 1000) { this.resumeTry = now; this.resumeAudio(); }
@@ -311,7 +324,7 @@ export class LiveMediaPool implements MediaSources {
       const cur = a?.url ? mediaUrl(a) : null;
       const stale = staleIdle(list.map((el) => ({ el, url: el.dataset.url ?? '' })), cur);
       if (!stale.length) continue;
-      stale.forEach(({ el }) => this.destroy(el));
+      stale.forEach(({ el }) => this.drop(el));
       const rest = list.filter((el) => !stale.some((x) => x.el === el));
       if (rest.length) this.idle.set(assetId, rest); else this.idle.delete(assetId);
     }
@@ -525,7 +538,14 @@ export class LiveMediaPool implements MediaSources {
         const el = this.byClip.get(l.clip.id);
         // sem elemento (mídia sem url / removida) ou fonte quebrada: o modo nativo não tem o que mostrar —
         // o chamador cai para o canvas (desenha fundo, textos e legendas) em vez de esperar para sempre (r2 #2/#3)
-        if (!(el instanceof HTMLVideoElement) || this.isBroken(el)) return 'canvas';
+        if (!(el instanceof HTMLVideoElement)) {
+          // elemento ainda não pego (ids novos logo depois de um corte/ripple): ESPERA — só cai para o
+          // canvas quando a mídia realmente não tem fonte (sem url) ou não existe mais
+          const a = l.clip.type === 'video' ? this.lastAssets[l.clip.assetId] : undefined;
+          if (a?.url && a.kind !== 'image') return false;
+          return 'canvas';
+        }
+        if (this.isBroken(el)) return 'canvas';
         if (!el.videoWidth || !this.ready(el, sourceTime(l.clip, t))) return false;
         els.push(el);
       }
