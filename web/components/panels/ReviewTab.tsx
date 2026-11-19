@@ -1,4 +1,5 @@
 'use client';
+import Icon from '@/components/ui/Icon';
 /* Revisão: comentários presos a um momento/trecho (markers kind 'comment').
    A IA aplica pelo botão do ChatPanel; aqui se lista, cria e resolve. */
 import { useMemo, useState } from 'react';
@@ -66,7 +67,7 @@ export default function ReviewTab() {
                 <p className="ep-cm-text">{m.label}</p>
                 <div className="ep-cm-acts">
                   <button type="button" className={`ep-mini${m.resolved ? '' : ' ok'}`} onClick={() => dispatch({ op: 'update_marker', markerId: m.id, patch: { resolved: !m.resolved } })}>{m.resolved ? 'Reabrir' : '✓ Resolver'}</button>
-                  {!m.resolved && <button type="button" className="ep-mini" onClick={() => askAI({ markerId: m.id, range: { start: m.t, end: m.end ?? m.t }, label: `Comentário ${formatTime(m.t)}: “${(m.label ?? '').slice(0, 28)}”` })}>✨ IA</button>}
+                  {!m.resolved && <button type="button" className="ep-mini" onClick={() => askAI({ markerId: m.id, range: { start: m.t, end: m.end ?? m.t }, label: `Comentário ${formatTime(m.t)}: “${(m.label ?? '').slice(0, 28)}”` })}><Icon name="ai" size={14} /> IA</button>}
                   <button type="button" className="ep-segdel" onClick={() => dispatch({ op: 'remove_marker', markerId: m.id })} aria-label="Apagar comentário" title="Apagar"><IconTrash size={14} /></button>
                 </div>
               </div>

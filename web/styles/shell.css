@@ -27,7 +27,6 @@
 .ep-sbhead .ep-logo b em { color:var(--green); }
 .ep-search { margin:14px 2px 6px; }
 .ep-search .kbd { border:1px solid var(--line2); cursor:pointer; }
-.ep-navlist .ep-sect:first-child { border-top:0; padding-top:4px; margin-top:6px; }
 .ep-navitem .t { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .ep-sbproj { margin:14px 4px 0; padding:12px 12px; border:1px solid var(--line); border-radius:var(--r-md); font-size:12px; color:var(--muted); display:flex; flex-direction:column; gap:5px; }
 .ep-sbproj b { color:var(--ink); font-size:12.5px; }
@@ -39,8 +38,6 @@
 .ep-iostip svg { vertical-align:-2px; }
 .ep-iostip button { position:absolute; top:6px; right:8px; border:0; background:none; color:var(--muted); cursor:pointer; }
 .ep-userwrap { position:relative; margin:0 2px; }
-.ep-user { display:flex; align-items:center; gap:10px; width:100%; text-align:left; font:inherit; background:none; border:1px solid var(--line); border-radius:999px; padding:8px 12px 8px 8px; cursor:pointer; transition:.14s; }
-.ep-user:hover { background:var(--navHover); }
 .ep-user .chev { margin-left:auto; color:var(--faint); flex:none; transition:transform .18s; }
 .ep-user[aria-expanded="true"] .chev { transform:rotate(180deg); }
 .ep-user .av { flex:none; width:34px; height:34px; border-radius:50%; background:var(--inverse); color:var(--inverseInk); display:grid; place-items:center; font-weight:700; font-size:13px; }
@@ -53,15 +50,13 @@
 .ep-usermenu button.danger { color:var(--red); }
 .ep-usermenu button.danger:hover { background:var(--redTint); }
 .ep-usermenu .sep { height:1px; background:var(--line); margin:5px 2px; }
-.ep-logout { flex:1; display:flex; align-items:center; justify-content:center; gap:8px; background:none; border:1px solid var(--line); border-radius:11px; padding:9px; font:inherit; font-size:12.5px; font-weight:600; color:var(--sub); cursor:pointer; transition:.14s; }
-.ep-logout:hover { color:var(--red); border-color:var(--red); background:var(--redTint); }
-.ep-root.dark .ep-user .r2, .ep-root.dark .ep-logout, .ep-root.dark .ep-themebtn { color:var(--muted); }
 .ep-sidebar.min .ep-search, .ep-sidebar.min .ep-sect, .ep-sidebar.min .ep-sbdiv, .ep-sidebar.min .ep-user, .ep-sidebar.min .ep-navitem .t, .ep-sidebar.min .ep-navitem .c, .ep-sidebar.min .ep-logo, .ep-sidebar.min .ep-logout .t, .ep-sidebar.min .ep-sbproj, .ep-sidebar.min .ep-navempty, .ep-sidebar.min .ep-installbtn .t { display:none; }
 .ep-sidebar.min { width:78px; }
 .ep-sidebar.min .ep-sbhead { justify-content:center; padding:4px 0 8px; }
-.ep-sidebar.min .ep-navitem { justify-content:center; padding:9px; }
-.ep-sidebar.min .ep-sbfoot { flex-direction:column; gap:6px; }
-.ep-sidebar.min .ep-logout { flex:none; width:38px; height:38px; padding:0; }
+.ep-sidebar.min .ep-navitem { justify-content:center; padding:4px 0; }
+.ep-sidebar.min .ep-sbfoot { flex-direction:column; gap:8px; align-items:center; }
+.ep-sidebar.min .ep-sbcircles { flex-direction:column; }
+
 .ep-sidebar.min .ep-installbtn { width:38px; height:38px; padding:0; justify-content:center; margin:0 auto 8px; }
 .ep-sidebar.min .ep-userwrap { display:none; }
 
@@ -210,9 +205,10 @@
   .ep-sidebar { width:78px; }
   .ep-sidebar .ep-sbhead { justify-content:center; padding:4px 0 8px; }
   .ep-sidebar .ep-sbhead .ep-iconbtn { display:none; }
-  .ep-sidebar .ep-navitem { justify-content:center; padding:9px; }
-  .ep-sidebar .ep-sbfoot { flex-direction:column; gap:6px; }
-  .ep-sidebar .ep-logout { flex:none; width:38px; height:38px; padding:0; }
+  .ep-sidebar .ep-navitem { justify-content:center; padding:4px 0; }
+  .ep-sidebar .ep-sbfoot { flex-direction:column; gap:8px; align-items:center; }
+  .ep-sidebar .ep-sbcircles { flex-direction:column; }
+
   .ep-sidebar .ep-installbtn { width:38px; height:38px; padding:0; justify-content:center; margin:0 auto 8px; }
   .ep-app, .ep-app.side-closed { grid-template-columns:minmax(0,1fr); }
   .ep-app .ep-stage { grid-column:1; }
@@ -326,8 +322,8 @@
 
 /* telas baixas (ex.: 1366×768): sidebar mais compacta */
 @media (max-height: 960px) and (min-width: 900px) {
-  .ep-sidebar .ep-navitem { padding:7px 11px; font-size:13px; }
-  .ep-sidebar .ep-sect { margin:8px 2px 2px; padding:10px 6px 4px; }
+  .ep-sidebar .ep-navitem .ib { width:34px; height:34px; border-radius:12px; }
+  .ep-sidebar .ep-sect { padding:12px 10px 6px; }
   .ep-sidebar .ep-search { margin:10px 2px 4px; padding:7px 10px; }
   .ep-sbproj { display:none; }
 }
@@ -352,7 +348,8 @@
 .ep-hslide-name { font-size:16px; font-weight:700; margin-top:10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .ep-homebody { max-width:1080px; margin:0 auto; padding:4px 28px 60px; }
 .ep-qa { position:relative; }
-.ep-qa-tag { position:absolute; top:-9px; left:50%; transform:translateX(-50%); z-index:1; }
+.ep-qa-tag { margin:-4px 0 -6px; height:20px; padding:0 9px; font-size:10.5px; }
+.ep-qa:has(.ep-qa-tag) { gap:8px; }
 .ep-home-ai { width:100%; margin-top:24px; }
 .ep-home-ai > svg:last-child { margin-left:auto; opacity:.7; flex:none; }
 .ep-tile-em { font-size:30px; line-height:1; }
@@ -417,7 +414,8 @@
   .ep-hh-top .ep-circle.ep-hh-ai { display:grid; }
   .ep-hh-hello { font-size:20px; }
   .ep-homebody { padding:0 16px calc(150px + env(safe-area-inset-bottom)); }
-  .ep-homecta { display:inline-flex; }
+  .ep-homecta { display:inline-flex; opacity:0; transform:translateY(16px) scale(.96); pointer-events:none; transition:opacity .2s, transform .2s; }
+  .ep-homecta.show { opacity:1; transform:none; pointer-events:auto; }
   .ep-tiles { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .ep-wiz { padding:max(10px, env(safe-area-inset-top)) 14px calc(130px + env(safe-area-inset-bottom)); }
   .ep-wblock { padding:18px 16px; }
@@ -445,3 +443,69 @@
 /* textos empilhados dentro dos blocos v2 */
 .ep-aicard .t, .ep-aicard .d, .ep-tile .lb, .ep-tile .ds { display:block; }
 .ep-aicard > span:not(.spark) { min-width:0; }
+
+/* tema ainda desconhecido (1º render): só o fundo neutro, sem flash do tema errado */
+.ep-root.theme-pending { background:#FFFFFF; }
+.ep-root.theme-pending > * { visibility:hidden; }
+@media (prefers-color-scheme: dark) { .ep-root.theme-pending, .ep-root.theme-pending .ep-boot { background:#0D0D0F; } }
+
+/* ---------- sidebar v2.1 ---------- */
+.ep-sidebar { width:272px; }
+.ep-sidebar .ep-rail { padding-left:max(16px, env(safe-area-inset-left)); padding-right:16px; gap:4px; background:var(--card); border-right:1px solid var(--line); backdrop-filter:none; -webkit-backdrop-filter:none; }
+.ep-appicon { width:36px; height:36px; border-radius:11px; display:block; flex:none; box-shadow:0 4px 12px rgba(242,104,31,.25); }
+.ep-sbhead { padding:2px 2px 14px 2px; }
+.ep-sbhead .ep-logo { gap:11px; }
+.ep-sbhead .ep-logo b { font-size:20px; font-weight:800; letter-spacing:-.025em; color:var(--ink); }
+.ep-sbhead .ep-logo b em { color:var(--green); }
+.ep-sidebar .ep-sbdiv { display:none; }
+.ep-sidebar .ep-search { margin:4px 0 6px; }
+.ep-navlist { gap:4px; padding:2px 0 12px; }
+.ep-navitem .c, .ep-navitem .nb { margin-left:auto; min-width:24px; height:22px; padding:0 8px; border-radius:999px; display:grid; place-items:center; font-size:11.5px; font-weight:700; }
+.ep-sbproj { background:var(--tile); border:0; border-radius:var(--r-md); }
+.ep-sbfoot { display:flex; align-items:center; gap:8px; margin:10px 0 0; }
+.ep-sbfoot .ep-userwrap { flex:1; min-width:0; margin:0; }
+.ep-user { display:flex; align-items:center; gap:10px; width:100%; text-align:left; font:inherit; background:var(--tile); border:0; border-radius:var(--r-lg); padding:8px 10px 8px 8px; cursor:pointer; transition:background .15s; min-height:56px; }
+.ep-user:hover { background:var(--tileHover); }
+.ep-user .av { flex:none; width:38px; height:38px; border-radius:50%; background:var(--green); color:#fff; display:grid; place-items:center; font-weight:800; font-size:14px; }
+.ep-user .ucol { display:flex; flex-direction:column; min-width:0; }
+.ep-user .nm { font-size:13.5px; font-weight:700; color:var(--ink); }
+.ep-user .r2 { font-size:11.5px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ep-user .chev { margin-left:auto; color:var(--muted); flex:none; }
+.ep-sbcircles { display:flex; gap:8px; }
+.ep-sblogout:hover { background:var(--redTint); color:var(--red); }
+.ep-usermenu { border:0; box-shadow:var(--shadow-float); border-radius:var(--r-md); }
+.ep-sidebar.min { width:84px; }
+.ep-sidebar.min .ep-rail { padding-left:12px; padding-right:12px; align-items:center; }
+.ep-sidebar.min .ep-navitem { width:auto; }
+.ep-sidebar.min .ep-sbhead { flex-direction:column; gap:10px; }
+.ep-sidebar.min .ep-logo { display:flex; }
+.ep-sidebar.min .ep-logo b { display:none; }
+@media (max-width: 1099px) {
+  .ep-sidebar { width:84px; }
+  .ep-sidebar .ep-rail { padding-left:12px; padding-right:12px; align-items:center; }
+  .ep-sidebar .ep-logo { display:flex; }
+  .ep-sidebar .ep-logo b { display:none; }
+}
+
+/* ---------- editor no celular v2.1: cabeçalho compacto 56px ---------- */
+.ep-hback { display:none; }
+@media (max-width: 899px) {
+  .ep-app, .ep-app.side-closed { grid-template-rows:calc(56px + env(safe-area-inset-top)) var(--pv-h,44dvh) 16px minmax(0,1fr) calc(70px + env(safe-area-inset-bottom)); }
+  .ep-app .ep-header { height:auto; padding:env(safe-area-inset-top) max(8px, env(safe-area-inset-right)) 0 max(6px, env(safe-area-inset-left)); gap:4px; border-bottom:0; background:var(--bg); backdrop-filter:none; -webkit-backdrop-filter:none; }
+  .ep-hmain { gap:2px; }
+  .ep-hback { display:grid; place-items:center; flex:none; width:44px; height:44px; border:0; border-radius:50%; background:none; color:var(--ink); cursor:pointer; }
+  .ep-hback:active { background:var(--tile); }
+  .ep-projname { font-size:16px; font-weight:700; padding:6px 6px; margin-left:0; }
+  .ep-aspect-sel, .ep-aspects { display:none !important; }
+  .ep-undo { gap:0; }
+  .ep-undo .ep-iconbtn { background:none !important; width:42px; height:42px; min-width:42px; min-height:42px; color:var(--ink); }
+  .ep-undo .ep-iconbtn:disabled { color:var(--faint); }
+  .ep-exportbtn { padding:0 16px !important; height:38px; min-height:38px !important; font-size:14px; border-radius:999px; }
+  .ep-exportbtn span { display:inline !important; }
+  .ep-exportbtn svg { display:none; }
+  .ep-hactions { gap:2px; align-self:center; }
+  .ep-tl-resizer { background:var(--bg); }
+  .ep-tl-resizer i { width:40px; height:4px; }
+  .ep-app .ep-timeline { border-top:0; }
+}
+@media (max-width: 360px) { .ep-undo { display:flex; } .ep-undo .ep-iconbtn { width:36px; min-width:36px; } }

@@ -1,11 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { applySystemChrome, useTheme } from '@/components/shell/theme';
 
 export default function Login() {
   const [password, setPassword] = useState('');
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(false);
+  const [dark] = useTheme();
+  useEffect(() => { if (dark !== null) applySystemChrome(dark); }, [dark]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -27,7 +30,7 @@ export default function Login() {
   }
 
   return (
-    <div className="ep-root dark">
+    <div className={`ep-root${dark ? ' dark' : ''}${dark === null ? ' theme-pending' : ''}`}>
       <div className="ep-login">
         <form className="ep-login-card" onSubmit={submit}>
           <div className="ep-logo">

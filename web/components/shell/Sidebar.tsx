@@ -88,15 +88,15 @@ export default function Sidebar({ min, onToggleMin, ...p }: NavProps & { min: bo
             const active = p.view === 'editor' && p.tool === id && p.toolOpen;
             return (
               <button key={id} type="button" className={`ep-navitem${active ? ' active' : ''}`} onClick={() => p.onTool(id)} title={label} aria-pressed={active}>
-                <span className="ib"><Icon size={17} /></span><span className="t">{label}</span>
-                {id === 'review' && pendingCm ? <span className="nb mono">{pendingCm}</span> : counts[id] ? <span className="c mono">{counts[id]}</span> : null}
+                <span className="ib"><Icon size={19} /></span><span className="t">{label}</span>
+                {id === 'review' && pendingCm ? <span className="nb">{pendingCm}</span> : counts[id] ? <span className="c">{counts[id]}</span> : null}
               </button>
             );
           })}
           {account.length > 0 && <div className="ep-sect">Conta</div>}
           {account.map(({ id, label, Icon, on, go }) => (
             <button key={id} type="button" className={`ep-navitem${on ? ' active' : ''}`} onClick={go} title={label}>
-              <span className="ib"><Icon size={17} /></span><span className="t">{label}</span>
+              <span className="ib"><Icon size={19} /></span><span className="t">{label}</span>
             </button>
           ))}
           {!tools.length && !account.length && <div className="ep-navempty">Nada encontrado para “{q}”.</div>}
@@ -108,26 +108,28 @@ export default function Sidebar({ min, onToggleMin, ...p }: NavProps & { min: bo
           )}
         </div>
         <InstallButton compact={min} />
-        <div className="ep-userwrap">
-          {menu && (
-            <div className="ep-usermenu" onClick={(e) => e.stopPropagation()}>
-              <button type="button" onClick={() => { setMenu(false); p.onHome(); }}><IconFolder size={15} />Meus projetos</button>
-              <button type="button" onClick={() => { setMenu(false); p.onSettings(); }}><IconCog size={15} />Configurações</button>
-              <div className="sep" />
-              <button type="button" className="danger" onClick={() => void logout()}><IconLogout size={15} />Sair da conta</button>
-            </div>
-          )}
-          <button type="button" className="ep-user" aria-expanded={menu} onClick={(e) => { e.stopPropagation(); setMenu((v) => !v); }}>
-            <span className="av">B</span>
-            <span className="ucol"><span className="nm">Bruno</span><span className="r2">Conta EditorPro</span></span>
-            <span className="chev"><IconChev size={15} /></span>
-          </button>
-        </div>
         <div className="ep-sbfoot">
-          <button type="button" className="ep-logout" onClick={() => void logout()} title="Sair"><IconLogout size={15} /><span className="t">Sair</span></button>
-          <button type="button" className="ep-themebtn" onClick={p.onTheme} title={p.dark ? 'Tema claro' : 'Tema escuro'} aria-label="Alternar tema">
-            {p.dark ? <IconSun size={16} /> : <IconMoon size={16} />}
-          </button>
+          <div className="ep-userwrap">
+            {menu && (
+              <div className="ep-usermenu" onClick={(e) => e.stopPropagation()}>
+                <button type="button" onClick={() => { setMenu(false); p.onHome(); }}><IconFolder size={16} />Meus projetos</button>
+                <button type="button" onClick={() => { setMenu(false); p.onSettings(); }}><IconCog size={16} />Configurações</button>
+                <div className="sep" />
+                <button type="button" className="danger" onClick={() => void logout()}><IconLogout size={16} />Sair da conta</button>
+              </div>
+            )}
+            <button type="button" className="ep-user" aria-expanded={menu} onClick={(e) => { e.stopPropagation(); setMenu((v) => !v); }}>
+              <span className="av">B</span>
+              <span className="ucol"><span className="nm">Bruno</span><span className="r2">Conta EditorPro</span></span>
+              <span className="chev"><IconChev size={16} /></span>
+            </button>
+          </div>
+          <div className="ep-sbcircles">
+            <button type="button" className="ep-circle sm" onClick={p.onTheme} title={p.dark ? 'Tema claro' : 'Tema escuro'} aria-label="Alternar tema">
+              {p.dark ? <IconSun size={18} /> : <IconMoon size={18} />}
+            </button>
+            <button type="button" className="ep-circle sm ep-sblogout" onClick={() => void logout()} title="Sair" aria-label="Sair"><IconLogout size={18} /></button>
+          </div>
         </div>
       </div>
     </aside>

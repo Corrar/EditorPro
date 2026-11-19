@@ -14,6 +14,7 @@ import type { AudioEffectKind, BlendMode, ChromaKey, ClipAnimation, FitMode, Mas
 import { DEFAULT_TRANSFORM } from '@/lib/types';
 import { uid } from '@/lib/util';
 import { IconCopy, IconTrash, IconZoom } from '@/components/shell/icons';
+import Icon from '@/components/ui/Icon';
 import { ColorField, Section, Seg, Slider, Toggle } from './controls';
 import { pct, secs, signed, useClipPatch } from './hooks';
 import {
@@ -89,12 +90,12 @@ export function EditSection({ clip }: { clip: Clip }) {
   return (
     <Section title="Editar">
       <div className="ep-actgrid">
-        <button type="button" className="ep-act" onClick={split} disabled={!inside} title={inside ? 'Dividir no playhead' : 'Coloque o playhead dentro do clipe'}><span>✂️</span>Dividir</button>
+        <button type="button" className="ep-act" onClick={split} disabled={!inside} title={inside ? 'Dividir no playhead' : 'Coloque o playhead dentro do clipe'}><span><Icon name="cut" /></span>Dividir</button>
         <button type="button" className="ep-act" onClick={dup}><span><IconCopy size={18} /></span>Duplicar</button>
-        {'assetId' in clip && clip.type !== 'sticker' && <button type="button" className="ep-act" onClick={() => input.current?.click()}><span>🔄</span>Substituir</button>}
-        {clip.type === 'video' && <button type="button" className={`ep-act${clip.reverse ? ' on' : ''}`} onClick={() => patch({ reverse: !clip.reverse })}><span>⏪</span>Reverso</button>}
-        {clip.type === 'video' && <button type="button" className="ep-act" onClick={freeze} disabled={!inside || !!busy}><span>🧊</span>Congelar</button>}
-        {clip.type === 'video' && <button type="button" className="ep-act" onClick={extract} disabled={!!busy}><span>🎵</span>Extrair áudio</button>}
+        {'assetId' in clip && clip.type !== 'sticker' && <button type="button" className="ep-act" onClick={() => input.current?.click()}><span><Icon name="replace" /></span>Substituir</button>}
+        {clip.type === 'video' && <button type="button" className={`ep-act${clip.reverse ? ' on' : ''}`} onClick={() => patch({ reverse: !clip.reverse })}><span><Icon name="reverse" /></span>Reverso</button>}
+        {clip.type === 'video' && <button type="button" className="ep-act" onClick={freeze} disabled={!inside || !!busy}><span><Icon name="freeze" /></span>Congelar</button>}
+        {clip.type === 'video' && <button type="button" className="ep-act" onClick={extract} disabled={!!busy}><span><Icon name="music" /></span>Extrair áudio</button>}
         <button type="button" className="ep-act danger" onClick={del}><span><IconTrash size={18} /></span>Excluir</button>
       </div>
       {busy && <p className="ep-pnote"><span className="ep-spin xs" /> {busy}</p>}
@@ -216,7 +217,7 @@ export function VolumeSection({ clip }: { clip: SoundClip }) {
       </Section>
       {clip.type === 'audio' && (
         <Section title="Batidas">
-          <button type="button" className="ep-btn sec ep-wide" onClick={beats} disabled={busy}>{busy ? <><span className="ep-spin xs" /> Analisando…</> : '🥁 Detectar batidas e marcar na timeline'}</button>
+          <button type="button" className="ep-btn sec ep-wide" onClick={beats} disabled={busy}>{busy ? <><span className="ep-spin xs" /> Analisando…</> : <><Icon name="music" size={16} /> Detectar batidas e marcar na timeline</>}</button>
           {!!asset?.beats?.length && <p className="ep-pnote" style={{ marginTop: 8 }}>{asset.beats.length} batidas nesta música.</p>}
         </Section>
       )}
@@ -275,9 +276,9 @@ export function CropSection({ clip }: { clip: VideoClip | ImageClip | VisualClip
         <Slider label="Altura" value={crop.h} min={0.1} max={1} onChange={(v, h) => setCrop('h', v, h)} format={pct} />
       </div>
       <div className="ep-actgrid sm">
-        <button type="button" className={`ep-act${clip.flipH ? ' on' : ''}`} onClick={() => patch({ flipH: !clip.flipH })}><span>↔️</span>Espelhar</button>
-        <button type="button" className={`ep-act${clip.flipV ? ' on' : ''}`} onClick={() => patch({ flipV: !clip.flipV })}><span>↕️</span>Inverter</button>
-        <button type="button" className="ep-act" onClick={() => patch({ transform: { ...tf, rotation: ((Math.round(tf.rotation / 90) * 90 + 90 + 180) % 360) - 180 } })}><span>🔃</span>Girar 90°</button>
+        <button type="button" className={`ep-act${clip.flipH ? ' on' : ''}`} onClick={() => patch({ flipH: !clip.flipH })}><span><Icon name="flip" /></span>Espelhar</button>
+        <button type="button" className={`ep-act${clip.flipV ? ' on' : ''}`} onClick={() => patch({ flipV: !clip.flipV })}><span><Icon name="flip" className="ep-rot90" /></span>Inverter</button>
+        <button type="button" className="ep-act" onClick={() => patch({ transform: { ...tf, rotation: ((Math.round(tf.rotation / 90) * 90 + 90 + 180) % 360) - 180 } })}><span><Icon name="rotate" /></span>Girar 90°</button>
       </div>
     </Section>
   );
@@ -337,8 +338,8 @@ export function ChromaSection({ clip }: { clip: VisualClip }) {
     <Section title="Chroma key" right={ck ? <button type="button" className="ep-mini" onClick={() => patch({ chromaKey: undefined })}>Desligar</button> : undefined}>
       {!ck ? (
         <div className="ep-chips">
-          <button type="button" className="ep-chipbtn" onClick={() => set({ color: '#00FF00' })}>🟩 Fundo verde</button>
-          <button type="button" className="ep-chipbtn" onClick={() => set({ color: '#0047FF' })}>🟦 Fundo azul</button>
+          <button type="button" className="ep-chipbtn" onClick={() => set({ color: '#00FF00' })}><i className="ep-dot" style={{ background: '#00C853' }} /> Fundo verde</button>
+          <button type="button" className="ep-chipbtn" onClick={() => set({ color: '#0047FF' })}><i className="ep-dot" style={{ background: '#0047FF' }} /> Fundo azul</button>
         </div>
       ) : (
         <>
@@ -353,7 +354,7 @@ export function ChromaSection({ clip }: { clip: VisualClip }) {
               <span>{picking ? 'Toque na cor do fundo' : ''}</span>
             </div>
           )}
-          <button type="button" className={`ep-btn sec ep-wide${picking ? ' on' : ''}`} onClick={() => setPicking((v) => !v)} disabled={!thumb}>💧 Conta-gotas</button>
+          <button type="button" className={`ep-btn sec ep-wide${picking ? ' on' : ''}`} onClick={() => setPicking((v) => !v)} disabled={!thumb}><Icon name="picker" size={16} /> Conta-gotas</button>
           <ColorField label="Cor removida" value={ck.color} onChange={(v, h) => set({ color: v }, h)} />
           <Slider label="Similaridade" value={ck.similarity} min={0} max={1} onChange={(v, h) => set({ similarity: v }, h)} format={pct} />
           <Slider label="Suavidade" value={ck.smoothness} min={0} max={1} onChange={(v, h) => set({ smoothness: v }, h)} format={pct} />
