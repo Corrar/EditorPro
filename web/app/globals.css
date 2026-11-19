@@ -1,41 +1,56 @@
 /* =====================================================================
-   EditorPro — design system (herdado do Radar Local: laranja #D9641E,
-   marrom quente no escuro, Poppins + JetBrains Mono). Tokens em .ep-root.
+   EditorPro — design system v2 (ver docs/superpowers/specs/2026-11-19-design-v2.md;
+   origem: Radar Local). Plus Jakarta Sans + JetBrains Mono. Tokens em .ep-root.
    Componentes compartilhados .ep-*; cada módulo tem seu CSS em /styles.
    ===================================================================== */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 /* fontes (carregadas via <link> no layout; fallback garante render sem o Google) */
 :root {
-  --font-ui: 'Poppins', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-ui: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
+/* Design v2 (2026-11-19): linguagem "app de banco premium" — superfícies planas, blocos cinza
+   bem arredondados, tipografia forte, cabeçalho colorido com cantos arredondados, barra inferior
+   com botão ativo circular. Marca: laranja EditorPro. --green continua sendo o laranja (legado). */
 .ep-root {
-  --bg:#DFE0E4;--canvas:#F2F2F4;--card:#FFFFFF;--ink:#1C1F22;--sub:#5B6169;--muted:#8A8F98;--faint:#A6ABB3;
-  --chip:#F3F4F5;--box:#F7F8F9;--line:#E9EAEC;--line2:#ECEDEF;--track:#EFF0F2;--navHover:#EBECEE;
-  --badge:#E7E8EA;--badgeInk:#6E747D;--tintG:#FBEEE3;--tintGBl:#F0D9C2;--tintGInk:#A2490F;--ofertaInk:#6B4A2E;
-  --green:#D9641E;--greenD:#B84F12;--red:#C94F3D;--redTint:#F9E9E6;--amberTint:#FBF3DF;--amberInk:#9A7A1F;
-  --colBg:#EBECEE;--dash:#D5D8DC;--skel1:#F0F1F2;--skel2:#F8F9FA;--inverse:#1C1F22;--inverseInk:#FFFFFF;
-  --cardBg:rgba(255,255,255,.66);--cardBorder:rgba(255,255,255,.85);
-  --cardShadow:0 10px 30px rgba(28,31,34,.10),0 2px 6px rgba(28,31,34,.05);
-  --canvasBg:radial-gradient(1100px 520px at 85% -60px,rgba(217,100,30,.16),transparent 60%),radial-gradient(900px 520px at -8% 34%,rgba(217,100,30,.10),transparent 55%),radial-gradient(760px 460px at 55% 110%,rgba(224,163,46,.09),transparent 60%),#F2F2F4;
+  --bg:#FFFFFF;--canvas:#FFFFFF;--card:#FFFFFF;--ink:#141414;--sub:#45484D;--muted:#767A81;--faint:#A3A6AB;
+  --chip:#F2F2F0;--box:#F2F2F0;--line:#ECECE9;--line2:#E4E4E0;--track:#E9E9E6;--navHover:#F2F2F0;
+  --badge:#EDEDEA;--badgeInk:#5C6066;--tintG:#FFEDE2;--tintGBl:#FFD5BC;--tintGInk:#B4470D;--ofertaInk:#7A3A12;
+  --green:#F2681F;--greenD:#D4520F;--red:#E5484D;--redTint:#FDECEC;--amberTint:#FFF5DB;--amberInk:#946500;
+  --colBg:#F5F5F3;--dash:#DADAD6;--skel1:#F0F0EE;--skel2:#F7F7F5;--inverse:#141414;--inverseInk:#FFFFFF;
+  --cardBg:#FFFFFF;--cardBorder:transparent;--cardShadow:none;
+  --canvasBg:#FFFFFF;
+  /* novos */
+  --tile:#F2F2F0;--tileHover:#EAEAE6;--tileActive:#E3E3DE;
+  --hero:linear-gradient(165deg,#F67B30 0%,#EC6418 55%,#DD5510 100%);--heroInk:#FFFFFF;
+  --heroGlass:rgba(255,255,255,.20);--heroGlassHover:rgba(255,255,255,.28);--heroCard:rgba(0,0,0,.11);
+  --ai:#25262B;--aiInk:#FFFFFF;--aiRing:linear-gradient(135deg,#FFB27A,#F2681F 45%,#FFD9B8);
+  --r-xl:32px;--r-lg:24px;--r-md:18px;--r-sm:14px;
+  --shadow-float:0 14px 34px rgba(20,20,20,.16);--shadow-sheet:0 -18px 48px rgba(20,20,20,.18);
+  --focus:0 0 0 3px rgba(242,104,31,.28);
 }
 .ep-root.dark {
-  --bg:#100C09;--canvas:#1A1310;--card:#241A15;--ink:#F3EBE4;--sub:#C0AFA3;--muted:#9A8879;--faint:#7A6959;
-  --chip:#2E211A;--box:#291D17;--line:#3D2C22;--line2:#372721;--track:#33241C;--navHover:#33241C;
-  --badge:#3A2A21;--badgeInk:#B09A8B;--tintG:#3A2A1B;--tintGBl:#553B23;--tintGInk:#EBAF7E;--ofertaInk:#D3A87F;
-  --green:#E07A33;--greenD:#C1591C;--red:#E0705E;--redTint:#3B2523;--amberTint:#3A331D;--amberInk:#D8B554;
-  --colBg:#291D17;--dash:#4A362A;--skel1:#281D17;--skel2:#33251D;--inverse:#F3EBE4;--inverseInk:#1A1310;
-  --cardBg:rgba(41,29,23,.66);--cardBorder:rgba(255,255,255,.07);--cardShadow:0 12px 32px rgba(0,0,0,.42);
-  --canvasBg:radial-gradient(1000px 560px at 88% -80px,rgba(224,122,51,.26),transparent 62%),radial-gradient(900px 520px at -10% 40%,rgba(193,89,28,.16),transparent 58%),radial-gradient(700px 480px at 50% 115%,rgba(224,122,51,.10),transparent 60%),#1A1310;
+  --bg:#0D0D0F;--canvas:#0D0D0F;--card:#17181A;--ink:#F5F5F3;--sub:#C4C6CA;--muted:#8D9197;--faint:#63666C;
+  --chip:#1E1F22;--box:#1E1F22;--line:#25262A;--line2:#2D2E33;--track:#26272B;--navHover:#1E1F22;
+  --badge:#2A2B2F;--badgeInk:#B9BCC1;--tintG:#3A2216;--tintGBl:#5A321C;--tintGInk:#FFAE7D;--ofertaInk:#FFC9A6;
+  --green:#FF7A33;--greenD:#E5601A;--red:#FF6B6E;--redTint:#3A1E20;--amberTint:#3A3017;--amberInk:#F2C14E;
+  --colBg:#141517;--dash:#3A3B40;--skel1:#1A1B1E;--skel2:#222326;--inverse:#F5F5F3;--inverseInk:#111214;
+  --cardBg:#17181A;--cardBorder:transparent;--cardShadow:none;
+  --canvasBg:#0D0D0F;
+  --tile:#1C1D20;--tileHover:#232428;--tileActive:#2A2B30;
+  --hero:linear-gradient(165deg,#EA6A24 0%,#D2550F 55%,#B4460B 100%);--heroInk:#FFFFFF;
+  --heroGlass:rgba(255,255,255,.15);--heroGlassHover:rgba(255,255,255,.22);--heroCard:rgba(0,0,0,.20);
+  --ai:#1F2024;--aiInk:#FFFFFF;--aiRing:linear-gradient(135deg,#FFB27A,#FF7A33 45%,#FFD9B8);
+  --shadow-float:0 14px 34px rgba(0,0,0,.5);--shadow-sheet:0 -18px 48px rgba(0,0,0,.55);
   color-scheme:dark;
 }
 
 html, body { min-height: 100%; }
 body { background: var(--bg); }
 .ep-root {
-  font-family: var(--font-ui), 'Poppins', system-ui, sans-serif;
+  font-family: var(--font-ui), system-ui, sans-serif;
   color: var(--ink);
   background: var(--bg);
   min-height: 100vh;
@@ -124,7 +139,7 @@ body { background: var(--bg); }
 .ep-label { font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
 .ep-box { margin-top:12px; background:var(--box); border:1px solid var(--line); border-radius:14px; padding:12px 13px; }
 .ep-input, .ep-select, .ep-textarea {
-  width:100%; font-family:var(--font-ui),'Poppins',sans-serif; font-size:13px; color:var(--ink);
+  width:100%; font-family:var(--font-ui),sans-serif; font-size:13px; color:var(--ink);
   background:var(--box); border:1px solid var(--line); border-radius:12px; padding:11px 12px; outline:none; transition:.15s;
 }
 .ep-input:focus, .ep-select:focus, .ep-textarea:focus { border-color:var(--green); background:var(--card); }
@@ -221,3 +236,133 @@ html, body { height: 100%; overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
   .ep-root *, .ep-root *::before, .ep-root *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* =====================================================================
+   DESIGN V2 — componentes (estilo app de banco premium, marca EditorPro)
+   Use estes blocos nas telas; os antigos (.ep-card, .ep-btn, .ep-navitem…)
+   foram re-estilizados abaixo para herdar o mesmo visual.
+   ===================================================================== */
+.ep-root { letter-spacing:-0.005em; }
+.ep-root :focus-visible { outline:none; box-shadow:var(--focus); }
+
+/* títulos de seção ("Acesso rápido", "Pro dia a dia") */
+.ep-h-section { font-size:24px; font-weight:800; letter-spacing:-0.025em; color:var(--ink); line-height:1.15; margin:28px 0 16px; }
+.ep-h-sheet { font-size:17px; font-weight:700; text-align:center; color:var(--ink); }
+
+/* cabeçalho colorido (hero) com cantos inferiores arredondados */
+.ep-hero2 { background:var(--hero); color:var(--heroInk); border-radius:0 0 var(--r-xl) var(--r-xl); padding:18px 20px 24px; position:relative; }
+.ep-hero2 .ep-hero2-card { background:var(--heroCard); border-radius:var(--r-lg); padding:20px; margin-top:16px; }
+.ep-hero2 .big { font-size:32px; font-weight:800; letter-spacing:-0.03em; line-height:1.1; }
+.ep-hero2 .sub { font-size:14px; opacity:.92; margin-top:6px; }
+.ep-hero2 .ep-hero2-btn { display:flex; align-items:center; justify-content:center; width:100%; margin-top:18px; border:0; border-radius:999px; padding:14px; background:var(--heroGlass); color:#fff; font:inherit; font-size:15px; font-weight:700; cursor:pointer; transition:background .15s; }
+.ep-hero2 .ep-hero2-btn:hover { background:var(--heroGlassHover); }
+.ep-dots { display:flex; justify-content:center; gap:6px; margin-top:14px; }
+.ep-dots i { width:8px; height:8px; border-radius:50%; background:rgba(255,255,255,.45); }
+.ep-dots i.on { background:#fff; }
+
+/* busca em pílula e botões circulares (no hero usam vidro; fora, cinza) */
+.ep-searchpill { display:flex; align-items:center; gap:10px; flex:1; min-width:0; height:48px; padding:0 18px; border-radius:999px; background:var(--tile); color:var(--muted); font-size:15px; }
+.ep-searchpill input { flex:1; min-width:0; border:0; background:none; outline:none; font:inherit; color:var(--ink); }
+.ep-hero2 .ep-searchpill { background:var(--heroGlass); color:#fff; }
+.ep-hero2 .ep-searchpill input { color:#fff; }
+.ep-hero2 .ep-searchpill input::placeholder { color:rgba(255,255,255,.85); }
+.ep-circle { flex:none; width:48px; height:48px; border-radius:50%; border:0; display:grid; place-items:center; background:var(--tile); color:var(--ink); cursor:pointer; transition:background .15s, transform .12s; }
+.ep-circle:hover { background:var(--tileHover); }
+.ep-circle:active { transform:scale(.95); }
+.ep-circle.sm { width:40px; height:40px; }
+.ep-hero2 .ep-circle { background:var(--heroGlass); color:#fff; }
+.ep-hero2 .ep-circle:hover { background:var(--heroGlassHover); }
+.ep-avatar2 { flex:none; width:48px; height:48px; border-radius:50%; background:var(--tile); color:var(--ink); display:grid; place-items:center; font-weight:700; font-size:16px; }
+.ep-hero2 .ep-avatar2 { background:rgba(255,255,255,.92); color:#141414; }
+
+/* chips de conta/filtro em pílula */
+.ep-pill2 { display:inline-flex; align-items:center; gap:10px; height:44px; padding:0 18px; border-radius:999px; border:0; background:var(--tile); color:var(--ink); font:inherit; font-size:15px; font-weight:600; cursor:pointer; }
+.ep-pill2.on { background:var(--card); box-shadow:0 2px 10px rgba(0,0,0,.08); }
+.ep-hero2 .ep-pill2 { background:var(--heroGlass); color:#fff; }
+.ep-hero2 .ep-pill2.on { background:#fff; color:#141414; }
+
+/* ações rápidas (quadrado arredondado + rótulo embaixo) — "Pro dia a dia" */
+.ep-qa-row { display:flex; gap:12px; overflow-x:auto; scrollbar-width:none; padding-bottom:4px; }
+.ep-qa-row::-webkit-scrollbar { display:none; }
+.ep-qa { flex:none; width:96px; display:flex; flex-direction:column; align-items:center; gap:10px; background:none; border:0; padding:0; font:inherit; color:var(--ink); cursor:pointer; }
+.ep-qa .ic { width:96px; height:76px; border-radius:var(--r-lg); background:var(--tile); display:grid; place-items:center; color:var(--ink); transition:background .15s, transform .12s; }
+.ep-qa:hover .ic { background:var(--tileHover); }
+.ep-qa:active .ic { transform:scale(.96); }
+.ep-qa.on .ic { background:var(--green); color:#fff; }
+.ep-qa .lb { font-size:14px; font-weight:500; text-align:center; line-height:1.2; }
+.ep-tag { display:inline-flex; align-items:center; height:24px; padding:0 10px; border-radius:999px; background:var(--inverse); color:var(--inverseInk); font-size:11px; font-weight:800; letter-spacing:.02em; text-transform:uppercase; white-space:nowrap; }
+.ep-tag.accent { background:var(--green); color:#fff; }
+
+/* grade de blocos ("Acesso rápido") */
+.ep-tiles { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(160px,100%),1fr)); gap:12px; }
+.ep-tile { display:flex; flex-direction:column; justify-content:space-between; gap:22px; min-height:118px; padding:20px 22px; border-radius:var(--r-lg); background:var(--tile); border:0; color:var(--ink); font:inherit; text-align:left; cursor:pointer; transition:background .15s, transform .12s; }
+.ep-tile:hover { background:var(--tileHover); }
+.ep-tile:active { transform:scale(.985); }
+.ep-tile .ic { color:var(--ink); }
+.ep-tile .lb { font-size:15px; font-weight:500; line-height:1.25; }
+.ep-tile .ds { font-size:12.5px; color:var(--muted); margin-top:2px; }
+.ep-tile.on { background:var(--tintG); color:var(--tintGInk); }
+.ep-tile[disabled] { opacity:.55; cursor:default; }
+
+/* linhas largas ("Cartão", "Empréstimos") */
+.ep-rows { display:flex; flex-direction:column; gap:12px; }
+.ep-row { display:flex; align-items:center; justify-content:space-between; gap:14px; min-height:68px; padding:0 22px; border-radius:var(--r-lg); background:var(--tile); border:0; color:var(--ink); font:inherit; font-size:16px; font-weight:500; text-align:left; cursor:pointer; transition:background .15s; width:100%; }
+.ep-row:hover { background:var(--tileHover); }
+.ep-row .meta { font-size:13px; color:var(--muted); font-weight:500; }
+
+/* card de IA (escuro, borda em gradiente e brilho) */
+.ep-aicard { position:relative; display:flex; align-items:center; gap:16px; padding:22px; border-radius:var(--r-lg); background:var(--ai); color:var(--aiInk); border:0; font:inherit; text-align:left; cursor:pointer; isolation:isolate; }
+.ep-aicard::before { content:''; position:absolute; inset:-2px; border-radius:calc(var(--r-lg) + 2px); background:var(--aiRing); z-index:-2; }
+.ep-aicard::after { content:''; position:absolute; inset:0; border-radius:var(--r-lg); background:var(--ai); z-index:-1; }
+.ep-aicard .spark { flex:none; width:56px; height:56px; border-radius:50%; display:grid; place-items:center; background:radial-gradient(circle,rgba(255,150,90,.35),rgba(255,150,90,0) 70%); color:#fff; }
+.ep-aicard .t { font-size:17px; font-weight:700; }
+.ep-aicard .d { font-size:13px; opacity:.72; margin-top:4px; }
+
+/* CTA flutuante preto em pílula ("Pagar") */
+.ep-cta { display:inline-flex; align-items:center; gap:14px; height:58px; padding:0 26px; border-radius:999px; border:0; background:var(--inverse); color:var(--inverseInk); font:inherit; font-size:17px; font-weight:700; cursor:pointer; box-shadow:var(--shadow-float); transition:transform .12s, filter .15s; }
+.ep-cta:hover { filter:brightness(1.12); }
+.ep-cta:active { transform:scale(.97); }
+.ep-cta.accent { background:var(--green); color:#fff; }
+
+/* faixa promocional escura com fechar */
+.ep-banner { display:flex; align-items:center; gap:14px; padding:18px 22px; background:var(--inverse); color:var(--inverseInk); border-radius:var(--r-lg); font-size:15px; font-weight:600; }
+.ep-banner .x { margin-left:auto; background:none; border:0; color:inherit; cursor:pointer; opacity:.85; }
+
+/* bottom-sheet ("Menu") */
+.ep-sheet2 { background:var(--card); border-radius:var(--r-xl) var(--r-xl) 0 0; box-shadow:var(--shadow-sheet); padding:14px 20px calc(24px + env(safe-area-inset-bottom)); }
+.ep-sheet2-head { display:grid; grid-template-columns:48px 1fr 48px; align-items:center; margin:8px 0 18px; }
+.ep-sheet2-head .ep-circle { grid-column:3; }
+
+/* barra inferior: ativo = círculo grande preenchido; demais = ícone + rótulo */
+.ep-tabbar { display:flex; align-items:center; justify-content:space-around; gap:4px; padding:10px 12px calc(10px + env(safe-area-inset-bottom)); background:var(--colBg); border-radius:var(--r-xl) var(--r-xl) 0 0; }
+.ep-tab { flex:1; display:flex; flex-direction:column; align-items:center; gap:6px; min-width:56px; padding:6px 0; background:none; border:0; color:var(--ink); font:inherit; font-size:12.5px; font-weight:500; cursor:pointer; }
+.ep-tab.on { flex:none; }
+.ep-tab.on .ic { width:68px; height:68px; border-radius:50%; background:var(--green); color:#fff; display:grid; place-items:center; box-shadow:0 10px 24px rgba(242,104,31,.35); margin-top:-26px; }
+.ep-tab.on .lb { display:none; }
+
+/* ---------- herança: componentes antigos com o visual novo ---------- */
+.ep-card { background:var(--tile); border:0; border-radius:var(--r-lg); box-shadow:none; }
+.ep-card:hover { transform:none; box-shadow:none; background:var(--tileHover); }
+.ep-btn { border-radius:999px; font-weight:700; font-size:14px; padding:13px 22px; }
+.ep-btn.primary { background:var(--green); box-shadow:none; }
+.ep-btn.primary:hover { background:var(--greenD); }
+.ep-btn.sec { background:var(--tile); border-color:transparent; color:var(--ink); }
+.ep-btn.sec:hover { background:var(--tileHover); }
+.ep-pillbtn { background:var(--tile); border-color:transparent; color:var(--ink); font-weight:600; padding:10px 16px; }
+.ep-pillbtn:hover { background:var(--tileHover); }
+.ep-iconbtn { background:var(--tile); border-color:transparent; color:var(--ink); }
+.ep-iconbtn:hover { background:var(--tileHover); }
+.ep-chipbtn { background:var(--tile); color:var(--ink); }
+.ep-badge { background:var(--tile); border-color:transparent; color:var(--sub); }
+.ep-input, .ep-select, .ep-textarea { background:var(--tile); border-color:transparent; border-radius:var(--r-md); padding:13px 16px; font-size:14px; }
+.ep-input:focus, .ep-select:focus, .ep-textarea:focus { background:var(--card); border-color:var(--green); box-shadow:var(--focus); }
+.ep-navitem { border-radius:var(--r-md); padding:11px 14px; font-weight:500; font-size:14px; color:var(--ink); }
+.ep-navitem:hover { background:var(--tile); }
+.ep-navitem.active, .ep-root.dark .ep-navitem.active { background:var(--tile); color:var(--ink); border-color:transparent; box-shadow:none; font-weight:700; }
+.ep-navitem.active .ib { color:var(--green); }
+.ep-modal { border-radius:var(--r-xl); border:0; }
+.ep-toast { background:var(--inverse); color:var(--inverseInk); border:0; border-radius:var(--r-md); backdrop-filter:none; }
+.ep-search { background:var(--tile); border-color:transparent; border-radius:999px; padding:11px 16px; }
+.ep-statpill { background:var(--tile); border-color:transparent; box-shadow:none; backdrop-filter:none; }
+.ep-segside { background:var(--tile); border-color:transparent; border-radius:999px; }
+.ep-segside button { border-radius:999px; }
