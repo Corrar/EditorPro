@@ -1,5 +1,6 @@
 /* plano de áudio: ganho de cada clipe no tempo t (puro). Usado pelo preview e pelo export. */
 import type { Clip, MediaAsset, Project, Seconds, Track } from '../types';
+import { animateClip } from './animate';
 
 export type AudibleClip = Extract<Clip, { type: 'video' } | { type: 'audio' }>;
 
@@ -28,6 +29,8 @@ export function clipGainAt(p: Project, track: Track, c: Clip, t: Seconds): numbe
   if (track.muted || (c.type === 'video' && (c.muted || track.hidden))) return 0;
   const local = t - c.start;
   if (local < 0 || local >= c.duration) return 0;
+  // automação de volume (keyframes universais: props.volume/fadeIn/fadeOut)
+  c = animateClip(c, local);
   let g = Math.max(0, c.volume ?? 1);
   if (c.fadeIn && c.fadeIn > 0) g *= Math.min(1, local / c.fadeIn);
   if (c.fadeOut && c.fadeOut > 0) g *= Math.min(1, Math.max(0, (c.duration - local) / c.fadeOut));

@@ -13,6 +13,7 @@ import type { Clip, MediaAsset, Project, Seconds, Track } from '@/lib/types';
 import type { MediaElement, MediaSources } from '@/lib/engine';
 import { sourceTime, clipSpeed, trackLayers } from '@/lib/engine/timing';
 import { clipGainAt } from '@/lib/engine/audio';
+import { hasVolumeKeyframes } from '@/lib/engine/animate';
 import { buildAudioChain, chainKey, needsAudioChain, type FxChain } from '@/lib/engine/audioFx';
 import { nativeGeometry, geometryTransform, geometryClip, layerFilter, type NativePlan } from './hybrid';
 import { driftDecision, staleIdle, frameReady, prerollPlan, warmPosition, type FrameProof, type LeadState } from './syncPolicy';
@@ -346,7 +347,8 @@ export class LiveMediaPool implements MediaSources {
     const fx = clip.type === 'video' || clip.type === 'audio' ? clip.audioEffects : undefined;
     const pitch = clip.type === 'video' || clip.type === 'audio' ? clip.pitch : undefined;
     let r = this.routes.get(el);
-    if (!r && (!this.actx || !needsAudioChain(fx, pitch))) return false;
+    // automação de volume (props.volume) também vai pelo GainNode: rampas suaves, sem cliques
+    if (!r && (!this.actx || !(needsAudioChain(fx, pitch) || hasVolumeKeyframes(clip)))) return false;
     if (!r) {
       try {
         const source = this.actx!.createMediaElementSource(el);
