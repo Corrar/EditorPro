@@ -8,7 +8,8 @@
    - ingestão via 'ep:attach-files' e por arquivos soltos na janela
    ===================================================================== */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { emit } from '@/lib/events';
+import { emit, on } from '@/lib/events';
+import { useAudioView } from '@/components/panels/AudioTab';
 import { ingestFile, ingestFiles, listenAttachFiles } from '@/lib/media/ingest';
 import { projectNameFromBrief, sequenceOps } from '@/lib/media/place';
 import { flushAutosave, openProject, resetWorkspace, restoreLastProject, startAutosave, startFromProject } from '@/lib/persist';
@@ -25,7 +26,7 @@ import Sidebar from './Sidebar';
 import Toasts from './Toasts';
 import { applySystemChrome, useTheme } from './theme';
 import Workspace from './Workspace';
-import type { ToolId } from './tools';
+import { TOOLS, type ToolId } from './tools';
 
 type View = 'loading' | 'home' | 'editor';
 const SB_KEY = 'ep_sb_min';
@@ -43,6 +44,7 @@ export default function EditorShell() {
   const [chatOpen, setChatOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [aiMode, setAiModeRaw] = useState<AiPopupMode>('closed');
+  const [aiPrompt, setAiPrompt] = useState<string | undefined>();
   const setAiMode = (m: AiPopupMode) => { if (m === 'open') setSideOpen(false); setAiModeRaw(m); };
   const [sbMin, setSbMin] = useState(false);
   const [settings, setSettings] = useState(false);
@@ -163,6 +165,25 @@ export default function EditorShell() {
     setChatOpen(open);
   };
 
+  // eventos do contrato: a timeline (e outros) pedem ferramenta / pop-up da IA
+  useEffect(() => on('ep:open-tool', ({ tool: t }) => {
+    const id = (t === 'sfx' || t === 'music' ? 'audio' : t) as ToolId;
+    if (!TOOLS.some((x) => x.id === id)) return;
+    if (t === 'sfx' || t === 'music') useAudioView.setState({ view: t });
+    if (mq('(max-width: 1099px)')) setChatOpen(false);
+    setAiModeRaw((m) => (m === 'open' ? 'min' : m));
+    setTool(id); setSideOpen(true);
+  }), []);
+  useEffect(() => on('ep:open-ai-popup', ({ prompt }) => {
+    setAiPrompt(prompt);
+    if (mq('(max-width: 899px) and (orientation: portrait)') || (mq('(max-width: 899px)') && !mq('(max-height: 520px)'))) {
+      setChatOpen(false); setSideOpen(false); setAiModeRaw('open');
+    } else {
+      if (mq('(max-width: 1099px)')) setSideOpen(false);
+      setChatOpen(true);
+    }
+  }), []);
+
   const startWizard = async (w: WizardInput) => {
     const brief = w.brief.trim() || DEFAULT_BRIEF;
     try {
@@ -249,7 +270,7 @@ export default function EditorShell() {
           {view === 'editor' && !chatOpen && (
             <>
               <MobileToolbar tool={tool} toolOpen={sideOpen} onTool={(t) => { if (aiMode === 'open') setAiModeRaw('min'); pickTool(t); }} onAi={() => setAiMode('open')} onMenu={() => setMenuOpen(true)} />
-              <AiPopupHost mode={aiMode} setMode={setAiMode} onOpenChat={() => openChat(true)} />
+              <AiPopupHost fabHidden={sideOpen} prompt={aiPrompt} mode={aiMode} setMode={setAiMode} onOpenChat={() => openChat(true)} />
             </>
           )}
         </div>

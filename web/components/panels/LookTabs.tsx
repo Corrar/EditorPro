@@ -1,4 +1,5 @@
 'use client';
+import { LookGallery } from '@/components/library';
 /* ferramentas Efeitos / Filtros / Ajustes: atuam no clipe selecionado ou numa camada de ajuste */
 import { makeAdjustmentClip } from '@/lib/defaults';
 import { targetTrackId } from '@/lib/media/place';
@@ -42,7 +43,8 @@ export function FiltersTool() {
   const clip = useSelectedClip()?.clip;
   return (
     <>
-      {isFilterable(clip) ? <FilterSection clip={clip} /> : <EmptyHint icon={<IconFilters />} title="Selecione um clipe" text="Filtros de cor valem para vídeo, imagem ou camada de ajuste." />}
+      <Section title="Looks de cor"><LookGallery /></Section>
+      {isFilterable(clip) ? <FilterSection clip={clip} /> : <EmptyHint icon={<IconFilters />} title="Filtros por clipe" text="Selecione um vídeo, imagem ou camada de ajuste para os filtros clássicos." />}
       <AddAdjustmentLayer />
     </>
   );

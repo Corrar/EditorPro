@@ -15,7 +15,7 @@ import { useEditor } from '@/lib/store';
 
 export type AiPopupMode = 'closed' | 'open' | 'min';
 
-export interface AiPopupBodyProps { onMinimize: () => void; onClose: () => void; onOpenChat: () => void }
+export interface AiPopupBodyProps { onMinimize: () => void; onClose: () => void; onOpenChat: () => void; initialPrompt?: string }
 
 const SUGGESTIONS = ['Cortar as pausas', 'Legendas estilo creator', 'Deixar mais dinâmico', 'Música animada de fundo', 'Zoom nos momentos fortes'];
 
@@ -27,14 +27,15 @@ function speechCtor(): (new () => SR) | null {
 }
 
 /** conteúdo provisório do pop-up (substituído pelo componente da sessão de IA) */
-function QuickAi({ onMinimize, onClose, onOpenChat }: AiPopupBodyProps) {
+function QuickAi({ onMinimize, onClose, onOpenChat, initialPrompt }: AiPopupBodyProps) {
   const status = useAIChat((s) => s.status);
   const busy = useAIChat((s) => s.busy);
   const send = useAIChat((s) => s.send);
   const lastId = useEditor((s) => [...s.messages].reverse().find((m) => m.role === 'assistant')?.id);
   const lastText = useEditor((s) => [...s.messages].reverse().find((m) => m.role === 'assistant')?.text ?? '');
   const run = useAIChat((s) => (lastId ? s.runs[lastId] : undefined));
-  const [text, setText] = useState('');
+  const [text, setText] = useState(initialPrompt ?? '');
+  useEffect(() => { if (initialPrompt) setText(initialPrompt); }, [initialPrompt]);
   const [listening, setListening] = useState(false);
   const rec = useRef<SR | null>(null);
   const stepsRef = useRef<HTMLOListElement>(null);
@@ -106,15 +107,15 @@ function QuickAi({ onMinimize, onClose, onOpenChat }: AiPopupBodyProps) {
   );
 }
 
-export default function AiPopupHost({ mode, setMode, onOpenChat, Body = QuickAi }: {
-  mode: AiPopupMode; setMode: (m: AiPopupMode) => void; onOpenChat: () => void; Body?: React.ComponentType<AiPopupBodyProps>;
+export default function AiPopupHost({ mode, setMode, onOpenChat, prompt, fabHidden, Body = QuickAi }: {
+  fabHidden?: boolean; mode: AiPopupMode; setMode: (m: AiPopupMode) => void; onOpenChat: () => void; prompt?: string; Body?: React.ComponentType<AiPopupBodyProps>;
 }) {
   const live = useEditor((s) => s.live);
   const busy = useAIChat((s) => s.busy);
   const working = live.running || busy;
   return (
     <>
-      {mode === 'closed' && (
+      {mode === 'closed' && !fabHidden && (
         <button type="button" className={`ep-aifab2${working ? ' live' : ''}`} onClick={() => setMode('open')} aria-label="Editar com IA">
           <Icon name="ai" size={24} />
         </button>
@@ -127,7 +128,7 @@ export default function AiPopupHost({ mode, setMode, onOpenChat, Body = QuickAi 
       )}
       {mode === 'open' && (
         <div className="ep-aipop" role="dialog" aria-modal="false" aria-label="Editar com IA">
-          <Body onMinimize={() => setMode('min')} onClose={() => setMode('closed')} onOpenChat={() => { setMode('closed'); onOpenChat(); }} />
+          <Body initialPrompt={prompt} onMinimize={() => setMode('min')} onClose={() => setMode('closed')} onOpenChat={() => { setMode('closed'); onOpenChat(); }} />
         </div>
       )}
     </>

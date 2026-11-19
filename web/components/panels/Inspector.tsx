@@ -16,16 +16,18 @@ import StickersTab from './StickersTab';
 import CanvasTab from './CanvasTab';
 import { AdjustTool, EffectsTool, FiltersTool } from './LookTabs';
 import ReviewTab from './ReviewTab';
+import { MotionTemplateGallery } from '@/components/library';
 import { askAI } from '@/components/shell/ui';
 import { formatTime } from '@/lib/util';
 
-export type InspectorTool = 'review' | 'edit' | 'text' | 'stickers' | 'captions' | 'effects' | 'filters' | 'adjust' | 'transitions' | 'audio' | 'canvas';
+export type InspectorTool = 'review' | 'edit' | 'text' | 'stickers' | 'captions' | 'effects' | 'filters' | 'adjust' | 'transitions' | 'audio' | 'canvas' | 'templates';
 
 export const INSPECTOR_TABS: { id: InspectorTool; label: string }[] = [
   { id: 'edit', label: 'Editar' },
   { id: 'audio', label: 'Áudio' },
   { id: 'text', label: 'Texto' },
   { id: 'stickers', label: 'Stickers' },
+  { id: 'templates', label: 'Modelos' },
   { id: 'effects', label: 'Efeitos' },
   { id: 'filters', label: 'Filtros' },
   { id: 'transitions', label: 'Transições' },
@@ -83,6 +85,7 @@ export default function Inspector({ tool, title }: { tool?: InspectorTool; title
         {active === 'review' && <ReviewTab />}
         {active === 'transitions' && <TransitionsTab />}
         {active === 'audio' && <AudioTab />}
+        {active === 'templates' && <MotionTemplateGallery />}
       </div>
     </div>
   );

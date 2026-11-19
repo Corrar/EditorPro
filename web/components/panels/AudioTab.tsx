@@ -1,4 +1,6 @@
 'use client';
+import { create } from 'zustand';
+import { SfxList } from '@/components/library';
 /* Áudio: importar música, gravar narração, biblioteca, volume/voz/batidas do clipe */
 import { useEffect, useRef, useState } from 'react';
 import { emit } from '@/lib/events';
@@ -10,7 +12,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { formatTime, uid } from '@/lib/util';
 import { IconMic, IconMusic, IconPlus, IconUpload } from '@/components/shell/icons';
 import { VolumeSection } from './ClipSections';
-import { Section } from './controls';
+import { Section, Seg } from './controls';
 import { isSound } from './clipkit';
 import { useSelectedClip } from './hooks';
 
@@ -97,6 +99,10 @@ function Narration() {
   );
 }
 
+/** aba do painel de Áudio (a barra do celular abre direto em "Efeitos sonoros") */
+export const useAudioView = create<{ view: 'music' | 'sfx' }>(() => ({ view: 'music' }));
+const AUDIO_VIEWS: { id: 'music' | 'sfx'; label: string }[] = [{ id: 'music', label: 'Músicas e voz' }, { id: 'sfx', label: 'Efeitos sonoros' }];
+
 export default function AudioTab() {
   const clip = useSelectedClip()?.clip;
   const input = useRef<HTMLInputElement>(null);
@@ -104,8 +110,16 @@ export default function AudioTab() {
     const done = await ingestFiles(files, 'music');
     if (done.length) emit('ep:toast', { text: `${done.length} áudio(s) importado(s)`, kind: 'ok' });
   };
+  const view = useAudioView((s) => s.view);
+  if (view === 'sfx') return (
+    <>
+      <Seg value={view} onChange={(v) => useAudioView.setState({ view: v })} options={AUDIO_VIEWS} />
+      <Section title="Efeitos sonoros"><SfxList /></Section>
+    </>
+  );
   return (
     <>
+      <Seg value={view} onChange={(v) => useAudioView.setState({ view: v })} options={AUDIO_VIEWS} />
       <div className="ep-audioacts">
         <button type="button" className="ep-btn primary ep-wide" onClick={() => input.current?.click()}><IconUpload size={16} /> Importar música</button>
         <input ref={input} type="file" hidden multiple accept="audio/*" onChange={(e) => { void importMusic(Array.from(e.target.files ?? [])); e.target.value = ''; }} />

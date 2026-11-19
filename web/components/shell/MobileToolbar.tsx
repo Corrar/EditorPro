@@ -19,6 +19,7 @@ import type { Clip } from '@/lib/types';
 import { DEFAULT_TRANSFORM } from '@/lib/types';
 import { uid } from '@/lib/util';
 import ToolSheet, { type SheetKind } from './ToolSheet';
+import { useAudioView } from '@/components/panels/AudioTab';
 import type { ToolId } from './tools';
 
 interface Item { id: string; label: string; icon: IconName; run: () => void; on?: boolean; danger?: boolean; accent?: boolean }
@@ -98,15 +99,15 @@ export default function MobileToolbar({ onTool, onAi, onMenu, tool, toolOpen }: 
     { id: 'format', label: 'Formato', icon: 'formats', run: () => openPanel('canvas'), on: isOn('canvas') },
     { id: 'bg', label: 'Fundo', icon: 'background', run: () => openPanel('canvas') },
     { id: 'transitions', label: 'Transições', icon: 'transitions', run: () => openPanel('transitions'), on: isOn('transitions') },
-    { id: 'templates', label: 'Modelos', icon: 'templates', run: () => openPanel('text') },
+    { id: 'templates', label: 'Modelos', icon: 'templates', run: () => openPanel('templates'), on: isOn('templates') },
     { id: 'review', label: 'Revisão', icon: 'review', run: () => openPanel('review'), on: isOn('review') },
     { id: 'more', label: 'Mais', icon: 'grid', run: onMenu },
   ];
   const sub: Record<string, Item[]> = {
     audio: [
-      { id: 'music', label: 'Músicas', icon: 'music', run: () => openPanel('audio') },
-      { id: 'sfx', label: 'Efeitos sonoros', icon: 'sfx', run: () => openPanel('audio') },
-      { id: 'rec', label: 'Narração', icon: 'mic', run: () => openPanel('audio') },
+      { id: 'music', label: 'Músicas', icon: 'music', run: () => { useAudioView.setState({ view: 'music' }); openPanel('audio'); } },
+      { id: 'sfx', label: 'Efeitos sonoros', icon: 'sfx', run: () => { useAudioView.setState({ view: 'sfx' }); openPanel('audio'); } },
+      { id: 'rec', label: 'Narração', icon: 'mic', run: () => { useAudioView.setState({ view: 'music' }); openPanel('audio'); } },
       { id: 'extract', label: 'Extrair áudio', icon: 'music', run: extractFromVideo },
     ],
     text: [
@@ -116,7 +117,8 @@ export default function MobileToolbar({ onTool, onAi, onMenu, tool, toolOpen }: 
         st.dispatch({ op: 'add_clip', trackId: targetTrackId(st.project, 'text'), clip: c, explain: 'Adicionando texto' });
         st.select([c.id]); st.setPlayhead(c.start + 0.5); setSheet('text');
       } },
-      { id: 'tpl', label: 'Modelos', icon: 'templates', run: () => openPanel('text') },
+      { id: 'tpl', label: 'Modelos de texto', icon: 'templates', run: () => openPanel('text') },
+      { id: 'motion', label: 'Animados', icon: 'film', run: () => openPanel('templates') },
       { id: 'auto', label: 'Legendas auto', icon: 'captions', run: () => emit('ep:generate-captions', {}) },
       { id: 'capstyle', label: 'Estilo legenda', icon: 'font', run: () => openPanel('captions') },
       { id: 'stk', label: 'Stickers', icon: 'stickers', run: () => openPanel('stickers') },
