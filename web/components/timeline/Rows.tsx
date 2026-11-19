@@ -154,9 +154,10 @@ function CaptionLane({ zoom, height, width }: { zoom: number; height: number; wi
   const enabled = useEditor((s) => s.project.captions.enabled);
   const sel = useTimelineUi((s) => s.captionSel);
   const drag = useTimelineUi((s) => (s.drag && s.drag.mode.startsWith('cap') ? (s.drag as { id: string; start: number; end: number }) : null));
+  const compact = useTimelineUi((s) => s.dims.compact);
   return (
     <div className={`ep-tl-lane k-captions${enabled ? '' : ' hidden'}`} style={{ width, height }} data-row="captions">
-      {!allSegs.length && <span className="ep-tl-lanehint">Sem legendas — gere pelo painel Legendas ou peça no chat</span>}
+      {!allSegs.length && <span className="ep-tl-lanehint">{compact ? 'Sem legendas' : 'Sem legendas — gere no painel Legendas ou peça no chat'}</span>}
       {segs.map((s) => {
         const st = drag?.id === s.id ? drag.start : s.start;
         const en = drag?.id === s.id ? drag.end : s.end;
@@ -182,7 +183,7 @@ function NewTrackLane({ height, width }: { height: number; width: number }) {
   const hint = useTimelineUi((s) => s.drag?.mode === 'move' && !!s.drag.newTrack);
   return (
     <div className={`ep-tl-lane k-new${hint ? ' hint' : ''}`} style={{ width, height }} data-row="new">
-      <span className="ep-tl-lanehint"><IPlus size={12} /> Solte aqui para criar uma trilha nova</span>
+      <span className="ep-tl-lanehint"><IPlus size={12} /> Solte aqui: nova trilha</span>
     </div>
   );
 }

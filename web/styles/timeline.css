@@ -636,3 +636,53 @@
 .ep-tl-headbtns { gap: 0; }
 .ep-tl-hb { width: 28px; height: 28px; }
 .ep-tl.coarse .ep-tl-hb { width: 32px; height: 32px; }
+
+/* =====================================================================
+   Design v2.1 — "eleve o nível" (celular): ícones simples, blocos neutros, régua discreta
+   ===================================================================== */
+.ep-tl { --tl-tick: color-mix(in srgb, var(--ink) 10%, transparent); --tl-tickMajor: color-mix(in srgb, var(--ink) 24%, transparent); }
+
+/* toolbar compacta: ícones simples sem fundo + separadores sutis */
+.ep-tl-bar.compact { height: 52px; }
+.ep-tl-bar.compact .ep-tl-btn { background: transparent; color: var(--ink); }
+.ep-tl-bar.compact .ep-tl-btn:hover:not(:disabled) { background: var(--tile); }
+.ep-tl-bar.compact .ep-tl-btn.on { background: transparent; color: var(--green); }
+.ep-tl-bar.compact .ep-tl-btn:disabled { opacity: .3; }
+.ep-tl-bar.compact .ep-tl-sep { height: 16px; background: var(--line); margin: 0 2px; }
+.ep-tl-barscroll { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 14px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 14px), transparent); }
+
+/* cabeçalhos compactos: bloco neutro (--tile) com o ícone na cor do tipo */
+.ep-tl-head.compact .ep-tl-headic.btn { background: var(--tile); color: var(--muted); border-radius: 12px; width: 40px; height: calc(100% - 6px); max-height: 44px; min-height: 26px; }
+.ep-tl-head.compact.k-video .ep-tl-headic.btn { color: var(--tl-video); }
+.ep-tl-head.compact.k-text .ep-tl-headic.btn { color: var(--tl-text); }
+.ep-tl-head.compact.k-audio .ep-tl-headic.btn { color: var(--tl-audio); }
+.ep-tl-head.compact.k-overlay .ep-tl-headic.btn { color: var(--tl-overlay); }
+.ep-tl-head.compact.k-effect .ep-tl-headic.btn { color: var(--tl-effect); }
+.ep-tl-head.compact.k-captions .ep-tl-headic.btn { color: var(--sub); }
+.ep-tl-head.compact .ep-tl-headic.btn.off { background: var(--tile); color: var(--faint); } /* legendas ocultas: ícone cinza riscado, sem vermelho */
+.ep-tl-head.compact .ep-tl-headic.btn.on { box-shadow: inset 0 0 0 2px var(--green); }
+.ep-tl-head.compact .ep-tl-headic.btn:active { background: var(--tileHover); }
+.ep-tl-flag { background: var(--green); border-color: var(--tile); width: 7px; height: 7px; }
+
+/* faixas sempre neutras (só os clipes têm cor) */
+.ep-tl-lane, .ep-tl-lane.k-captions { background: var(--tl-lane); }
+.ep-tl-lane.hidden { background: color-mix(in srgb, var(--tl-lane) 60%, transparent); }
+.ep-tl-lane.hint { background: color-mix(in srgb, var(--green) 10%, var(--tl-lane)); }
+
+/* estados vazios: curtos, centralizados, sem cortar */
+.ep-tl-lanehint { font-size: 12px; color: var(--faint); font-weight: 500; }
+.ep-tl-empty {
+  right: auto; top: 50%; transform: translateY(-50%); padding: 0 16px; text-align: center;
+  font-size: 13px; font-weight: 500; color: var(--muted); white-space: normal; line-height: 1.4;
+}
+
+/* régua: números menores e ticks sutis */
+.ep-tl-tick { font-size: 11px; color: var(--faint); top: 4px; }
+.ep-tl-tick.sub { font-size: 10px; }
+
+/* rolagem horizontal fina e estilizada */
+.ep-tl-scroll { scrollbar-width: thin; scrollbar-color: var(--tileActive) transparent; }
+.ep-tl-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+.ep-tl-scroll::-webkit-scrollbar-track { background: transparent; }
+.ep-tl-scroll::-webkit-scrollbar-thumb { background: var(--tileActive); border: 0; border-radius: 999px; }
+.ep-tl-scroll::-webkit-scrollbar-thumb:hover { background: var(--muted); }

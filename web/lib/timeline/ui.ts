@@ -37,6 +37,8 @@ export interface TimelineUi {
   snapping: boolean;
   scrollLeft: number;
   viewW: number;
+  /** altura visível da área rolável (p/ esticar as trilhas no celular) */
+  viewH: number;
   drag: DragPreview | null;
   snapLine: Seconds | null;
   /** destaque ao arrastar mídia da biblioteca */
@@ -149,6 +151,19 @@ export function rowLayout(p: Project, withNewRow: boolean, rowH: Record<RowKind,
   return rows;
 }
 
+/**
+ * no compacto, estica as alturas das trilhas para preencher a altura disponível
+ * (sem sobra vazia embaixo), no máximo 1,6x.
+ */
+export function fillRowHeights(rowH: Record<RowKind, number>, p: Project, available: number): Record<RowKind, number> {
+  const base = rowsHeight(rowLayout(p, false, rowH));
+  if (available <= 0 || base <= 0 || available <= base) return rowH;
+  const k = Math.min(1.6, available / base);
+  const out = { ...rowH };
+  for (const key of Object.keys(out) as RowKind[]) if (key !== 'new') out[key] = Math.floor(out[key] * k);
+  return out;
+}
+
 export function rowsHeight(rows: RowInfo[]): number {
   const last = rows[rows.length - 1];
   return last ? last.top + last.height + ROW_GAP : 0;
@@ -165,6 +180,7 @@ export const useTimelineUi = create<TimelineUi>((set) => ({
   snapping: true,
   scrollLeft: 0,
   viewW: 1000,
+  viewH: 300,
   drag: null,
   snapLine: null,
   dropHint: null,

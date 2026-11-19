@@ -337,3 +337,17 @@ describe('virtualização', () => {
     expect(b).toBe(50);
   });
 });
+
+describe('preencher altura (celular)', () => {
+  it('fillRowHeights estica até 1,6x e nunca encolhe', async () => {
+    const { fillRowHeights, dimsFor, rowLayout, rowsHeight } = await import('./ui');
+    const p = mock();
+    const rh = dimsFor(390, 300, true).rowH;
+    const base = rowsHeight(rowLayout(p, false, rh));
+    expect(fillRowHeights(rh, p, base - 10)).toBe(rh);
+    const f = fillRowHeights(rh, p, base * 1.3);
+    expect(rowsHeight(rowLayout(p, false, f))).toBeLessThanOrEqual(base * 1.3 + 1);
+    expect(f.video).toBeGreaterThan(rh.video);
+    expect(fillRowHeights(rh, p, base * 5).video).toBe(Math.floor(rh.video * 1.6));
+  });
+});

@@ -26,7 +26,7 @@ import {
 import {
   addMarker, commit as commitOps, copyClips, cutClips, duplicateClips, pasteClips, removeClips, splitAtPlayhead, toggleKeyframe,
 } from '@/lib/timeline/actions';
-import { type RowInfo, dimsFor, rowAtY, rowLayout, rowsHeight, useDims, useTimelineUi } from '@/lib/timeline/ui';
+import { type RowInfo, dimsFor, fillRowHeights, rowAtY, rowLayout, rowsHeight, useDims, useTimelineUi } from '@/lib/timeline/ui';
 import { Toolbar, ZMAX, ZMIN } from './Toolbar';
 import { Ruler } from './Ruler';
 import { DragLayer, Guides, KeyframeLayer, PlayheadLine, Rows, TouchHandles } from './Rows';
@@ -74,6 +74,17 @@ function trackLabel(kind: TrackKind, p: Project): string {
   return `${kind === 'video' ? 'Vídeo' : kind === 'audio' ? 'Áudio' : 'Texto'} ${n}`;
 }
 
+/** estado vazio centralizado na área VISÍVEL (não no conteúdo inteiro, que pode ser mais largo) */
+function EmptyHint({ compact, headerW }: { compact: boolean; headerW: number }) {
+  const scrollLeft = useTimelineUi((s) => s.scrollLeft);
+  const viewW = useTimelineUi((s) => s.viewW);
+  return (
+    <div className="ep-tl-empty" style={{ left: headerW + scrollLeft, width: Math.max(120, viewW - headerW) }}>
+      {compact ? 'Adicione mídia pela aba Mídia' : 'Arraste mídias da biblioteca para cá — ou descreva o vídeo no chat e a IA monta a timeline.'}
+    </div>
+  );
+}
+
 export default function Timeline() {
   const project = useEditor((s) => s.project);
   const zoom = useEditor((s) => s.zoom);
@@ -101,7 +112,13 @@ export default function Timeline() {
   const anchor = useRef<{ t: Seconds; px: number } | null>(null);
   const edgeRaf = useRef(0);
 
-  const rows = useMemo(() => rowLayout(project, showNew, dims.rowH), [project, showNew, dims.rowH]);
+  const viewH = useTimelineUi((s) => s.viewH);
+  const rowH = useMemo(
+    () => (dims.compact ? fillRowHeights(dims.rowH, project, viewH - dims.rulerH - 4) : dims.rowH),
+    // só a estrutura de trilhas importa para as alturas
+    [dims.compact, dims.rowH, dims.rulerH, viewH, project.tracks.length], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const rows = useMemo(() => rowLayout(project, showNew, rowH), [project, showNew, rowH]);
   const rowsRef = useRef<RowInfo[]>(rows);
   rowsRef.current = rows;
   const zoomRef = useRef(zoom);
@@ -149,7 +166,7 @@ export default function Timeline() {
     let raf = 0;
     const sync = () => {
       cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => setUi({ scrollLeft: el.scrollLeft, viewW: el.clientWidth }));
+      raf = requestAnimationFrame(() => setUi({ scrollLeft: el.scrollLeft, viewW: el.clientWidth, viewH: el.clientHeight }));
     };
     sync();
     el.addEventListener('scroll', sync, { passive: true });
@@ -1054,13 +1071,7 @@ export default function Timeline() {
             <TouchHandles project={project} rows={rows} zoom={zoom} />
             <KeyframeLayer project={project} rows={rows} zoom={zoom} />
             <MarkerLines zoom={zoom} height={rowsH} headerW={dims.headerW} />
-            {empty && (
-              <div className="ep-tl-empty" style={{ left: hw() }}>
-                {dims.compact
-                  ? 'Adicione mídias pela biblioteca ou peça no chat.'
-                  : 'Arraste mídias da biblioteca para cá — ou descreva o vídeo no chat e deixe a IA montar a timeline.'}
-              </div>
-            )}
+            {empty && <EmptyHint compact={dims.compact} headerW={dims.headerW} />}
           </div>
         </div>
       </div>
