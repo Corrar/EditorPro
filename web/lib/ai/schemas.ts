@@ -20,9 +20,10 @@ const transform = z.object({
   rotation: z.number().optional(),
   opacity: z.number().optional(),
 });
-const keyframe = z.object({ t: z.number().describe('segundos desde o início do clipe'), transform, easing: z.enum(EASINGS).optional() });
+const propKf = z.array(z.object({ path: z.string().describe("caminho da propriedade: 'volume', 'style.color', 'effects.0.intensity', 'colorGrade.saturation'…"), value: z.union([z.number(), z.string()]).describe("número ou cor '#RRGGBB'") }));
+const keyframe = z.object({ t: z.number().describe('segundos desde o início do clipe'), transform: transform.optional(), props: propKf.optional().describe('keyframe de QUALQUER propriedade numérica/cor'), easing: z.enum(EASINGS).optional() });
 const filter = z.object({ kind: z.enum(FILTER_KINDS), value: z.number() });
-const transition = z.object({ kind: z.enum(TRANSITIONS), duration: z.number(), easing: z.enum(EASINGS).optional() });
+const transition = z.object({ kind: z.enum([...TRANSITIONS, 'custom'] as string[] as [string, ...string[]]), duration: z.number(), easing: z.enum(EASINGS).optional(), code: z.string().optional().describe("kind 'custom': GLSL com vec4 transition(vec2 uv)"), name: z.string().optional(), params: z.array(z.number()).optional() });
 const textStyleShape = {
   fontFamily: z.string().optional(),
   fontSize: z.number().optional(),
@@ -63,7 +64,7 @@ const captionStyle = z.object({
   jitter: z.number().optional(),
 });
 
-const effect = z.object({ kind: z.enum(EFFECT_KINDS), intensity: z.number().describe('0..1'), speed: z.number().optional(), color: z.string().optional().describe('#RRGGBB'), angle: z.number().optional().describe('graus') });
+const effect = z.object({ kind: z.enum([...EFFECT_KINDS, 'custom'] as string[] as [string, ...string[]]), code: z.string().optional().describe("kind 'custom': GLSL com vec4 effect(vec2 uv)"), name: z.string().optional(), params: z.array(z.number()).optional(), intensity: z.number().describe('0..1'), speed: z.number().optional(), color: z.string().optional().describe('#RRGGBB'), angle: z.number().optional().describe('graus') });
 const audioEffect = z.object({ kind: z.enum(AUDIO_EFFECTS), amount: z.number().describe('0..1') });
 const clipAnim = z.object({ kind: z.enum(CLIP_ANIMATIONS), duration: z.number() });
 const mask = z.object({ shape: z.enum(MASK_SHAPES), x: z.number(), y: z.number(), w: z.number(), h: z.number(), rotation: z.number(), feather: z.number(), invert: z.boolean().optional(), radius: z.number().optional(), text: z.string().optional(), keyframes: z.array(z.object({ t: z.number(), x: z.number().optional(), y: z.number().optional(), w: z.number().optional(), h: z.number().optional(), rotation: z.number().optional(), feather: z.number().optional() })).optional() });

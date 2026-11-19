@@ -270,7 +270,12 @@ function buildClipPatch(raw: Record<string, unknown>, clip: Clip, assets: Record
     const d = duration ?? clip.duration;
     const fadeIn = clampNum(raw.fadeIn, 0, d / 2); if (fadeIn !== undefined) out.fadeIn = fadeIn;
     const fadeOut = clampNum(raw.fadeOut, 0, d / 2); if (fadeOut !== undefined) out.fadeOut = fadeOut;
-    if (clip.type === 'audio') { const duck = bool(raw.duckUnderVoice); if (duck !== undefined) out.duckUnderVoice = duck; }
+    if (clip.type === 'audio') {
+      const duck = bool(raw.duckUnderVoice); if (duck !== undefined) out.duckUnderVoice = duck;
+      // automação (ex.: props.volume subindo aos poucos) — em áudio só `props` vale
+      const akf = sanitizeKeyframes(raw.keyframes, d)?.filter((k) => k.props).map((k) => ({ ...k, transform: {} }));
+      if (akf?.length) out.keyframes = akf; else if (Array.isArray(raw.keyframes) && !raw.keyframes.length) out.keyframes = [];
+    }
     if (clip.type === 'video') { const muted = bool(raw.muted); if (muted !== undefined) out.muted = muted; }
     Object.assign(out, sanitizeAudioExtras(raw));
   }
