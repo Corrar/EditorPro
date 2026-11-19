@@ -3,7 +3,7 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import type { TrackKind } from '@/lib/types';
 import { useEditor, useDuration } from '@/lib/store';
-import { useDims, useTimelineUi } from '@/lib/timeline/ui';
+import { TOOL_LABEL, useDims, useTimelineUi, type EditTool } from '@/lib/timeline/ui';
 import { TRACK_NAMES } from '@/lib/ops';
 import { formatTime } from '@/lib/util';
 import {
@@ -12,6 +12,7 @@ import {
 import {
   IAudio, IAudioSplit, IClipboard, IComment, ICopy, IDiamond, IFit, IFlag, IGauge, IInsert, IMagnet, IMagnetTrack, IMore,
   IPause, IPlay, IPlus, IRedo, IRipple, ISliders, ISnowflake, ISplit, ISticker, IText, ITrash, IUndo, IVideo, IZoomIn, IZoomOut,
+  IBlade, IKeyboard, IRippleTool, IRoll, ISelect, ISlide, ISlip,
 } from './icons';
 
 export const ZMIN = 8;
@@ -143,6 +144,13 @@ function MoreItems({ actions, close, compact, center }: { actions: ToolbarAction
           <div className="ep-tl-menusep" />
         </>
       )}
+      {center && (
+        <>
+          <div className="ep-tl-menuhead">Ferramenta</div>
+          <ToolItems close={close} chips />
+          <div className="ep-tl-menusep" />
+        </>
+      )}
       <div className="ep-tl-menuhead">Edição</div>
       <button role="menuitemcheckbox" aria-checked={ui.snapping} onClick={run(() => ui.set({ snapping: !ui.snapping }))}>
         <IMagnet size={15} /> Ímã (encaixe) <span className={`ep-tl-check${ui.snapping ? ' on' : ''}`} />
@@ -193,6 +201,12 @@ function MoreItems({ actions, close, compact, center }: { actions: ToolbarAction
           <button role="menuitem" className="danger" disabled={!hasSel} onClick={run(actions.rippleRemove)}><IRipple size={15} /> Excluir com ripple</button>
         </>
       )}
+      {!center && (
+        <>
+          <div className="ep-tl-menusep" />
+          <button role="menuitem" onClick={run(() => ui.set({ helpOpen: true }))}><IKeyboard size={15} /> Atalhos do teclado <kbd>?</kbd></button>
+        </>
+      )}
     </>
   );
 }
@@ -213,6 +227,43 @@ function SpeedItems({ close }: { close: () => void }) {
       </div>
       {cur == null && <div className="ep-tl-menunote">Selecione um clipe de vídeo ou áudio.</div>}
       <div className="ep-tl-menunote">Curvas (montagem, herói, bala…) ficam no painel do clipe.</div>
+    </>
+  );
+}
+
+export const TOOLS: { tool: EditTool; icon: (p: { size?: number }) => JSX.Element; key: string; hint: string }[] = [
+  { tool: 'select', icon: ISelect, key: 'A', hint: 'mover e aparar' },
+  { tool: 'blade', icon: IBlade, key: 'B', hint: 'clique corta o clipe' },
+  { tool: 'ripple', icon: IRippleTool, key: 'T', hint: 'apara e empurra o resto' },
+  { tool: 'roll', icon: IRoll, key: 'T', hint: 'move o corte entre 2 clipes' },
+  { tool: 'slip', icon: ISlip, key: 'T', hint: 'troca o trecho, mesmo lugar' },
+  { tool: 'slide', icon: ISlide, key: 'T', hint: 'move o clipe, vizinhos ajustam' },
+];
+
+/** lista de ferramentas (popover da barra e menu ⋯ do celular) */
+function ToolItems({ close, chips }: { close: () => void; chips?: boolean }) {
+  const tool = useTimelineUi((s) => s.tool);
+  const setUi = useTimelineUi((s) => s.set);
+  const pick = (t: EditTool) => () => { setUi({ tool: t }); close(); };
+  if (chips)
+    return (
+      <div className="ep-tl-toolchips" role="radiogroup" aria-label="Ferramenta">
+        {TOOLS.map(({ tool: t, icon: I }) => (
+          <button key={t} role="radio" aria-checked={tool === t} className={tool === t ? 'on' : ''} onClick={pick(t)} title={TOOL_LABEL[t]}>
+            <I size={16} /><span>{TOOL_LABEL[t]}</span>
+          </button>
+        ))}
+      </div>
+    );
+  return (
+    <>
+      <div className="ep-tl-menuhead">Ferramenta</div>
+      {TOOLS.map(({ tool: t, icon: I, key, hint }) => (
+        <button key={t} role="menuitemradio" aria-checked={tool === t} className={tool === t ? 'cur' : ''} onClick={pick(t)}>
+          <I size={15} /> <span className="ep-tl-toolname">{TOOL_LABEL[t]}<small>{hint}</small></span> <kbd>{key}</kbd>
+        </button>
+      ))}
+      <div className="ep-tl-menunote">Alt durante o arraste: só este clipe (J/L-cut).</div>
     </>
   );
 }
@@ -240,7 +291,7 @@ function PlayBtn() {
   );
 }
 
-type PopKind = 'more' | 'speed' | 'add' | null;
+type PopKind = 'more' | 'speed' | 'add' | 'tool' | null;
 
 function ToolbarInner({ actions }: { actions: ToolbarActions }) {
   const canUndo = useEditor((s) => s.past.length > 0);
@@ -252,12 +303,18 @@ function ToolbarInner({ actions }: { actions: ToolbarActions }) {
   const snapping = useTimelineUi((s) => s.snapping);
   const magnetic = useTimelineUi((s) => s.magnetic);
   const setUi = useTimelineUi((s) => s.set);
-  const open = useTimelineUi((s) => (s.overflowOpen ? 'more' : s.addTrackOpen ? 'add' : s.speedPop ? 'speed' : null)) as PopKind;
+  const [toolOpen, setToolOpen] = useState(false);
+  const tool = useTimelineUi((s) => s.tool);
+  const open = useTimelineUi((s) => (s.overflowOpen ? 'more' : s.addTrackOpen ? 'add' : s.speedPop ? 'speed' : null)) as PopKind ?? (toolOpen ? 'tool' : null);
   const { barCompact: compact, compact: narrow } = useDims();
   const moreRef = useRef<HTMLButtonElement>(null);
   const speedRef = useRef<HTMLButtonElement>(null);
   const addRef = useRef<HTMLButtonElement>(null);
-  const setOpen = (k: PopKind) => setUi({ overflowOpen: k === 'more', addTrackOpen: k === 'add', speedPop: k === 'speed' ? { x: 0, y: 0 } : null });
+  const toolRef = useRef<HTMLButtonElement>(null);
+  const setOpen = (k: PopKind) => {
+    setToolOpen(k === 'tool');
+    setUi({ overflowOpen: k === 'more', addTrackOpen: k === 'add', speedPop: k === 'speed' ? { x: 0, y: 0 } : null });
+  };
   const toggle = (k: PopKind) => () => setOpen(open === k ? null : k);
   const close = () => setOpen(null);
 
@@ -266,19 +323,38 @@ function ToolbarInner({ actions }: { actions: ToolbarActions }) {
       <Popover open={open === 'more'} anchor={moreRef} onClose={close} width={250}><MoreItems actions={actions} close={close} compact={compact} /></Popover>
       <Popover open={open === 'speed'} anchor={speedRef} onClose={close} width={250}><SpeedItems close={close} /></Popover>
       <Popover open={open === 'add'} anchor={addRef} onClose={close} width={210}><AddTrackItems close={close} /></Popover>
+      <Popover open={open === 'tool'} anchor={toolRef} onClose={close} width={260}><ToolItems close={close} /></Popover>
     </>
+  );
+
+  const CurTool = TOOLS.find((x) => x.tool === tool)!.icon;
+  const trimActive = tool !== 'select' && tool !== 'blade';
+  const toolBtns = compact ? (
+    <button ref={toolRef} className={`ep-tl-btn${tool !== 'select' ? ' on' : ''}`} onClick={toggle('tool')} title={`Ferramenta: ${TOOL_LABEL[tool]}`} aria-label={`Ferramenta: ${TOOL_LABEL[tool]}`} aria-haspopup="menu" aria-expanded={open === 'tool'}>
+      <CurTool />
+    </button>
+  ) : (
+    <span className="ep-tl-seg" role="radiogroup" aria-label="Ferramenta">
+      <button role="radio" aria-checked={tool === 'select'} className={`ep-tl-btn${tool === 'select' ? ' on' : ''}`} onClick={() => setUi({ tool: 'select' })} title="Seleção (A)" aria-label="Seleção"><ISelect /></button>
+      <button role="radio" aria-checked={tool === 'blade'} className={`ep-tl-btn${tool === 'blade' ? ' on' : ''}`} onClick={() => setUi({ tool: 'blade' })} title="Lâmina (B): clique no clipe para cortar" aria-label="Lâmina"><IBlade /></button>
+      <button ref={toolRef} role="radio" aria-checked={trimActive} className={`ep-tl-btn${trimActive ? ' on' : ''}`} onClick={toggle('tool')} title={`Trim (T): ${trimActive ? TOOL_LABEL[tool] : 'ripple, roll, slip, slide'}`} aria-label="Ferramentas de trim" aria-haspopup="menu" aria-expanded={open === 'tool'}>
+        {trimActive ? <CurTool /> : <IRippleTool />}
+      </button>
+    </span>
   );
 
   const editBtns = (
     <>
+      {toolBtns}
+      <span className="ep-tl-sep" />
       <button className="ep-tl-btn" onClick={undo} disabled={!canUndo} title="Desfazer (Ctrl+Z)" aria-label="Desfazer"><IUndo /></button>
       <button className="ep-tl-btn" onClick={redo} disabled={!canRedo} title="Refazer (Ctrl+Shift+Z)" aria-label="Refazer"><IRedo /></button>
       <span className="ep-tl-sep" />
-      <button className="ep-tl-btn" onClick={actions.split} title="Dividir no cursor (S)" aria-label="Dividir"><ISplit /></button>
+      <button className="ep-tl-btn" onClick={actions.split} title="Dividir no cursor (S · Ctrl+B) · Ctrl+Shift+B corta todas as trilhas" aria-label="Dividir"><ISplit /></button>
       <button className="ep-tl-btn" onClick={actions.remove} disabled={!hasSel} title="Excluir (Delete) · Shift+Delete exclui com ripple" aria-label="Excluir"><ITrash /></button>
       {!compact && <button className="ep-tl-btn" onClick={actions.duplicate} disabled={!hasSel} title="Duplicar (Ctrl+D)" aria-label="Duplicar"><ICopy /></button>}
       <span className="ep-tl-sep" />
-      <button className="ep-tl-btn" onClick={() => toggleKeyframe()} disabled={!hasSel} title="Adicionar/remover keyframe no cursor (K)" aria-label="Keyframe"><IDiamond /></button>
+      <button className="ep-tl-btn" onClick={() => toggleKeyframe()} disabled={!hasSel} title="Adicionar/remover keyframe no cursor (Shift+K)" aria-label="Keyframe"><IDiamond /></button>
       {!compact && <button className="ep-tl-btn" onClick={actions.marker} title="Marcador no cursor (M)" aria-label="Marcador"><IFlag /></button>}
       {!compact && <button className="ep-tl-btn" onClick={actions.comment} title="Comentário de revisão (C)" aria-label="Comentar"><IComment /></button>}
       <button ref={speedRef} className={`ep-tl-btn${open === 'speed' ? ' on' : ''}`} onClick={toggle('speed')} title="Velocidade" aria-label="Velocidade" aria-haspopup="menu" aria-expanded={open === 'speed'}><IGauge /></button>

@@ -14,6 +14,8 @@ import { EditResponseSchema } from '@/lib/ai/schemas';
 import { summarizeProject } from '@/lib/ai/summary';
 import { sanitizeOps } from '@/lib/ai/validate';
 import { libraryCatalogForAI } from '@/lib/library/catalog';
+import { engineCatalogForAI } from '@/lib/ai/catalogs';
+import { COLOR_GRADE_LIVE } from '@/lib/ai/colormatch';
 import { isObj, num, str } from '@/lib/ai/sanitize';
 
 export const runtime = 'nodejs';
@@ -94,7 +96,7 @@ export async function POST(req: Request) {
     content.push({ type: 'text', text: `${task}\n\nPROJETO ATUAL (JSON):\n${JSON.stringify(summary)}${where ? `\n\nO USUÁRIO APONTOU PARA: ${where}` : ''}\n\nPEDIDO DO USUÁRIO:\n${userText}` });
 
     const raw = await generateStructured({
-      system: `${await loadPrompt('edit-system')}\n\n## Catálogo da biblioteca (ids válidos)\n${libraryCatalogForAI()}`,
+      system: `${await loadPrompt('edit-system')}${COLOR_GRADE_LIVE ? '' : '\n\nOBS.: o motor de `colorGrade` ainda não está ligado — para cor use `colorPreset`, `filters` (temperature, tint, exposure, contrast, saturation…) ou `apply_look`.'}\n\n## Catálogo do editor (ids válidos)\n${engineCatalogForAI()}\n\n## Catálogo da biblioteca (ids válidos)\n${libraryCatalogForAI()}`,
       content,
       schema: EditResponseSchema,
       effort: first || commentsMode ? 'high' : 'medium',

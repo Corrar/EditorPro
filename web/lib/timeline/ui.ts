@@ -5,6 +5,7 @@
    Fica separado do store global para que arrastar/rolar não
    re-renderize o resto do editor.
    ===================================================================== */
+import type { ClipOverride, MonitorFrame, TrimTool } from './trim';
 import { create } from 'zustand';
 import type { Id, Project, Seconds, Track, TrackKind } from '../types';
 import type { ClipboardItem } from './edit';
@@ -24,7 +25,9 @@ export type DragPreview =
   | { mode: 'trim-start' | 'trim-end'; id: Id; start: Seconds; end: Seconds }
   | { mode: 'cap-move' | 'cap-start' | 'cap-end'; id: Id; start: Seconds; end: Seconds }
   | { mode: 'marker'; id: Id; t: Seconds; end?: Seconds }
-  | { mode: 'keyframe'; clipId: Id; index: number; t: Seconds };
+  | { mode: 'keyframe'; clipId: Id; index: number; t: Seconds }
+  /** trims profissionais: valores provisórios dos clipes tocados + quadros do monitor */
+  | { mode: 'pro'; tool: TrimTool; clipId: Id; over: Record<Id, ClipOverride>; frames: [MonitorFrame | null, MonitorFrame | null]; delta: Seconds };
 
 export interface Marquee {
   x0: number;
@@ -32,6 +35,12 @@ export interface Marquee {
   x1: number;
   y1: number;
 }
+
+export type EditTool = 'select' | 'blade' | 'ripple' | 'roll' | 'slip' | 'slide';
+export const TRIM_TOOLS: EditTool[] = ['ripple', 'roll', 'slip', 'slide'];
+export const TOOL_LABEL: Record<EditTool, string> = {
+  select: 'Seleção', blade: 'Lâmina', ripple: 'Ripple', roll: 'Roll', slip: 'Slip', slide: 'Slide',
+};
 
 export interface TimelineUi {
   snapping: boolean;
@@ -71,6 +80,14 @@ export interface TimelineUi {
   /** menu "⋯" da toolbar compacta / popover de trilha compacta */
   overflowOpen: boolean;
   trackPop: { id: Id; x: number; y: number } | null;
+  /** ferramenta ativa (estilo DaVinci): Seleção (A), Lâmina (B) e trims (T alterna) */
+  tool: EditTool;
+  /** tela de ajuda de atalhos (?) */
+  helpOpen: boolean;
+  /** shuttle J/K/L: velocidade atual (0 = parado; negativo = ré) */
+  shuttle: number;
+  /** posição do cursor da lâmina (prévia do corte) */
+  bladeAt: { t: Seconds; clipId: Id } | null;
   set: (patch: Partial<Omit<TimelineUi, 'set'>>) => void;
 }
 
@@ -210,6 +227,10 @@ export const useTimelineUi = create<TimelineUi>((set) => ({
   dims: dimsFor(1200, 400, false),
   overflowOpen: false,
   trackPop: null,
+  tool: 'select',
+  helpOpen: false,
+  shuttle: 0,
+  bladeAt: null,
   set: (patch) => set(patch),
 }));
 

@@ -9,7 +9,7 @@
 /* palco: fundo neutro escuro (nos dois temas), cantos generosos */
 .ep-pv-box { flex:1; min-height:0; position:relative; display:grid; place-items:center; background:var(--pv-stage); border-radius:var(--r-lg, 24px); padding:16px; overflow:hidden; }
 .ep-pv-frame { position:relative; border-radius:18px; overflow:hidden; background:#000; box-shadow:0 18px 50px rgba(0,0,0,.45); container-type:inline-size; }
-.ep-pv-canvas { position:relative; z-index:1; display:block; width:100%; height:100%; background:transparent; cursor:pointer; touch-action:manipulation; -webkit-tap-highlight-color:transparent; }
+.ep-pv-canvas { position:relative; z-index:1; display:block; width:100%; height:100%; background:transparent; cursor:pointer; touch-action:none; -webkit-tap-highlight-color:transparent; }
 .ep-pv-canvas.pointing { cursor:crosshair; }
 /* camada de vídeo NATIVA (modo híbrido): os <video> tocam visíveis sob o canvas transparente */
 .ep-pv-host { position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:0; }
@@ -233,3 +233,51 @@
 .ep-pv-perf span { opacity:.65; font-weight:500; }
 .ep-pv-perf b { font-weight:700; overflow:hidden; text-overflow:ellipsis; }
 .ep-pv-perf .warn b { color:#FF9A5C; }
+
+/* ---------- Visualização: velocidade, zoom, repetir, grade, zonas seguras ---------- */
+.ep-pv-box.zoomed { overflow:auto; place-items:safe center; -webkit-overflow-scrolling:touch; }
+.ep-pv-viewwrap { position:relative; }
+.ep-pv-pop { position:absolute; right:0; bottom:calc(100% + 10px); z-index:40; width:300px; max-width:calc(100vw - 24px); padding:8px;
+  background:var(--card, #fff); color:var(--ink, #141414); border-radius:18px; box-shadow:var(--shadow-float, 0 18px 50px rgba(0,0,0,.28)); }
+.ep-pv-view { display:flex; flex-direction:column; gap:4px; }
+.ep-pv-view .row { display:flex; flex-direction:column; gap:6px; padding:6px 8px; }
+.ep-pv-view .row.sub { padding-top:0; }
+.ep-pv-view .row > span { font-size:11px; font-weight:700; letter-spacing:.02em; color:var(--muted, #6b6b6b); text-transform:uppercase; }
+.ep-pv-view .chips { display:flex; flex-wrap:wrap; gap:6px; }
+.ep-pv-view .chips button, .ep-pv-menu .ep-pv-view .chips button { min-height:36px; min-width:44px; padding:0 10px; border:0; border-radius:999px; background:var(--tile, #f1f1f1);
+  color:inherit; font:inherit; font-size:13px; font-weight:700; cursor:pointer; justify-content:center; }
+.ep-pv-view .chips button.on, .ep-pv-menu .ep-pv-view .chips button.on { background:var(--green, #F2681F); color:#fff; }
+.ep-pv-view .tog { display:flex; align-items:center; gap:10px; min-height:44px; padding:0 12px; border:0; border-radius:12px; background:none; color:inherit;
+  font:inherit; font-size:14px; font-weight:600; text-align:left; cursor:pointer; white-space:nowrap; }
+.ep-pv-view .tog.on { background:var(--tintG, rgba(242,104,31,.12)); color:var(--tintGInk, #B84A10); }
+.ep-pv-view .tog small { margin-left:auto; font-size:11px; font-weight:500; color:var(--muted, #6b6b6b); }
+.ep-pv-rate { font-size:12px; font-weight:800; padding:3px 8px; border-radius:999px; background:var(--green, #F2681F); color:#fff; }
+.ep-pv-grid { position:absolute; inset:0; pointer-events:none; z-index:2; }
+.ep-pv-grid i { position:absolute; background:rgba(255,255,255,.55); box-shadow:0 0 0 .5px rgba(0,0,0,.35); }
+.ep-pv-grid i:nth-child(1) { left:33.333%; top:0; bottom:0; width:1px; }
+.ep-pv-grid i:nth-child(2) { left:66.666%; top:0; bottom:0; width:1px; }
+.ep-pv-grid i:nth-child(3) { top:33.333%; left:0; right:0; height:1px; }
+.ep-pv-grid i:nth-child(4) { top:66.666%; left:0; right:0; height:1px; }
+@media (max-width: 899px) {
+  .ep-pv-menu { max-height:min(70vh, 560px); overflow:auto; }
+}
+
+/* antes/depois */
+.ep-pv-split { position:absolute; top:0; bottom:0; width:44px; margin-left:-22px; z-index:4; cursor:ew-resize; touch-action:none; display:flex; justify-content:center; }
+.ep-pv-split i { width:2px; height:100%; background:#fff; box-shadow:0 0 0 1px rgba(0,0,0,.35); }
+.ep-pv-split b { position:absolute; top:50%; transform:translateY(-50%); width:34px; height:34px; border-radius:50%; background:#fff; color:#141414;
+  display:flex; align-items:center; justify-content:center; gap:0; box-shadow:0 4px 14px rgba(0,0,0,.35); }
+.ep-pv-split span { position:absolute; top:10px; font-size:11px; font-weight:800; color:#fff; background:rgba(0,0,0,.55); padding:3px 9px; border-radius:999px; white-space:nowrap; pointer-events:none; }
+.ep-pv-split .l { right:calc(50% + 8px); }
+.ep-pv-split .r { left:calc(50% + 8px); }
+
+/* guias ao arrastar texto/sticker */
+.ep-pv-guides { position:absolute; inset:0; pointer-events:none; z-index:3; }
+.ep-pv-guides i { position:absolute; background:#FF3DA5; box-shadow:0 0 0 .5px rgba(0,0,0,.4); }
+.ep-pv-guides .gx { top:0; bottom:0; width:1px; }
+.ep-pv-guides .gy { left:0; right:0; height:1px; }
+.ep-pv-guides b { position:absolute; border:1.5px dashed #fff; border-radius:6px; box-shadow:0 0 0 1px rgba(0,0,0,.35); }
+/* com zoom (100%/200%), o toque no quadro rola o palco em vez de arrastar camadas */
+.ep-pv-box.zoomed .ep-pv-canvas { touch-action:pan-x pan-y pinch-zoom; }
+.ep-ex-prog .warn { margin:-6px 0 10px; font-size:12px; font-weight:600; color:var(--amberInk, #8a5a00); }
+.ep-ex-seg { flex-wrap:wrap; max-width:100%; }

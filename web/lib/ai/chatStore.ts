@@ -13,6 +13,7 @@ import { getStatus, type AIStatus } from './client';
 import { AI_CURSOR_STEP_MS } from '../aiCursor';
 import { orderForViewing, shortExplain } from './order';
 import { SCOPE_LABELS, styleScopeFromText, wantsApplyNow, type StyleScope } from './model';
+import { explainChanges, HELP_TEXT, isExplainRequest, isHelpRequest } from './suggest';
 import { analyzeModel, applyComments, applyModelStyle, chatEdit, generateCaptions, runFirstEdit, type AskOption, type PipelineOptions, type PipelineResult } from './pipeline';
 
 export type StepState = 'pending' | 'active' | 'done' | 'skipped';
@@ -30,6 +31,10 @@ export interface RunState {
   after?: Project;
   error?: string;
   done: boolean;
+  /** tamanho do histórico (past) no início da execução: desfazer volta TODOS os lotes dela */
+  pastLen?: number;
+  /** projeto ao terminar (p/ "o que mudou?", mesmo depois de outras edições) */
+  final?: Project;
   /** resposta da análise de um vídeo modelo (mostra "Aplicar este estilo" + chips) */
   model?: { assetId: Id };
   /** pergunta pendente ao usuário (botões no chat) */
@@ -115,7 +120,7 @@ export const useAIChat = create<AIChatState>((set, get) => {
     }
     set({ busy: true });
     const msgId = editor().pushMessage({ role: 'assistant', text: '', status: 'pending' });
-    patchRun(msgId, { phase: intro, log: [], steps: [], done: false, before: editor().project });
+    patchRun(msgId, { phase: intro, log: [], steps: [], done: false, before: editor().project, pastLen: editor().past.length });
 
     const apply: PipelineOptions['apply'] = async (ops: EditOp[], o) => {
       const base = get().runs[msgId]?.steps.length ?? 0;
@@ -170,7 +175,7 @@ export const useAIChat = create<AIChatState>((set, get) => {
       });
       const after = editor().project;
       const changed = !res.undo && after !== get().runs[msgId]?.before;
-      patchRun(msgId, { phase: undefined, progress: undefined, done: true, after: changed ? after : undefined });
+      patchRun(msgId, { phase: undefined, progress: undefined, done: true, after: changed ? after : undefined, final: after });
       editor().updateMessage(msgId, { text: res.reply, status: 'done', opIds: res.appliedIds });
       onDone?.(msgId, res);
       return true;
@@ -257,6 +262,20 @@ export const useAIChat = create<AIChatState>((set, get) => {
     send: async (raw) => {
       const text = raw.trim();
       if (!text || get().busy) return;
+      if (isHelpRequest(text)) {
+        editor().pushMessage({ role: 'user', text, status: 'done' });
+        editor().pushMessage({ role: 'assistant', text: HELP_TEXT, status: 'done' });
+        return;
+      }
+      // "o que você mudou?" -> explica a última edição sem mexer no projeto
+      if (isExplainRequest(text)) {
+        editor().pushMessage({ role: 'user', text, status: 'done' });
+        const msgs = editor().messages;
+        let found: RunState | undefined;
+        for (let i = msgs.length - 1; i >= 0 && !found; i--) { const r = get().runs[msgs[i].id]; if (r?.done && r.before && r.final && r.final !== r.before) found = r; }
+        editor().pushMessage({ role: 'assistant', text: found ? `O que mudou na última edição:\n${explainChanges(found.before!, found.final!)}` : 'Ainda não fiz nenhuma edição nesta conversa.', status: 'done' });
+        return;
+      }
       const context = editor().chatContext;
       editor().pushMessage({ role: 'user', text, status: 'done', ...(context ? { context } : {}) });
       if (context) editor().setChatContext(undefined);
@@ -288,7 +307,10 @@ export const useAIChat = create<AIChatState>((set, get) => {
         emit('ep:toast', { text: 'Já houve outras mudanças depois desta edição — use o Desfazer do editor.', kind: 'info' });
         return;
       }
-      editor().undo();
+      // a execução pode ter aplicado vários lotes (pré, estilo, legendas, principal): desfaz todos
+      const steps = Math.max(1, editor().past.length - (r.pastLen ?? editor().past.length - 1));
+      // (histórico pode estar no limite: segue até voltar ao projeto de antes, com teto)
+      for (let i = 0; i < Math.max(steps, 8) && editor().project !== r.before && editor().past.length; i++) editor().undo();
       patchRun(msgId, { after: undefined });
       editor().pushMessage({ role: 'system', text: 'Edição desfeita.', status: 'done' });
     },

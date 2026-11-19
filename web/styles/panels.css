@@ -342,3 +342,22 @@
 .ep-segask { justify-content:center; color:var(--green); }
 .ep-act > span { color:var(--ink); }
 .ep-act.on > span, .ep-act.danger > span { color:inherit; }
+
+/* ---------- seções recolhíveis (DaVinci), valor digitável e diamante de keyframe ---------- */
+.ep-psec.closed { padding-bottom:6px; }
+.ep-psec.closed .ep-psec-h { margin-bottom:0; }
+.ep-psec-t { display:inline-flex; align-items:center; gap:6px; min-height:40px; margin:-8px 0; padding:0; border:0; background:none; color:var(--ink); font:inherit; font-size:14px; font-weight:800; letter-spacing:-.01em; cursor:pointer; text-align:left; }
+.ep-psec-chev { display:inline-block; width:14px; font-size:11px; color:var(--sub); transition:transform .15s; }
+.ep-psec.closed .ep-psec-chev { transform:rotate(-90deg); }
+.ep-psec-r { display:inline-flex; align-items:center; gap:6px; }
+.ep-psec-reset { display:grid; place-items:center; width:36px; height:36px; margin:-6px -6px -6px 0; border:0; border-radius:50%; background:none; color:var(--green); font-size:16px; cursor:pointer; }
+.ep-psec-reset:active { background:var(--tile); }
+.ep-slider-l { display:inline-flex; align-items:center; gap:6px; }
+.ep-slider-num { border:0; background:none; color:inherit; font:inherit; padding:2px 0; min-height:24px; cursor:text; }
+.ep-slider-in { width:64px; border:0; border-radius:6px; background:var(--card); color:var(--ink); font:inherit; font-size:13px; padding:2px 4px; outline:2px solid var(--green); }
+.ep-kfbtn { display:grid; place-items:center; width:28px; height:28px; margin:-6px 0 -6px -6px; border:0; background:none; cursor:pointer; padding:0; }
+.ep-kfbtn i { width:9px; height:9px; transform:rotate(45deg); border:1.6px solid var(--sub); border-radius:1px; }
+.ep-kfbtn.anim i { border-color:var(--green); }
+.ep-kfbtn.at i { background:var(--green); border-color:var(--green); }
+.ep-kfbtn:disabled { opacity:.35; cursor:default; }
+@media (pointer: coarse) { .ep-kfbtn { width:36px; height:36px; margin:-10px -2px -10px -10px; } .ep-slider-num { min-height:32px; padding:4px 2px; } }

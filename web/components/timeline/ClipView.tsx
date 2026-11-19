@@ -29,6 +29,10 @@ function ClipViewInner({ clip, kind, zoom, height, locked }: Props) {
     if ((d.mode === 'trim-start' || d.mode === 'trim-end') && d.id === clip.id) return d;
     return null;
   });
+  // trims profissionais: valores provisórios deste clipe (ripple/roll/slip/slide)
+  const over = useTimelineUi((s) => (s.drag?.mode === 'pro' ? s.drag.over[clip.id] : undefined));
+  const proMain = useTimelineUi((s) => s.drag?.mode === 'pro' && s.drag.clipId === clip.id);
+  const blade = useTimelineUi((s) => (s.bladeAt?.clipId === clip.id ? s.bladeAt.t : null));
 
   let start = clip.start;
   let duration = clip.duration;
@@ -37,11 +41,17 @@ function ClipViewInner({ clip, kind, zoom, height, locked }: Props) {
     start = drag.start;
     duration = drag.end - drag.start;
   }
+  if (over) {
+    start = over.start;
+    duration = over.duration;
+  }
   const h = Math.max(12, height - 6);
   const left = start * zoom;
   const width = Math.max(2, duration * zoom);
   // conteúdo continua ancorado na mídia ao aparar o início
-  const shown = trimming ? previewClip(clip, start, duration) : clip;
+  const shown = over
+    ? ({ ...clip, start, duration, ...(over.in != null ? { in: over.in } : {}) } as Clip)
+    : trimming ? previewClip(clip, start, duration) : clip;
 
   const cls = [
     'ep-tl-clip',
@@ -51,7 +61,8 @@ function ClipViewInner({ clip, kind, zoom, height, locked }: Props) {
     glowing && 'glow',
     enter.current && 'enter',
     drag?.mode === 'move' && 'src',
-    trimming && 'trimming',
+    (trimming || proMain) && 'trimming',
+    over && !proMain && 'pro-touched',
     (locked || clip.locked) && 'locked',
     width < 36 && 'tiny',
   ]
@@ -73,7 +84,10 @@ function ClipViewInner({ clip, kind, zoom, height, locked }: Props) {
           <span className="ep-tl-handle r" data-handle="end" />
         </>
       )}
-      {trimming && <span className="ep-tl-durtip mono">{formatTime(duration, { decimals: true })}</span>}
+      {blade != null && blade > clip.start && blade < clip.start + clip.duration && (
+        <span className="ep-tl-bladeline" style={{ left: (blade - start) * zoom }} aria-hidden />
+      )}
+      {(trimming || proMain) && <span className="ep-tl-durtip mono">{formatTime(duration, { decimals: true })}</span>}
     </div>
   );
 }

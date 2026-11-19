@@ -10,10 +10,13 @@
 import type { Clip, MediaAsset, VideoClip } from '../types';
 import type { MediaElement, MediaSources } from '../engine';
 import { OfflineMediaPool } from './mediaPool';
-import { demuxMp4, decoderConfigFor, keyIndexFor, type DemuxVideo } from './demux';
+import { demuxMp4, decoderConfigFor, indexMp4Video, keyIndexFor, readPlan, type SampleRef, type VideoIndex } from './demux';
+import { shouldCheck, sourceIsBlack } from './blackCheck';
 
 /** salto à frente maior que isto reinicia na chave mais próxima em vez de decodificar tudo */
 const JUMP_RESEEK = 3;
+/** máximo de quadros decodificados/em decodificação à frente (Android: poucos buffers de saída no MediaCodec) */
+const MAX_AHEAD = 8;
 
 /** o clipe pode ir pelo decodificador sequencial? (null = sim; senão, o motivo do fallback) */
 export function decodeFallbackReason(clip: Clip, asset: MediaAsset | undefined): string | null {
@@ -26,7 +29,50 @@ export function decodeFallbackReason(clip: Clip, asset: MediaAsset | undefined):
   return null;
 }
 
-interface Track { v: DemuxVideo; cfg: VideoDecoderConfig }
+interface Track { v: VideoIndex; cfg: VideoDecoderConfig; blob: Blob }
+
+/**
+ * Bytes das amostras lidos sob demanda do Blob (janela de ~48 amostras por vez) e
+ * liberados assim que vão p/ o decoder: memória ~constante mesmo com arquivo de 500 MB.
+ */
+class SampleReader {
+  private data = new Map<number, Uint8Array>();
+  private loading: Promise<void> | null = null;
+  failure: unknown = null;
+  constructor(private blob: Blob, private samples: SampleRef[]) {}
+
+  has(i: number) { return !!this.samples[i]?.data || this.data.has(i); }
+
+  /** bytes da amostra i (e libera a memória dela) */
+  take(i: number): Uint8Array {
+    const pre = this.samples[i].data;
+    if (pre) return pre;
+    const d = this.data.get(i)!;
+    this.data.delete(i);
+    return d;
+  }
+
+  /** carrega a janela a partir de i (se ainda não estiver carregando) */
+  load(i: number): Promise<void> {
+    if (this.loading) return this.loading;
+    let from = i;
+    while (from < this.samples.length && this.has(from)) from++;
+    const plan = readPlan(this.samples, from);
+    if (!plan) return Promise.resolve();
+    this.loading = (async () => {
+      const buf = new Uint8Array(await this.blob.slice(plan.start, plan.end).arrayBuffer());
+      for (let k = plan.from; k < plan.to; k++) {
+        const s = this.samples[k];
+        // cópia própria: libera o trecho inteiro (com o áudio intercalado) quando a janela acaba
+        this.data.set(k, buf.slice(s.offset - plan.start, s.offset - plan.start + s.size));
+      }
+    })().catch((e) => { this.failure = e; }).finally(() => { this.loading = null; });
+    return this.loading;
+  }
+
+  /** descarta o que foi carregado (seek p/ outro ponto) */
+  reset() { this.data.clear(); }
+}
 
 /** decodificador sequencial de UM clipe */
 class ClipDecoder {
@@ -37,10 +83,19 @@ class ClipDecoder {
   private flushed = false;
   private failure: unknown = null;
   private wake: (() => void) | null = null;
-  constructor(private track: Track) {}
+  private reader: SampleReader;
+  constructor(private track: Track) {
+    this.reader = new SampleReader(track.blob, track.v.samples);
+  }
+
+  private chunk(i: number): EncodedVideoChunk {
+    const s = this.track.v.samples[i];
+    return new EncodedVideoChunk({ type: s.sync ? 'key' : 'delta', timestamp: Math.round(s.cts * 1e6), duration: Math.round(s.duration * 1e6), data: this.reader.take(i) });
+  }
 
   private start(t: number) {
     this.close(false);
+    this.reader.reset();
     this.dec = new VideoDecoder({
       output: (f) => {
         // mantém em ordem de apresentação
@@ -76,6 +131,7 @@ class ClipDecoder {
     const dec = this.dec!;
     for (;;) {
       if (this.failure) throw this.failure;
+      if (this.reader.failure) throw this.reader.failure;
       // avança: o quadro atual passa a ser o último decodificado com timestamp ≤ t
       while (this.queue.length && this.queue[0].timestamp <= us) {
         const f = this.queue.shift()!;
@@ -85,8 +141,8 @@ class ClipDecoder {
       // decidido quando já existe quadro posterior a t (ou o vídeo acabou)
       if (this.queue.length || (this.flushed && dec.decodeQueueSize === 0)) break;
       if (this.next < samples.length && dec.decodeQueueSize < 6) {
-        const s = samples[this.next++];
-        dec.decode(new EncodedVideoChunk({ type: s.sync ? 'key' : 'delta', timestamp: Math.round(s.cts * 1e6), duration: Math.round(s.duration * 1e6), data: s.data }));
+        if (!this.reader.has(this.next)) { await this.reader.load(this.next); continue; }
+        dec.decode(this.chunk(this.next++));
         continue;
       }
       if (this.next >= samples.length && !this.flushed) {
@@ -98,7 +154,22 @@ class ClipDecoder {
     }
     // antes do 1º quadro: mostra o 1º (como o <video>)
     if (!this.current && this.queue.length) this.current = this.queue.shift()!;
+    this.topUp();
     return this.current;
+  }
+
+  /** pipeline: deixa o decoder trabalhando nos próximos quadros enquanto este é desenhado/codificado
+   *  (fila limitada: quadros decodificados + em decodificação ≤ MAX_AHEAD; VideoFrames sempre fechados) */
+  private topUp() {
+    const dec = this.dec;
+    if (!dec || this.failure || dec.state !== 'configured') return;
+    const samples = this.track.v.samples;
+    while (this.next < samples.length && this.queue.length + dec.decodeQueueSize < MAX_AHEAD && this.reader.has(this.next)) {
+      dec.decode(this.chunk(this.next++));
+    }
+    // leitura da próxima janela em paralelo com o render/encode
+    if (this.next < samples.length && !this.reader.has(this.next)) void this.reader.load(this.next);
+    else if (this.next + 16 < samples.length && !this.reader.has(this.next + 16)) void this.reader.load(this.next + 16);
   }
 
   close(_all = true) {
@@ -130,7 +201,7 @@ class FrameSurface {
   }
 }
 
-export interface DecodeStats { decodedClips: number; fallbackClips: number; reasons: Record<string, number> }
+export interface DecodeStats { decodedClips: number; fallbackClips: number; reasons: Record<string, number>; blackChecks: number; blackSwitches: number }
 
 export class DecodedMediaPool implements MediaSources {
   readonly offline = true;
@@ -141,9 +212,16 @@ export class DecodedMediaPool implements MediaSources {
   private frames = new Map<string, MediaElement>();
   private rotations = new Map<string, number>();
   private useFallback = new Set<string>();
-  readonly stats: DecodeStats = { decodedClips: 0, fallbackClips: 0, reasons: {} };
+  readonly stats: DecodeStats = { decodedClips: 0, fallbackClips: 0, reasons: {}, blackChecks: 0, blackSwitches: 0 };
+  /** nº de quadros já entregues por clipe (p/ amostrar o detector de preto) */
+  private nth = new Map<string, number>();
+  /** clipes cujo quadro preto foi confirmado pelos dois caminhos (preto de verdade): param de checar */
+  private trulyBlack = new Map<string, number>();
+  /** aviso p/ o progresso (ex.: 'Usando decodificador alternativo') */
+  onNotice?: (msg: string) => void;
   constructor(private assets: Record<string, MediaAsset>) {
     this.fallback = new OfflineMediaPool(assets);
+    this.fallback.onNotice = (m) => this.onNotice?.(m);
   }
 
   preloadImages() { return this.fallback.preloadImages(); }
@@ -161,10 +239,15 @@ export class DecodedMediaPool implements MediaSources {
       p = (async () => {
         try {
           const blob = await (await fetch(asset.url!)).blob();
-          const dm = await demuxMp4(blob, { audio: false });
-          if (!dm?.video?.samples.length) return null;
-          const cfg = await decoderConfigFor(dm.video);
-          return cfg ? { v: dm.video, cfg } : null;
+          // índice sob demanda (só o moov); MP4 fragmentado etc. → demux completo em memória
+          let v: VideoIndex | null = await indexMp4Video(blob).catch(() => null);
+          if (!v) {
+            const dm = await demuxMp4(blob, { audio: false });
+            if (!dm?.video?.samples.length) return null;
+            v = { ...dm.video, samples: dm.video.samples.map((x) => ({ cts: x.cts, dts: x.dts, duration: x.duration, sync: x.sync, offset: 0, size: x.data.byteLength, data: x.data })) };
+          }
+          const cfg = await decoderConfigFor(v);
+          return cfg ? { v, cfg, blob } : null;
         } catch { return null; }
       })();
       this.tracks.set(asset.id, p);
@@ -201,6 +284,7 @@ export class DecodedMediaPool implements MediaSources {
           let s = this.surfaces.get(clip.id);
           if (!s) { s = new FrameSurface(); this.surfaces.set(clip.id, s); }
           this.frames.set(clip.id, s.source(f, this.rotations.get(clip.id) ?? 0));
+          if (await this.blackViaDecoder(it)) { toFallback.push(it); return; }
         }
       } catch (e) {
         console.warn('[export] decodificador falhou, usando <video>', e);
@@ -212,6 +296,36 @@ export class DecodedMediaPool implements MediaSources {
       }
     }));
     await this.fallback.prepare(toFallback);
+  }
+
+  /**
+   * Detector de preto (amostrado): se o quadro decodificado saiu todo preto, tenta o mesmo
+   * quadro pelo <video>. Se lá tem imagem, o clipe passa de vez p/ o <video> (true).
+   * Se os dois saem pretos, é preto de verdade (fade, cena escura) e segue no decoder.
+   */
+  private async blackViaDecoder(it: { clip: Clip; time: number }): Promise<boolean> {
+    const id = it.clip.id;
+    const n = this.nth.get(id) ?? 0;
+    this.nth.set(id, n + 1);
+    if ((this.trulyBlack.get(id) ?? 0) >= 3 || !shouldCheck(n)) return false;
+    this.stats.blackChecks++;
+    // QA: globalThis.__epForceBlackDecoder = true simula decoder entregando preto (testa a troca de caminho)
+    const forced = !!(globalThis as { __epForceBlackDecoder?: boolean }).__epForceBlackDecoder;
+    if (!forced && sourceIsBlack(this.frames.get(id)) !== true) return false;
+    await this.fallback.prepare([it]);
+    const alt = sourceIsBlack(this.fallback.getForClip(it.clip));
+    if (alt === false) {
+      console.warn(`[export] quadro preto no decodificador WebCodecs (clipe ${id}, t=${it.time.toFixed(2)}s); trocando para o <video>`);
+      this.decoders.get(id)?.close();
+      this.decoders.delete(id);
+      this.frames.delete(id);
+      this.fall(it.clip, 'quadro preto no decoder');
+      this.stats.blackSwitches++;
+      this.onNotice?.('Usando decodificador alternativo');
+      return true;
+    }
+    this.trulyBlack.set(id, (this.trulyBlack.get(id) ?? 0) + 1);
+    return false;
   }
 
   dispose() {

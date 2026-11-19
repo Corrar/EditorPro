@@ -8,7 +8,7 @@ import { usePendingComments } from '@/components/panels/ReviewTab';
 import { IconChat, IconChevRight, IconClose, IconCog, IconDownload, IconFolder, IconGrid, IconHome, IconLogout, IconMoon, IconSearch, IconSpark, IconSun } from './icons';
 import type { NavProps } from './Sidebar';
 import { logout } from './session';
-import { TOOLS, toolAttr, toolDef, type ToolId } from './tools';
+import { useVisibleTools, toolAttr, toolDef, type ToolId } from './tools';
 
 export default function MobileNav({ chatOpen, onChat, menuOpen, onMenuOpen, focusSearch, ...p }: NavProps & {
   chatOpen: boolean; onChat: (open: boolean) => void; menuOpen?: boolean; onMenuOpen?: (open: boolean) => void; focusSearch?: boolean;
@@ -44,7 +44,8 @@ export default function MobileNav({ chatOpen, onChat, menuOpen, onMenuOpen, focu
   ];
 
   const ql = q.trim().toLowerCase();
-  const tools = TOOLS.filter((t) => (t.id !== 'edit' || hasSel) && (!ql || t.label.toLowerCase().includes(ql)));
+  const visibleTools = useVisibleTools();
+  const tools = visibleTools.filter((t) => (t.id !== 'edit' || hasSel) && (!ql || t.label.toLowerCase().includes(ql)));
   const match = (s: string) => !ql || s.toLowerCase().includes(ql);
 
   return (

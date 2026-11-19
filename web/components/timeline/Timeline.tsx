@@ -31,12 +31,13 @@ import { type RowInfo, dimsFor, fillRowHeights, rowAtY, rowLayout, rowsHeight, u
 import { CenterOverlay, Toolbar, ZMAX, ZMIN } from './Toolbar';
 import { Ruler } from './Ruler';
 import { COVER_MARKER_ID, DragLayer, GroupOutlines, Guides, KeyframeLayer, PlayheadLine, Rows, TouchHandles } from './Rows';
-import { ClipMenu, LiveBanner, TrackPop } from './Overlays';
-import { useShortcuts } from './useShortcuts';
+import { ClipMenu, LiveBanner, ShortcutsHelp, TrackPop, TrimMonitor } from './Overlays';
+import { useShortcuts, useShuttle } from './useShortcuts';
 import { MarkerLines, MarkerPop, RangePop } from './Markers';
 import { Minimap } from './Minimap';
 import { keyframesOf, moveKeyframeOps } from '@/lib/timeline/keyframes';
 import { assetOf } from '@/lib/timeline/clip';
+import { expandLinks, linkedEdgePartners, monitorFrames, overridesAfter, proSession, type ProSession, type TrimTool } from '@/lib/timeline/trim';
 
 const ASSET_MIME = 'application/x-ep-asset';
 const DRAG_THRESHOLD = 4;
@@ -59,7 +60,7 @@ type Gesture =
       lastTrack?: Id;
       lastNew?: boolean;
     }
-  | { kind: 'trim'; edge: 'start' | 'end'; x0: number; moved: boolean; clip: Clip; points: Seconds[]; min: Seconds; max: Seconds }
+  | { kind: 'trim'; edge: 'start' | 'end'; x0: number; moved: boolean; clip: Clip; points: Seconds[]; min: Seconds; max: Seconds; partners: Clip[] }
   | { kind: 'cap'; mode: 'cap-move' | 'cap-start' | 'cap-end'; x0: number; moved: boolean; id: Id; start: Seconds; end: Seconds; points: Seconds[]; min: Seconds; max: Seconds }
   | { kind: 'marquee'; x0: number; y0: number; moved: boolean; additive: boolean; base: Id[] }
   | { kind: 'scrub' }
@@ -68,7 +69,9 @@ type Gesture =
   | { kind: 'marker'; x0: number; moved: boolean; id: Id; t0: Seconds; end0?: Seconds; points: Seconds[] }
   | { kind: 'range'; x0: number; moved: boolean; t0: Seconds; points: Seconds[] }
   | { kind: 'kf'; x0: number; moved: boolean; clipId: Id; index: number; start: Seconds; dur: Seconds; t0: Seconds; points: Seconds[] }
-  | { kind: 'reorder'; x0: number; y0: number; moved: boolean; trackId: Id; overId?: Id };
+  | { kind: 'reorder'; x0: number; y0: number; moved: boolean; trackId: Id; overId?: Id }
+  /** trims profissionais (ripple/roll/slip/slide) */
+  | { kind: 'pro'; x0: number; moved: boolean; s: ProSession; ops: EditOp[] };
 
 function trackLabel(kind: TrackKind, p: Project): string {
   const n = p.tracks.filter((t) => t.kind === kind).length + 1;
@@ -93,6 +96,7 @@ export default function Timeline() {
   const viewW = useTimelineUi((s) => s.viewW);
   const showMinimap = useTimelineUi((s) => s.showMinimap);
   const setUi = useTimelineUi((s) => s.set);
+  const tool = useTimelineUi((s) => s.tool);
   const dims = useDims();
   const dimsRef = useRef(dims);
   dimsRef.current = dims;
@@ -491,7 +495,9 @@ export default function Timeline() {
     marker: () => openNewMarker('user'),
     comment: () => openNewMarker('comment'),
     keyframe: () => toggleKeyframe(),
+    fit: () => fit(),
   });
+  useShuttle();
 
   const openNewMarkerRef = useRef<(k: 'user' | 'comment') => void>(() => {});
   openNewMarkerRef.current = (k) => openNewMarker(k);
@@ -632,6 +638,33 @@ export default function Timeline() {
         drag: { mode: 'move', ids: g.ids, primary: g.primary, delta, trackId, newTrack },
         snapLine: point ?? null,
       });
+    } else if (g.kind === 'pro') {
+      const s = g.s;
+      let d = (x - g.x0) / z;
+      let point: Seconds | undefined;
+      if (snapOn && s.snapRefs.length) {
+        const pts = snapPts(useEditor.getState().project, s.touched);
+        let best: { d: number; point: number; dist: number } | null = null;
+        for (const ref of s.snapRefs) {
+          const r = snapTime(ref + d, pts, thr);
+          if (r.point != null) {
+            const dist = Math.abs(r.t - (ref + d));
+            if (!best || dist < best.dist) best = { d: r.t - ref, point: r.point, dist };
+          }
+        }
+        if (best) { d = best.d; point = best.point; }
+      }
+      const cd = Math.max(s.range.min, Math.min(s.range.max, d));
+      if (cd !== d) point = undefined;
+      const p0 = useEditor.getState().project;
+      const ops = s.build(cd);
+      let after = p0;
+      try { after = applyOps(p0, ops).project; } catch { return; }
+      g.ops = ops;
+      ui.set({
+        drag: { mode: 'pro', tool: s.tool, clipId: s.clipId, over: overridesAfter(after, s.touched), frames: monitorFrames(after, s), delta: cd },
+        snapLine: point ?? null,
+      });
     } else if (g.kind === 'trim') {
       const c = g.clip;
       const base = g.edge === 'start' ? c.start : clipEnd(c);
@@ -747,7 +780,7 @@ export default function Timeline() {
 
     if (g.kind === 'move') {
       if (!g.moved) {
-        if (g.clickReduce) st.select(expandGroups(st.project, [g.primary]));
+        if (g.clickReduce) st.select(expandLinks(st.project, expandGroups(st.project, [g.primary])));
         return;
       }
       if (!drag || drag.mode !== 'move') return;
@@ -787,8 +820,18 @@ export default function Timeline() {
     } else if (g.kind === 'trim') {
       if (!g.moved || !drag || (drag.mode !== 'trim-start' && drag.mode !== 'trim-end')) return;
       const c = g.clip;
-      if (drag.mode === 'trim-start' && Math.abs(drag.start - c.start) > 1e-6) commitOps([{ op: 'trim_clip', clipId: c.id, start: drag.start }]);
-      if (drag.mode === 'trim-end' && Math.abs(drag.end - clipEnd(c)) > 1e-6) commitOps([{ op: 'trim_clip', clipId: c.id, end: drag.end }]);
+      // pontas vinculadas (áudio do vídeo) acompanham; Alt no início do arraste = J/L-cut
+      const ids = [c, ...g.partners];
+      if (drag.mode === 'trim-start' && Math.abs(drag.start - c.start) > 1e-6) {
+        const d = drag.start - c.start;
+        commitOps(ids.map((x) => ({ op: 'trim_clip', clipId: x.id, start: x.start + d }) as EditOp));
+      }
+      if (drag.mode === 'trim-end' && Math.abs(drag.end - clipEnd(c)) > 1e-6) {
+        const d = drag.end - clipEnd(c);
+        commitOps(ids.map((x) => ({ op: 'trim_clip', clipId: x.id, end: clipEnd(x) + d }) as EditOp));
+      }
+    } else if (g.kind === 'pro') {
+      if (g.moved && g.ops.length) commitOps(g.ops);
     } else if (g.kind === 'cap') {
       if (!g.moved || !drag || !drag.mode.startsWith('cap')) return;
       const d = drag as { start: number; end: number };
@@ -937,7 +980,7 @@ export default function Timeline() {
         endGestureRef.current(false);
         const st = useEditor.getState();
         const p = st.project;
-        if (!st.selection.includes(clipId)) st.select(expandGroups(p, [clipId]));
+        if (!st.selection.includes(clipId)) st.select(expandLinks(p, expandGroups(p, [clipId])));
         const ids = useEditor.getState().selection.filter((sid) => {
           const ff = findClip(p, sid);
           return ff && !ff.track.locked && !ff.clip.locked;
@@ -964,6 +1007,37 @@ export default function Timeline() {
 
   useEffect(() => () => endGestureRef.current(false), []);
 
+  /** lâmina: corta o clipe (e os vinculados, salvo com Alt) no ponto clicado, com ímã */
+  const bladeAt = (t: Seconds) => {
+    const ui = useTimelineUi.getState();
+    if (!ui.snapping) return t;
+    const r = snapTime(t, snapPts(useEditor.getState().project, []), snapThreshold(zoomRef.current));
+    return r.point != null ? r.t : t;
+  };
+  const bladeCut = (clipId: Id, t0: Seconds, alt: boolean) => {
+    const st = useEditor.getState();
+    const p = st.project;
+    const t = bladeAt(t0);
+    const fps = p.fps || 30;
+    const at = Math.round(t * fps) / fps;
+    const ops: EditOp[] = [];
+    for (const id of alt ? [clipId] : expandLinks(p, [clipId])) {
+      const f = findClip(p, id);
+      if (!f || f.track.locked || f.clip.locked) continue;
+      if (at > f.clip.start + 1e-3 && at < clipEnd(f.clip) - 1e-3) ops.push({ op: 'split_clip', clipId: id, at, newId: uid('clip') });
+    }
+    if (ops.length) commitOps(ops);
+  };
+  const onTracksHover = (e: React.PointerEvent) => {
+    if (e.pointerType !== 'mouse' || gesture.current) return;
+    const ui = useTimelineUi.getState();
+    if (ui.tool !== 'blade') { if (ui.bladeAt) ui.set({ bladeAt: null }); return; }
+    const clipEl = (e.target as HTMLElement).closest<HTMLElement>('[data-clip-id]');
+    if (!clipEl) { if (ui.bladeAt) ui.set({ bladeAt: null }); return; }
+    const { t } = toLocal(e.clientX, e.clientY);
+    ui.set({ bladeAt: { t: bladeAt(t), clipId: clipEl.dataset.clipId! } });
+  };
+
   const onTracksPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0 || gesture.current) return;
     if (e.pointerType === 'touch' && !e.isPrimary) return;
@@ -981,7 +1055,7 @@ export default function Timeline() {
     }
     const st = useEditor.getState();
     const p = st.project;
-    const { x, y } = toLocal(e.clientX, e.clientY);
+    const { x, y, t } = toLocal(e.clientX, e.clientY);
     const handle = target.closest<HTMLElement>('[data-handle]')?.dataset.handle as 'start' | 'end' | undefined;
     const clipEl = target.closest<HTMLElement>('[data-clip-id]');
     const capEl = target.closest<HTMLElement>('[data-cap-id]');
@@ -1001,7 +1075,14 @@ export default function Timeline() {
     }
 
     const center = dimsRef.current.center;
-    if (clipEl && touch && !handle && (center || !st.selection.includes(clipEl.dataset.clipId!))) {
+    const tool = useTimelineUi.getState().tool;
+    if (clipEl && tool === 'blade') {
+      e.preventDefault();
+      bladeCut(clipEl.dataset.clipId!, t, e.altKey);
+      return;
+    }
+    const proTool = tool !== 'select';
+    if (clipEl && touch && !handle && (center || !st.selection.includes(clipEl.dataset.clipId!)) && !(proTool && st.selection.includes(clipEl.dataset.clipId!))) {
       beginGesture({ kind: 'tap', x0: x, y0: y, moved: false, clipId: clipEl.dataset.clipId! }, e);
       if (center) startLongDrag(e, clipEl.dataset.clipId!);
       else startLongPress(e, { clipId: clipEl.dataset.clipId! });
@@ -1023,7 +1104,7 @@ export default function Timeline() {
       const multi = e.shiftKey || e.metaKey || e.ctrlKey;
       const was = st.selection.includes(id);
       // grupo (modelo): seleciona todos os clipes juntos; Alt = só este
-      const unit = e.altKey ? [id] : expandGroups(p, [id]);
+      const unit = e.altKey ? [id] : expandLinks(p, expandGroups(p, [id]));
       let sel = st.selection;
       if (multi) sel = was ? sel.filter((s) => !unit.includes(s)) : [...new Set([...sel, ...unit])];
       else if (!was || (e.altKey && sel.length > 1) || (!e.altKey && unit.some((u) => !sel.includes(u)))) sel = unit;
@@ -1031,9 +1112,37 @@ export default function Timeline() {
       const locked = !!f.track.locked || !!f.clip.locked;
       if (locked || (multi && was)) return;
 
+      const tool = useTimelineUi.getState().tool;
+      if (tool !== 'select' && tool !== 'blade') {
+        const r = clipEl.getBoundingClientRect();
+        const near: 'start' | 'end' = handle ?? (e.clientX < r.left + r.width / 2 ? 'start' : 'end');
+        const minDur = Math.max(MIN_CLIP, 1 / (p.fps || 30));
+        let s = proSession(p, st.assets, tool as TrimTool, id, near, e.altKey, minDur);
+        if (!s && tool === 'roll') s = proSession(p, st.assets, 'roll', id, near === 'start' ? 'end' : 'start', e.altKey, minDur);
+        if (!s) {
+          toast(tool === 'roll' ? 'Roll precisa de dois clipes encostados' : tool === 'slip' ? 'Slip funciona em vídeo e áudio' : 'Não dá para usar esta ferramenta aqui', 'info');
+          return;
+        }
+        beginGesture({ kind: 'pro', x0: x, moved: false, s, ops: [] }, e);
+        return;
+      }
+
       if (handle) {
         const asset = assetOf(f.clip, st.assets);
-        const b = trimBounds(f.clip, f.track, asset, Math.max(MIN_CLIP, 1 / (p.fps || 30)));
+        const minDur = Math.max(MIN_CLIP, 1 / (p.fps || 30));
+        const b = trimBounds(f.clip, f.track, asset, minDur);
+        const base = handle === 'start' ? f.clip.start : clipEnd(f.clip);
+        let min = handle === 'start' ? b.minStart : b.minEnd;
+        let max = handle === 'start' ? b.maxStart : b.maxEnd;
+        // pontas vinculadas aparam junto: a faixa é a interseção (Alt = só este, J/L-cut)
+        const partners = e.altKey ? [] : linkedEdgePartners(p, id, handle);
+        for (const c of partners) {
+          const pf = findClip(p, c.id)!;
+          const pb = trimBounds(c, pf.track, assetOf(c, st.assets), minDur);
+          const pbase = handle === 'start' ? c.start : clipEnd(c);
+          min = Math.max(min, base + (handle === 'start' ? pb.minStart : pb.minEnd) - pbase);
+          max = Math.min(max, base + (handle === 'start' ? pb.maxStart : pb.maxEnd) - pbase);
+        }
         beginGesture(
           {
             kind: 'trim',
@@ -1041,9 +1150,10 @@ export default function Timeline() {
             x0: x,
             moved: false,
             clip: f.clip,
-            points: snapPts(p, [id]),
-            min: handle === 'start' ? b.minStart : b.minEnd,
-            max: handle === 'start' ? b.maxStart : b.maxEnd,
+            points: snapPts(p, [id, ...partners.map((c) => c.id)]),
+            min: Math.min(min, base),
+            max: Math.max(max, base),
+            partners,
           },
           e,
         );
@@ -1227,6 +1337,7 @@ export default function Timeline() {
   return (
     <div
       ref={rootRef}
+      data-tool={tool}
       className={`ep-tl${dims.compact ? ' compact' : ''}${dims.center ? ' center' : ''}${dims.short ? ' short' : ''}${dims.coarse ? ' coarse' : ''}`}
       style={{ ['--tl-head' as string]: `${dims.headerW}px`, ['--tl-ruler' as string]: `${dims.rulerH}px` }}
     >
@@ -1235,6 +1346,7 @@ export default function Timeline() {
       {showMinimap && !dims.short && !dims.center && <Minimap scrollRef={scrollRef} />}
       <div className="ep-tl-scrollwrap">
       {dims.center && <CenterOverlay actions={toolbarActions} />}
+      <TrimMonitor />
       <div className="ep-tl-scroll" ref={scrollRef} data-ep-timeline onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
         <div className="ep-tl-content" style={{ width: contentW, height: dimsRef.current.rulerH + rowsH }}>
           <Ruler zoom={zoom} width={laneW} onScrubStart={onScrubStart} />
@@ -1243,6 +1355,8 @@ export default function Timeline() {
             ref={tracksRef}
             style={{ height: rowsH, width: contentW }}
             onPointerDown={onTracksPointerDown}
+            onPointerMove={onTracksHover}
+            onPointerLeave={() => useTimelineUi.getState().bladeAt && setUi({ bladeAt: null })}
             onContextMenu={onContextMenu}
           >
             <Rows rows={rows} zoom={zoom} width={laneW} />
@@ -1262,6 +1376,7 @@ export default function Timeline() {
       <MarkerPop />
       <RangePop />
       <TrackPop />
+      <ShortcutsHelp />
     </div>
   );
 }
