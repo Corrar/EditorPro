@@ -10,7 +10,7 @@ import { useEditor } from '../store';
 import { AIClientError, analyzeReference, getStatus, requestEdit, translateSegments, type AIStatus, type EditFrame } from './client';
 import { beatsOf, colorStatsOf, sampleReference, silencesFor } from './analysis';
 import { colorGradeOps, matchColorGrade } from './colormatch';
-import { CAPTION_ADD, canonVerbs, chatIntent, demoCaptions, demoNeeds, planFirstEdit, silenceCutOps, silenceOptsFromText, speechRanges, type Range } from './demo';
+import { CAPTION_ADD, canonVerbs, chatIntent, demoNeeds, planFirstEdit, silenceCutOps, silenceOptsFromText, speechRanges, type Range } from './demo';
 import { deviceProfile, framesFromThumbnails, sampleVideo } from './frames';
 import { captionsMediaToTimeline } from './timemap';
 import { sanitizeOps } from './validate';
@@ -179,12 +179,17 @@ const triedTranscription = new Set<string>();
 /** transcreve as fontes com Whisper e converte p/ tempos da timeline. null = pulada/falhou/desligada. */
 async function whisperCaptions(sources: MediaAsset[], language: string, opts: PipelineOptions, warnings: string[]): Promise<CaptionSegment[] | null> {
   const media = sources.filter((a) => (a.kind === 'video' || a.kind === 'audio') && a.url && !triedTranscription.has(`${a.id}|${a.url}`));
-  if (!media.length || opts.whisper === false) return null;
+  if (!media.length) return null;
+  const server = !!(await getStatus()).transcribe; // Whisper large no servidor: não baixa nada no aparelho
+  if (!server && opts.whisper === false) {
+    warnings.push('sem transcrição (a transcrição no aparelho está desligada no botão CC)');
+    return null;
+  }
   const dev = deviceProfile();
   const total = media.reduce((n, a) => n + (a.duration || 0), 0);
   const choice = await chooseWhisper();
   // aparelho fraco ou áudio longo no celular: pergunta antes de baixar/processar
-  if (opts.ask && (dev.weak || (dev.mobile && total > 600))) {
+  if (!server && opts.ask && (dev.weak || (dev.mobile && total > 600))) {
     const pick = await opts.ask(
       `Para legendar, transcrevo a fala aqui no aparelho (${choice.label}, ~${choice.sizeMB} MB na 1ª vez${total > 120 ? `, ${Math.round(total / 60)} min de áudio` : ''}). Neste aparelho pode demorar.`,
       [{ id: 'go', label: `Transcrever (~${choice.sizeMB} MB)` }, { id: 'skip', label: 'Pular legendas' }],
@@ -359,17 +364,12 @@ export async function generateCaptions(opts: PipelineOptions & { language?: stri
   // pedido explícito do usuário: pode tentar de novo
   for (const a of used) triedTranscription.delete(`${a.id}|${a.url}`);
 
-  let segs = await whisperCaptions(used, language, opts, warnings);
-  let real = !!segs;
+  const segs = await whisperCaptions(used, language, opts, warnings);
+  const real = true;
   if (!segs) {
-    // sem transcrição: no demo, legendas de exemplo nos trechos de fala
-    if (status.configured && warnings.length) throw new AIClientError(warnings[0], 500, 'transcribe_failed');
-    opts.onStatus?.('Ouvindo o áudio…');
-    const silences = await silencesFor(used);
-    const speech: Record<Id, Range[]> = {};
-    for (const a of used) speech[a.id] = speechRanges(silences[a.id] ?? [], a.duration);
-    segs = demoCaptions(store().project, speech, store().project.brief);
-    real = false;
+    // legenda é SEMPRE a fala de verdade: sem transcrição, explica em vez de inventar texto
+    const why = warnings[0] ? ` (${warnings[0].replace(/^sem transcrição \(|\)$/g, '')})` : '';
+    return { reply: `Não consegui transcrever a fala${why}, então não coloquei legendas — legenda inventada não serve. Toque em "Gerar legendas" para tentar de novo.`, ops: [], appliedIds: [], provider: status.provider, warnings };
   }
   if (!segs.length) return { reply: 'Não encontrei fala para legendar neste vídeo.', ops: [], appliedIds: [], provider: status.provider, warnings };
   const ops = sanitizeOps(
@@ -377,9 +377,8 @@ export async function generateCaptions(opts: PipelineOptions & { language?: stri
     store().project, store().assets,
   ).ops;
   const appliedIds = await apply(ops, { delayMs: 300 });
-  const reply = real
-    ? `Pronto! Gerei ${segs.length} legendas sincronizadas com a fala. Quer mudar o estilo (ex.: "legendas estilo TikTok")?`
-    : `Coloquei ${segs.length} legendas de exemplo nos trechos de fala (sem transcrição desta vez).`;
+  void real;
+  const reply = `Pronto! Gerei ${segs.length} legendas com a fala, no tempo de cada palavra. Quer mudar o estilo (ex.: "legendas estilo TikTok")?`;
   return { reply, ops, appliedIds, provider: status.provider, warnings };
 }
 

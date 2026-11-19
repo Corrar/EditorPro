@@ -10,7 +10,7 @@ import type { Frame } from './frames';
 import type { ReferenceSample } from './analysis';
 import { slimAssets } from './summary';
 
-export interface AIStatus { configured: boolean; provider: 'anthropic' | 'demo'; model?: string; /** a checagem falhou (rede/sessão): não é demo de verdade, tenta de novo no próximo pedido */ offline?: boolean }
+export interface AIStatus { configured: boolean; provider: 'anthropic' | 'demo'; model?: string; /** a checagem falhou (rede/sessão): não é demo de verdade, tenta de novo no próximo pedido */ offline?: boolean; /** transcrição no servidor disponível (Whisper large) */ transcribe?: 'groq' | 'openai' | null }
 
 export interface EditFrame extends Frame { assetId: string }
 
