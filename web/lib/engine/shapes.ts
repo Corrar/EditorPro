@@ -9,6 +9,12 @@ export const SHAPE_LABELS: Record<ShapeClip['shape'], string> = {
 };
 
 /** proporção (largura/altura) natural de cada forma */
+/** proporção efetiva do clipe: `aspect` (campo opcional dos modelos da biblioteca) ou a natural da forma */
+export function clipShapeAspect(c: ShapeClip): number {
+  const a = (c as ShapeClip & { aspect?: number }).aspect;
+  return a && Number.isFinite(a) && a > 0 ? Math.min(64, Math.max(1 / 64, a)) : shapeAspect(c.shape);
+}
+
 export function shapeAspect(shape: ShapeClip['shape']): number {
   switch (shape) {
     case 'rect': case 'rounded-rect': return 1.6;
@@ -24,10 +30,13 @@ const cache = new Map<string, AnyCanvas>();
 function key(parts: unknown[]) { return parts.join('|'); }
 
 export function shapeCanvas(c: ShapeClip, sizePx: number): AnyCanvas {
-  const asp = shapeAspect(c.shape);
-  const h = Math.max(8, Math.min(2048, Math.round(sizePx)));
-  const w = Math.max(8, Math.min(4096, Math.round(h * asp)));
-  const k = key([c.shape, c.fill, c.stroke, c.strokeWidth, c.cornerRadius, w, h]);
+  const asp = clipShapeAspect(c);
+  // lado maior limitado (faixas finas muito largas não estouram a memória)
+  let h = Math.max(4, Math.min(2048, Math.round(sizePx)));
+  let w = Math.round(h * asp);
+  if (w > 4096) { w = 4096; h = Math.max(2, Math.round(w / asp)); }
+  w = Math.max(4, w);
+  const k = key([c.shape, c.fill, c.stroke, c.strokeWidth, c.cornerRadius, asp.toFixed(4), w, h]);
   const hit = cache.get(k);
   if (hit) return hit;
   if (cache.size > 64) cache.clear();
