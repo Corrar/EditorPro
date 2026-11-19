@@ -79,3 +79,12 @@ describe('looksUndecodable', () => {
     expect(UNDECODABLE_MSG('a.mov')).toContain('Mais compatível');
   });
 });
+
+describe('decodeFits (B6: áudio longo não decodifica inteiro)', () => {
+  it('podcast de 1 h fica fora; música de 4 min passa', async () => {
+    const { decodeFits } = await import('./pure');
+    expect(decodeFits(3600)).toBe(false);
+    expect(decodeFits(240)).toBe(true);
+    expect(decodeFits(0)).toBe(true);
+  });
+});

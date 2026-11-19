@@ -61,14 +61,15 @@ export function matchColorGrade(model: ColorStats, material: ColorStats, strengt
 export function colorGradeOps(p: Project, gradeByAsset: Record<Id, ColorGrade>, label = 'Combinando a cor com o modelo', live = COLOR_GRADE_LIVE): EditOp[] {
   const ops: EditOp[] = [];
   for (const t of p.tracks) {
-    if (t.kind !== 'video' && t.kind !== 'overlay') continue;
+    if ((t.kind !== 'video' && t.kind !== 'overlay') || t.locked) continue;
     for (const c of t.clips) {
       if ((c.type !== 'video' && c.type !== 'image') || c.locked) continue;
       const g = gradeByAsset[c.assetId];
       if (!g || !Object.keys(g).length) continue;
       // nunca zera o colorPreset; sem o motor de cor, vai como filtros equivalentes (substituindo só os mesmos tipos)
       const patch = live
-        ? { colorGrade: g }
+        // o validate mescla com a cor do usuário: os campos do match são trocados (null = limpa o antigo), LUT/curvas/HSL ficam
+        ? { colorGrade: { exposure: null, contrast: null, saturation: null, temperature: null, tint: null, offset: null, ...g } }
         : { filters: [...(c.filters ?? []).filter((f) => !GRADE_FILTER_KINDS.includes(f.kind)), ...gradeToFilters(g)] };
       if (!live && !gradeToFilters(g).length) continue;
       ops.push({ op: 'update_clip', clipId: c.id, patch, explain: ops.length ? `Cor do modelo no clipe de ${c.start.toFixed(1).replace('.', ',')} s` : label } as EditOp);

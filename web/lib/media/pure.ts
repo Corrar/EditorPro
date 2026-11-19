@@ -104,3 +104,11 @@ export function looksUndecodable(v: { width?: number; height?: number; thumbCoun
 
 export const UNDECODABLE_MSG = (name: string) =>
   `Este aparelho não consegue ler "${name}" (formato como HEVC/HDR). Grave em H.264 ("Mais compatível" na câmera) ou converta antes de enviar.`;
+
+/** orçamento para decodificar áudio inteiro no aparelho (PCM Float32 48 kHz estéreo ×1,5 de pico do decodificador) */
+export const DECODE_BUDGET_BYTES = 400 * 1024 * 1024;
+export function decodeFits(duration: number, budget = DECODE_BUDGET_BYTES): boolean {
+  if (!Number.isFinite(duration) || duration <= 0) return true; // duração desconhecida: o limite de tamanho do arquivo decide
+  return duration * 48000 * 2 * 4 * 1.5 <= budget;
+}
+export const TOO_LONG_TO_DECODE = 'Áudio longo demais para analisar neste aparelho (mais de ~12 min). Corte um trecho menor e tente de novo.';

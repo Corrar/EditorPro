@@ -161,7 +161,15 @@ export async function duplicateProject(id: string): Promise<string | null> {
 /** renomeia um projeto salvo (se for o aberto, usa a op set_project) */
 export async function renameProject(id: string, name: string): Promise<void> {
   const st = useEditor.getState();
-  if (st.project.id === id) { st.dispatch({ op: 'set_project', patch: { name } }); return; }
+  if (st.project.id === id) {
+    // projeto aberto: grava já (na Home o autosave está desligado) — senão a lista e o reload perdem o nome (B3)
+    saveSoon.cancel();
+    st.dispatch({ op: 'set_project', patch: { name } }, { history: false });
+    if (await saveNow()) return;
+    const rec = await getProjectRecord(id).catch(() => undefined);
+    if (rec) await saveProjectRecord({ ...rec, name, project: { ...rec.project, name } });
+    return;
+  }
   const rec = await getProjectRecord(id);
   if (!rec) return;
   await saveProjectRecord({ ...rec, name, project: { ...rec.project, name } });

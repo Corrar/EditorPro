@@ -1,4 +1,5 @@
 'use client';
+import { Fragment } from 'react';
 import { useEditor } from '@/lib/store';
 import type { ImageClip, TransitionKind, VideoClip } from '@/lib/types';
 import { IconTransitions } from '@/components/shell/icons';
@@ -36,7 +37,7 @@ export default function TransitionsTab() {
   };
 
   return (
-    <>
+    <Fragment key={clip.id}>
       <Section title="Transição de entrada">
         {isFirst && <p className="ep-pnote">Este é o primeiro clipe da trilha: a transição entra a partir do fundo.</p>}
         <div className="ep-trgrid">
@@ -63,6 +64,6 @@ export default function TransitionsTab() {
           Aplicar “{current === 'custom' && tr ? transitionDisplayName(tr) : transitions.find((t) => t.kind === current)?.label}” em todos os cortes da trilha
         </button>
       )}
-    </>
+    </Fragment>
   );
 }

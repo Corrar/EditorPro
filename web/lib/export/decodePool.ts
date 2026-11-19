@@ -10,7 +10,7 @@
 import type { Clip, MediaAsset, VideoClip } from '../types';
 import type { MediaElement, MediaSources } from '../engine';
 import { OfflineMediaPool } from './mediaPool';
-import { demuxMp4, decoderConfigFor, indexMp4Video, keyIndexFor, readPlan, type SampleRef, type VideoIndex } from './demux';
+import { demuxMp4, decoderConfigFor, indexMp4Video, keyIndexFor, SampleReader, type VideoIndex } from './demux';
 import { shouldCheck, sourceIsBlack } from './blackCheck';
 
 /** salto à frente maior que isto reinicia na chave mais próxima em vez de decodificar tudo */
@@ -32,49 +32,6 @@ export function decodeFallbackReason(clip: Clip, asset: MediaAsset | undefined):
 }
 
 interface Track { v: VideoIndex; cfg: VideoDecoderConfig; blob: Blob }
-
-/**
- * Bytes das amostras lidos sob demanda do Blob (janela de ~48 amostras por vez) e
- * liberados assim que vão p/ o decoder: memória ~constante mesmo com arquivo de 500 MB.
- */
-class SampleReader {
-  private data = new Map<number, Uint8Array>();
-  private loading: Promise<void> | null = null;
-  failure: unknown = null;
-  constructor(private blob: Blob, private samples: SampleRef[]) {}
-
-  has(i: number) { return !!this.samples[i]?.data || this.data.has(i); }
-
-  /** bytes da amostra i (e libera a memória dela) */
-  take(i: number): Uint8Array {
-    const pre = this.samples[i].data;
-    if (pre) return pre;
-    const d = this.data.get(i)!;
-    this.data.delete(i);
-    return d;
-  }
-
-  /** carrega a janela a partir de i (se ainda não estiver carregando) */
-  load(i: number): Promise<void> {
-    if (this.loading) return this.loading;
-    let from = i;
-    while (from < this.samples.length && this.has(from)) from++;
-    const plan = readPlan(this.samples, from);
-    if (!plan) return Promise.resolve();
-    this.loading = (async () => {
-      const buf = new Uint8Array(await this.blob.slice(plan.start, plan.end).arrayBuffer());
-      for (let k = plan.from; k < plan.to; k++) {
-        const s = this.samples[k];
-        // cópia própria: libera o trecho inteiro (com o áudio intercalado) quando a janela acaba
-        this.data.set(k, buf.slice(s.offset - plan.start, s.offset - plan.start + s.size));
-      }
-    })().catch((e) => { this.failure = e; }).finally(() => { this.loading = null; });
-    return this.loading;
-  }
-
-  /** descarta o que foi carregado (seek p/ outro ponto) */
-  reset() { this.data.clear(); }
-}
 
 /** decodificador sequencial de UM clipe */
 class ClipDecoder {
@@ -190,8 +147,13 @@ class ClipDecoder {
 }
 
 /** quadro decodificado + rotação, pronto p/ desenhar (canvas só quando há rotação) */
-class FrameSurface {
+export class FrameSurface {
   private canvas: OffscreenCanvas | HTMLCanvasElement | null = null;
+  /** solta o backing store na hora (sem esperar o GC — importante no Safari/celular) */
+  release() {
+    if (this.canvas) { this.canvas.width = 0; this.canvas.height = 0; this.canvas = null; }
+  }
+  get holding() { return !!this.canvas; }
   source(frame: VideoFrame, rot: number): MediaElement {
     if (!rot) return frame;
     const w = rot % 180 ? frame.displayHeight : frame.displayWidth;
@@ -272,7 +234,7 @@ export class DecodedMediaPool implements MediaSources {
 
   async prepare(items: { clip: Clip; time: number }[]): Promise<void> {
     const wanted = new Set(items.map((x) => x.clip.id));
-    for (const [id, d] of this.decoders) if (!wanted.has(id)) { d.close(); this.decoders.delete(id); this.frames.delete(id); }
+    for (const [id, d] of this.decoders) if (!wanted.has(id)) { d.close(); this.decoders.delete(id); this.frames.delete(id); this.dropSurface(id); }
     const toFallback: { clip: Clip; time: number }[] = [];
     await Promise.all(items.map(async (it) => {
       const clip = it.clip;
@@ -298,6 +260,7 @@ export class DecodedMediaPool implements MediaSources {
         d.close();
         this.decoders.delete(clip.id);
         this.frames.delete(clip.id);
+        this.dropSurface(clip.id);
         this.fall(clip as VideoClip, 'erro no decoder');
         toFallback.push(it);
       }
@@ -326,6 +289,7 @@ export class DecodedMediaPool implements MediaSources {
       this.decoders.get(id)?.close();
       this.decoders.delete(id);
       this.frames.delete(id);
+      this.dropSurface(id);
       this.fall(it.clip, 'quadro preto no decoder');
       this.stats.blackSwitches++;
       this.onNotice?.('Usando decodificador alternativo');
@@ -335,7 +299,17 @@ export class DecodedMediaPool implements MediaSources {
     return false;
   }
 
+  private dropSurface(id: string) {
+    this.surfaces.get(id)?.release();
+    this.surfaces.delete(id);
+  }
+
+  /** nº de canvases de rotação vivos (diagnóstico/teste) */
+  get liveSurfaces() { return [...this.surfaces.values()].filter((s) => s.holding).length; }
+
   dispose() {
+    for (const s of this.surfaces.values()) s.release();
+    this.surfaces.clear();
     for (const d of this.decoders.values()) d.close();
     this.decoders.clear();
     this.frames.clear();

@@ -87,7 +87,10 @@ export default function ExportDialog({ onClose, initial }: { onClose: () => void
     return () => window.removeEventListener('keydown', h, true);
   }, [phase, onClose]);
 
+  const warnsRef = useRef<string[]>([]);
+  const onWarning = (m: string) => { if (!warnsRef.current.includes(m)) warnsRef.current.push(m); };
   const run = async (kind: 'video' | 'audio', make: (signal: AbortSignal) => Promise<Blob>) => {
+    warnsRef.current = [];
     const ac = new AbortController();
     abortRef.current = ac;
     setPhase('running');
@@ -110,7 +113,9 @@ export default function ExportDialog({ onClose, initial }: { onClose: () => void
       }
       setResult({ url, blob, name: safeFileName(project.name, ext), size: blob.size, type: ext, secs: (performance.now() - startedRef.current) / 1000, cover });
       setPhase('done');
-      emit('ep:toast', { text: kind === 'video' ? 'Vídeo exportado! Clique em Baixar.' : 'Áudio exportado! Clique em Baixar.', kind: 'ok' });
+      const w = warnsRef.current;
+      if (w.length) emit('ep:toast', { text: `${kind === 'video' ? 'Vídeo' : 'Áudio'} exportado, com aviso: ${w.slice(0, 2).join(' · ')}`, kind: 'info' });
+      else emit('ep:toast', { text: kind === 'video' ? 'Vídeo exportado! Clique em Baixar.' : 'Áudio exportado! Clique em Baixar.', kind: 'ok' });
     } catch (e) {
       if ((e as Error)?.name === 'AbortError') { setPhase('idle'); setStage(''); setProgress(0); return; }
       console.error('[export]', e);
@@ -122,8 +127,8 @@ export default function ExportDialog({ onClose, initial }: { onClose: () => void
   };
 
   const onProgress = (f: number, s: string) => { setProgress(f); setStage(s); };
-  const start = () => run('video', (signal) => exportVideo(project, assets, { format, quality, fps, speed, signal, onProgress }));
-  const startAudio = (fmt: 'wav' | 'm4a') => run('audio', (signal) => exportAudio(project, assets, { format: fmt, signal, onProgress }));
+  const start = () => run('video', (signal) => exportVideo(project, assets, { format, quality, fps, speed, signal, onProgress, onWarning }));
+  const startAudio = (fmt: 'wav' | 'm4a') => run('audio', (signal) => exportAudio(project, assets, { format: fmt, signal, onProgress, onWarning }));
   const [frameBusy, setFrameBusy] = useState(false);
   /** tempo da capa: Project.coverTime (escolhida na timeline) ou o 1º quadro */
   const coverT = () => Math.min(Math.max(0, project.coverTime ?? 0), Math.max(0, duration - 1 / fps));

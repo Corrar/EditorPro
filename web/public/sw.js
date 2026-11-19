@@ -1,5 +1,10 @@
-/* EditorPro — service worker (app instalável + shell offline). Mídia fica no IndexedDB. */
-const CACHE = 'editorpro-v1';
+/* EditorPro — service worker (app instalável + shell offline). Mídia fica no IndexedDB.
+   v2: o cache não cresce mais a cada deploy — só /_next/static (com hash) vai para um cache
+   próprio, limitado às STATIC_MAX entradas mais recentes; o resto da origem não é guardado.
+   Trocar o nome do CACHE instala este SW e o activate apaga o 'editorpro-v1' antigo. */
+const CACHE = 'editorpro-v2';
+const STATIC = 'editorpro-static';
+const STATIC_MAX = 150;
 const SHELL = ['/', '/login', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', (e) => {
@@ -10,10 +15,19 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil((async () => {
     const keys = await caches.keys();
-    await Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)));
+    await Promise.all(keys.filter((k) => k !== CACHE && k !== STATIC).map((k) => caches.delete(k)));
+    await trimStatic();
     await self.clients.claim();
   })());
 });
+
+/** apaga as entradas mais antigas (cache.keys() vem em ordem de inserção) */
+async function trimStatic() {
+  const c = await caches.open(STATIC);
+  const keys = await c.keys();
+  const extra = keys.length - STATIC_MAX;
+  for (let i = 0; i < extra; i++) await c.delete(keys[i]);
+}
 
 self.addEventListener('fetch', (e) => {
   const req = e.request;
@@ -32,11 +46,18 @@ self.addEventListener('fetch', (e) => {
     }).catch(() => caches.match(req).then((hit) => hit || caches.match('/'))));
     return;
   }
-  // estáticos (_next, ícones, fontes locais): cache-first com atualização em background
+  const isStatic = url.pathname.startsWith('/_next/static/');
+  const isShell = SHELL.includes(url.pathname);
+  if (!isStatic && !isShell) return; // resto: rede normal, sem guardar (não acumula)
+
+  // estáticos com hash: cache-first; shell: cache-first com atualização em background
   e.respondWith(
     caches.match(req).then((hit) => {
       const net = fetch(req).then((res) => {
-        if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {}); }
+        if (res.ok) {
+          const copy = res.clone();
+          caches.open(isStatic ? STATIC : CACHE).then((c) => c.put(req, copy)).then(() => (isStatic ? trimStatic() : undefined)).catch(() => {});
+        }
         return res;
       }).catch(() => hit);
       return hit || net;

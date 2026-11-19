@@ -3,7 +3,9 @@ import type { MediaAsset, Project } from '../types';
 import { projectDuration } from '../ops';
 import { audibleClips, gainEnvelope } from '../engine/audio';
 import { buildAudioChain, noiseGate, peakGain } from '../engine/audioFx';
-import { curveOf, rateEnvelope, sourceSpan } from '../engine/speed';
+import { curveOf, sourceOffset, sourceSpan } from '../engine/speed';
+import { wsola } from './timeStretch';
+import { decodeAudioRange } from './audioDecode';
 
 /** recorta [from, from+dur) de um buffer (com reverso, portão de ruído e normalização opcionais) */
 function segment(ctx: BaseAudioContext, buf: AudioBuffer, from: number, dur: number, opts: { reverse?: boolean; gate?: number; normalize?: number }): AudioBuffer | null {
@@ -30,35 +32,31 @@ function segment(ctx: BaseAudioContext, buf: AudioBuffer, from: number, dur: num
 
 export const MIX_RATE = 48000;
 
-/** cache POR MIXAGEM (antes era global e nunca liberava: vídeo longo = centenas de MB presos) */
-type BufferCache = Map<string, Promise<AudioBuffer | null>>;
+type Speedy = Parameters<typeof sourceOffset>[0];
 
-async function decodeAsset(asset: MediaAsset, ctx: BaseAudioContext, bufferCache: BufferCache): Promise<AudioBuffer | null> {
-  const key = `${asset.id}:${asset.url}`;
-  let p = bufferCache.get(key);
-  if (!p) {
-    p = (async () => {
-      try {
-        if (!asset.url) return null;
-        const res = await fetch(asset.url);
-        const data = await res.arrayBuffer();
-        return await ctx.decodeAudioData(data);
-      } catch (e) {
-        // vídeo sem trilha de áudio ou codec não suportado pelo navegador
-        console.warn('[export] sem áudio decodificável em', asset.name, e);
-        return null;
-      }
-    })();
-    bufferCache.set(key, p);
-  }
-  return p;
+/** o clipe toca fora de 1x (constante ou curva)? */
+export function needsStretch(clip: Speedy & { speed?: number }): boolean {
+  if (curveOf(clip)) return true;
+  const v = clip.speed ?? 1;
+  return v > 0 && Math.abs(v - 1) > 1e-3;
+}
+
+/** estica o trecho até clip.duration seguindo o mapeamento de velocidade do motor (mesmo do vídeo) */
+function stretchToClip(ctx: BaseAudioContext, seg: AudioBuffer, clip: Speedy & { duration: number }): AudioBuffer {
+  const sr = seg.sampleRate;
+  const outLen = Math.max(2, Math.round(clip.duration * sr));
+  const ins = Array.from({ length: seg.numberOfChannels }, (_, c) => seg.getChannelData(c));
+  const outs = wsola(ins, sr, outLen, (t) => sourceOffset(clip, t));
+  const buf = ctx.createBuffer(outs.length, outLen, sr);
+  outs.forEach((ch, c) => buf.copyToChannel(ch, c));
+  return buf;
 }
 
 /** renderiza o mix estéreo 48 kHz do projeto inteiro; null se não houver nenhum som */
 export async function mixProjectAudio(
   p: Project,
   assets: Record<string, MediaAsset>,
-  opts: { signal?: AbortSignal; onProgress?: (f: number) => void } = {},
+  opts: { signal?: AbortSignal; onProgress?: (f: number) => void; onWarning?: (msg: string) => void } = {},
 ): Promise<AudioBuffer | null> {
   const duration = projectDuration(p);
   const items = audibleClips(p, assets);
@@ -67,31 +65,40 @@ export async function mixProjectAudio(
   const ctx = new OfflineAudioContext(2, length, MIX_RATE);
   let any = false;
   let done = 0;
-  const cache: BufferCache = new Map();
+  // só o Blob (handle barato, o arquivo fica no disco) por asset; o áudio é decodificado por clipe, só o trecho usado
+  const blobs = new Map<string, Promise<Blob | null>>();
+  const warned = new Set<string>();
   for (const { clip, track, asset } of items) {
     if (opts.signal?.aborted) throw new DOMException('Exportação cancelada', 'AbortError');
-    const buf = await decodeAsset(asset, ctx, cache);
+    let bp = blobs.get(asset.id);
+    if (!bp) { bp = asset.url ? fetch(asset.url).then((r) => r.blob()).catch(() => null) : Promise.resolve(null); blobs.set(asset.id, bp); }
+    const blob = await bp;
+    const want = sourceSpan(clip);
+    const res = blob
+      ? await decodeAudioRange(ctx, asset, blob, Math.max(0, clip.in - 0.05), clip.in + want + 0.05)
+      : { range: null, warning: `O áudio de "${asset.name}" não pôde ser incluído (arquivo indisponível).` };
     done++;
     opts.onProgress?.(done / items.length);
-    if (!buf) continue;
-    if (clip.in >= buf.duration) continue;
-    const span = Math.min(sourceSpan(clip), buf.duration - clip.in);
+    if (res.warning && !warned.has(asset.id)) { warned.add(asset.id); console.warn('[export]', res.warning); opts.onWarning?.(res.warning); }
+    if (!res.range) continue;
+    const { buffer: buf, t0 } = res.range;
+    const from = clip.in - t0; // posição do clipe dentro do trecho decodificado
+    if (from >= buf.duration) continue;
+    const span = Math.min(want, buf.duration - Math.max(0, from));
     const fx = clip.audioEffects ?? [];
     const amount = (k: string) => fx.find((e) => e.kind === k)?.amount;
-    const seg = segment(ctx, buf, clip.in, span, {
+    const seg = segment(ctx, buf, Math.max(0, from), span, {
       reverse: !!clip.reverse,
       gate: amount('noise-reduction'),
       normalize: amount('normalize'),
     });
     if (!seg) continue;
     const src = ctx.createBufferSource();
-    src.buffer = seg;
+    // velocidade/curva SEM mudar o tom (o preview usa preservesPitch): time-stretch offline até a
+    // duração do clipe na timeline e toca a 1x. Antes: playbackRate reamostrava e subia o tom (2x = +1 oitava).
+    src.buffer = needsStretch(clip) ? stretchToClip(ctx, seg, clip) : seg;
+    src.playbackRate.value = 1;
     const start = Math.max(0, clip.start);
-    if (curveOf(clip)) {
-      const env = rateEnvelope(clip, 1 / 60);
-      src.playbackRate.setValueAtTime(env[0].rate, start);
-      for (const pt of env.slice(1)) src.playbackRate.linearRampToValueAtTime(pt.rate, Math.max(0, pt.t));
-    } else src.playbackRate.value = clip.speed > 0 ? clip.speed : 1;
     const gain = ctx.createGain();
     const env = gainEnvelope(p, track, clip, 1 / 60);
     gain.gain.setValueAtTime(env[0]?.g ?? 0, start);

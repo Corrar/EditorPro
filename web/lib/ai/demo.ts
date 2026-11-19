@@ -9,7 +9,7 @@ import type {
   Keyframe, MediaAsset, Project, Seconds, SpeedPreset, StyleProfile, TransitionKind, VideoClip, VisualEffectKind,
 } from '../types';
 import { DEFAULT_TRANSFORM } from '../types';
-import { beatMarkerOps, beatSyncOps, chapterOps, fillerOps, highlightOps, hookFromTranscript, hookOps, timelineBeats } from './features';
+import { beatMarkerOps, beatSyncOps, chapterOps, fillerOps, highlightOps, hookFromTranscript, hookOps, mergeKfProps, timelineBeats } from './features';
 import { applyOps, clipEnd, projectDuration, type EditOp } from '../ops';
 import { DEFAULT_TEXT_STYLE } from '../defaults';
 import { formatTime, uid } from '../util';
@@ -421,14 +421,14 @@ export function zoomOps(p: Project, strong = false, only?: Set<Id>): EditOp[] {
     return clips.map((c, i) => ({
       op: 'update_clip' as const,
       clipId: c.id,
-      patch: { transform: { ...c.transform, scale: i % 2 === 1 ? z : 1 }, keyframes: i % 2 === 1 ? [] : [{ t: 0, transform: { scale: 1 } }, { t: r3(c.duration), transform: { scale: 1.04 } }] },
+      patch: { transform: { ...c.transform, scale: i % 2 === 1 ? z : 1 }, keyframes: mergeKfProps(c.keyframes, i % 2 === 1 ? [] : [{ t: 0, transform: { scale: 1 } }, { t: r3(c.duration), transform: { scale: 1.04 } }], ['scale']) },
       explain: i % 2 === 1 ? `Punch-in no corte em ${fmt(c.start)}` : `Zoom lento em ${fmt(c.start)}`,
     }));
   }
   return clips.map((c) => ({
     op: 'update_clip' as const,
     clipId: c.id,
-    patch: { keyframes: punchKeyframes(c.duration, strong ? 2 : 2.8, z) },
+    patch: { keyframes: mergeKfProps(c.keyframes, punchKeyframes(c.duration, strong ? 2 : 2.8, z), ['scale']) },
     explain: `Zoom punch-in ritmado no clipe de ${fmt(c.start)}`,
   }));
 }
@@ -436,7 +436,7 @@ export function zoomOps(p: Project, strong = false, only?: Set<Id>): EditOp[] {
 export function removeZoomOps(p: Project, only?: Set<Id>): EditOp[] {
   return videoClipsOf(p)
     .filter((c) => !c.locked && (!only || only.has(c.id)) && (c.keyframes?.length || c.transform.scale !== 1))
-    .map((c) => ({ op: 'update_clip' as const, clipId: c.id, patch: { keyframes: [], transform: { ...c.transform, scale: 1 } }, explain: `Tirando o zoom do clipe de ${fmt(c.start)}` }));
+    .map((c) => ({ op: 'update_clip' as const, clipId: c.id, patch: { keyframes: mergeKfProps(c.keyframes, [], ['scale']), transform: { ...c.transform, scale: 1 } }, explain: `Tirando o zoom do clipe de ${fmt(c.start)}` }));
 }
 
 export function colorOps(p: Project, preset: ColorPreset, name: string, only?: Set<Id>): EditOp[] {
