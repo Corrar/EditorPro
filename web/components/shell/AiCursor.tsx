@@ -141,7 +141,7 @@ export default function AiCursor() {
   }, [done]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!shown) return null;
-  const flip = pos.x > innerWidth - 200;
+  const flip = pos.x > innerWidth - (Math.min(240, innerWidth * 0.62) + 28); // balão cabe à direita?
   const up = pos.y > innerHeight - 120;
   const style = { transform: `translate3d(${Math.round(pos.x)}px, ${Math.round(pos.y)}px, 0)` };
   return (
