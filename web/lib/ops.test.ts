@@ -205,3 +205,37 @@ describe('ops — legendas: origem do texto e ritmo (aditivo, sessão legendas)'
     expect(p.captions.style.rhythm).toBe('phrase');
   });
 });
+
+describe('ops — cortes de fala robustos (sessão legendas §2.8)', () => {
+  const asset2: MediaAsset = { id: 'a1', kind: 'video', role: 'source', name: 'v.mp4', mime: 'video/mp4', size: 1, duration: 30 };
+  const W = (id: string, start: number, end: number, text: string) => ({ id, start, end, text });
+  const vlen = (p: Project) => p.tracks[0].clips.reduce((n, c) => n + c.duration, 0);
+  const proj = () => {
+    let p = applyOp(createProject(), { op: 'add_clip', trackId: 'track_video_1', clip: { ...makeVideoClip(asset2, 0), id: 'c1', duration: 10 } as VideoClip });
+    const words = [W('w1', 0.8, 1.2, 'oi'), W('w2', 1.25, 1.6, 'né'), W('w3', 1.62, 2.0, 'gente'), W('w4', 3.5, 3.9, 'tudo'), W('w5', 3.95, 4.3, 'bem')];
+    p = applyOp(p, { op: 'set_captions', segments: [{ id: 's', start: 0.8, end: 4.3, text: 'oi né gente tudo bem', words }] });
+    return p;
+  };
+  it('remove_words sem padding: borda no meio da pausa, sem comer a palavra vizinha', () => {
+    const p = applyOp(proj(), { op: 'remove_words', fromWordId: 'w2', toWordId: 'w2' });
+    const ws = p.captions.segments.flatMap((s) => s.words!);
+    expect(ws.map((w) => w.text)).toEqual(['oi', 'gente', 'tudo', 'bem']);
+    // "oi" e "gente" intactos (duração igual)
+    expect(ws[0].end - ws[0].start).toBeCloseTo(0.4, 6);
+    expect(ws[1].end - ws[1].start).toBeCloseTo(0.38, 6);
+    expect(vlen(p)).toBeCloseTo(10 - 0.42, 6); // cortou [1,2; 1,62]: até a borda das vizinhas, nunca dentro delas
+  });
+  it('cut_pauses: corta a pausa ≥ 0,5 s pelas palavras, deixando 0,12 s de cada lado', () => {
+    const p = applyOp(proj(), { op: 'cut_pauses' });
+    const ws = p.captions.segments.flatMap((s) => s.words!);
+    // começo (0,8 s) e pausa 2,0→3,5 s cortados
+    expect(ws[0].start).toBeCloseTo(0.12, 6);
+    expect(ws[3].start - ws[2].end).toBeCloseTo(0.24, 6);
+    expect(ws.every((w) => w.end > w.start)).toBe(true);
+    expect(vlen(p)).toBeCloseTo(10 - 0.68 - 1.26, 6);
+  });
+  it('cut_pauses com ranges medidos no navegador', () => {
+    const p = applyOp(proj(), { op: 'cut_pauses', ranges: [{ start: 2.0, end: 3.5 }], keep: 0.1 });
+    expect(vlen(p)).toBeCloseTo(10 - 1.3, 6);
+  });
+});

@@ -47,6 +47,12 @@ export type EditOp = (
   | { op: 'move_track'; trackId: Id; index: number }
   /** corta as palavras de fromWordId até toWordId (ids de CaptionWord) com ripple — cortes ancorados na fala */
   | { op: 'remove_words'; fromWordId: string; toWordId: string; padding?: Seconds }
+  /**
+   * (aditivo, sessão legendas §2.8) corta as pausas da fala ≥ minPause (padrão 0,5 s) deixando `keep` (padrão 0,12 s)
+   * de respiro de cada lado. As pausas vêm das palavras da legenda (tempos já corrigidos pela energia do áudio)
+   * ou de `ranges` (silêncios medidos no navegador). Do fim para o começo, com ripple em todas as trilhas.
+   */
+  | { op: 'cut_pauses'; minPause?: Seconds; keep?: Seconds; ranges?: { start: Seconds; end: Seconds }[] }
 ) & {
   /** id único da operação (preenchido por normalizeOp se faltar) */
   id?: Id;
@@ -584,8 +590,37 @@ function applyOpInner(p: Project, op: EditOp): Project {
     case 'remove_words': {
       const r = wordRange(p, op.fromWordId, op.toWordId);
       if (!r) throw new OpError(`palavras não encontradas: ${op.fromWordId}..${op.toWordId}`);
-      const pad = op.padding ?? 0.02;
-      return applyOpInner(p, { op: 'ripple_delete', start: Math.max(0, r.start - pad), end: r.end + pad });
+      // bordas no silêncio entre as palavras (no máx. 0,12 s para fora), sem comer a palavra vizinha
+      const words = allWords(p);
+      const a = words.findIndex((w) => w.id === op.fromWordId), b = words.findIndex((w) => w.id === op.toWordId);
+      const [i, j] = a <= b ? [a, b] : [b, a];
+      const prevEnd = i > 0 ? words[i - 1].end : -Infinity;
+      const nextStart = j < words.length - 1 ? words[j + 1].start : Infinity;
+      const pad = op.padding ?? 0.05;
+      const left = op.padding !== undefined ? pad : Math.min(0.12, Math.max(pad, (r.start - prevEnd) / 2));
+      const right = op.padding !== undefined ? pad : Math.min(0.12, Math.max(pad, (nextStart - r.end) / 2));
+      const start = Math.max(0, r.start - left, prevEnd === -Infinity ? 0 : Math.min(r.start, prevEnd));
+      const end = Math.min(r.end + right, nextStart === Infinity ? Infinity : Math.max(r.end, nextStart));
+      return applyOpInner(p, { op: 'ripple_delete', start, end });
+    }
+
+    case 'cut_pauses': {
+      const min = Math.max(0.15, op.minPause ?? 0.5);
+      const keep = Math.max(0, Math.min(0.4, op.keep ?? 0.12));
+      let gaps: { start: Seconds; end: Seconds }[];
+      if (op.ranges?.length) gaps = op.ranges.filter((g) => g.end - g.start >= min);
+      else {
+        const words = allWords(p).filter((w) => w.end > w.start).sort((x, y) => x.start - y.start);
+        gaps = [];
+        if (words.length && words[0].start >= min) gaps.push({ start: 0, end: words[0].start });
+        for (let k = 1; k < words.length; k++) if (words[k].start - words[k - 1].end >= min) gaps.push({ start: words[k - 1].end, end: words[k].start });
+      }
+      let out = p;
+      for (const g of [...gaps].sort((x, y) => y.start - x.start)) {
+        const s0 = g.start <= EPS ? 0 : g.start + keep, e0 = g.end - keep;
+        if (e0 - s0 > 0.05) out = applyOpInner(out, { op: 'ripple_delete', start: s0, end: e0 });
+      }
+      return out;
     }
 
     case 'move_track': {
@@ -636,6 +671,7 @@ export function opFocus(p: Project, op: EditOp): { time?: Seconds; clipId?: Id }
     case 'duplicate_clip': { const f = findClip(p, op.clipId); return { time: op.start ?? (f ? clipEnd(f.clip) : undefined), clipId: op.newId }; }
     case 'add_marker': return { time: op.marker.t };
     case 'remove_words': { const r = wordRange(p, op.fromWordId, op.toWordId); return { time: r?.start }; }
+    case 'cut_pauses': return { time: 0 };
     default: return {};
   }
 }

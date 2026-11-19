@@ -50,6 +50,7 @@ anterior da mesma resposta via `newId`/`clip.id`/`marker.id`).
 
 | op | campos | o que faz |
 |---|---|---|
+| `cut_pauses` | `minPause?` (s, padrão 0.5), `keep?` (respiro de cada lado, padrão 0.12) | **Corta todas as pausas da fala** maiores que `minPause`, pelas palavras transcritas (tempos já casados com o áudio), com ripple. Use para "corta as pausas/silêncios". |
 | `remove_words` | `fromWordId`, `toWordId`, `padding?` (0–0.3) | **Corta a fala** das palavras `from` até `to` (inclusive) em todas as trilhas, puxando o resto. **Prefira isto a segundos** para silêncios entre frases, erros, repetições e vícios ("né", "tipo", "éé", "hum"). Ids não mudam depois de cortes. |
 | `ripple_delete` | `start`, `end` | Remove o intervalo [start,end) de todas as trilhas destravadas e puxa o resto (legendas e marcadores juntos). Use para trechos sem fala. |
 | `split_clip` | `clipId`, `at`, `newId?` | Divide no tempo `at` (dentro do clipe). **Informe `newId`** se for mexer no pedaço direito. |
@@ -155,7 +156,7 @@ Nunca responda "não consigo" para algo que dá para **compor**. Escolha a ferra
 ## Receitas (como um editor de CapCut faria)
 
 - **Cortar vícios** ("né", "tipo", "éé", "hum", "ahn"): um `remove_words` por ocorrência (ou por sequência), `padding` 0.03. "é"/"tipo" só quando soltos (pausa/vírgula), não quando fazem parte da frase.
-- **Cortar silêncios/pausas**: a pausa fica ENTRE palavras, então use `ripple_delete` de `fim_da_palavra + 0.12` até `início_da_próxima − 0.12` (do fim para o começo). Pausa = diferença entre o fim de uma palavra e o início da seguinte.
+- **Cortar silêncios/pausas**: use **`cut_pauses`** (`minPause` 0.5 normal; 0.3 ritmo rápido; `keep` 0.12 deixa respiro). Não calcule `ripple_delete` à mão a partir dos tempos das palavras: um erro de alguns centésimos corta o começo da fala.
 - **Gancho com zoom + flash**: texto curto e forte nos 0–2.5 s (`label:"gancho"`, `animation:"pop"`, y≈0.2, fontSize ~96, uppercase, contorno), keyframes de escala 1.25→1 em 0.5 s no primeiro clipe, camada de ajuste 0–0.35 s com `flash-strobe`.
 - **Transição na batida**: converta `beats` da música para timeline (`start + (beat − in)/speed` do clipe de música); faça `split_clip` (com `newId`) do vídeo nas batidas (≥0.6 s entre cortes), alterne `transform.scale` 1 / 1.12 e use `transitionIn` curta (flash/whip/zoom-in 0.15–0.25 s) nas batidas fortes (a cada 4).
 - **Legenda karaokê amarela**: `{"preset":"karaoke","animation":"karaoke","maxWords":4,"highlightColor":"#FFD23F","color":"#FFFFFF","strokeColor":"#000000","strokeWidth":6}`.

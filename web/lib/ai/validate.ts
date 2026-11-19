@@ -27,7 +27,7 @@ import type { Keyframe as KF } from '../types';
 
 export const OP_KINDS: EditOpKind[] = [
   'set_project', 'set_aspect', 'add_track', 'update_track', 'remove_track', 'move_track', 'add_clip', 'update_clip',
-  'remove_clip', 'duplicate_clip', 'move_clip', 'split_clip', 'trim_clip', 'ripple_delete', 'remove_words', 'set_captions',
+  'remove_clip', 'duplicate_clip', 'move_clip', 'split_clip', 'trim_clip', 'ripple_delete', 'remove_words', 'cut_pauses', 'set_captions',
   'update_caption', 'set_caption_style', 'toggle_captions', 'add_marker', 'update_marker', 'remove_marker',
 ];
 
@@ -56,6 +56,7 @@ const DEFAULT_EXPLAIN: Record<EditOpKind, string> = {
   trim_clip: 'Aparando o clipe',
   ripple_delete: 'Cortando um trecho',
   remove_words: 'Cortando um trecho da fala',
+  cut_pauses: 'Cortando as pausas da fala',
   set_captions: 'Colocando as legendas',
   update_caption: 'Corrigindo uma legenda',
   set_caption_style: 'Mudando o estilo das legendas',
@@ -529,6 +530,16 @@ export function sanitizeOp(raw: unknown, p: Project, assets: Record<Id, MediaAss
       if (dur > 0 && words[j].end - words[i].start >= dur - 0.25) fail('cortaria o vídeo inteiro');
       const padding = clampNum(r.padding, 0, 0.3);
       return { op: 'remove_words', fromWordId: words[i].id!, toWordId: words[j].id!, ...(padding !== undefined ? { padding } : {}), ...meta };
+    }
+    case 'cut_pauses': {
+      if (!allWords(p).length && !Array.isArray(r.ranges)) fail('sem palavras transcritas para achar as pausas');
+      const minPause = clampNum(r.minPause, 0.2, 3);
+      const keep = clampNum(r.keep, 0, 0.4);
+      const ranges = Array.isArray(r.ranges)
+        ? r.ranges.filter(isObj).map((g) => ({ start: clampNum(g.start, 0, dur), end: clampNum(g.end, 0, dur) }))
+          .filter((g): g is { start: number; end: number } => g.start !== undefined && g.end !== undefined && g.end - g.start > 0.05).slice(0, 400)
+        : undefined;
+      return { op: 'cut_pauses', ...(minPause !== undefined ? { minPause } : {}), ...(keep !== undefined ? { keep } : {}), ...(ranges?.length ? { ranges } : {}), ...meta };
     }
     case 'set_captions': {
       const segments = sanitizeSegments(r.segments, p);

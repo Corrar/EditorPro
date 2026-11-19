@@ -154,6 +154,8 @@ export const EditOpSchema = z.object({
   fromWordId: z.string().optional(),
   toWordId: z.string().optional(),
   padding: z.number().optional(),
+  minPause: z.number().optional().describe('cut_pauses: pausa mínima a cortar (s, padrão 0.5)'),
+  keep: z.number().optional().describe('cut_pauses: respiro que fica de cada lado (s, padrão 0.12)'),
   markerId: z.string().optional(),
   marker: z.object({ id: z.string().optional(), t: z.number(), end: z.number().optional(), label: z.string().optional(), color: z.string().optional(), kind: z.enum(MARKER_KINDS).optional(), resolved: z.boolean().optional() }).optional(),
   clip: z.object({ type: z.enum(CLIP_TYPES), id: z.string().optional(), assetId: z.string().optional(), ...clipFields }).optional(),
