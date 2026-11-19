@@ -352,7 +352,8 @@ export const PlayheadLine = memo(function PlayheadLine({ zoom, height, scrollRef
       // paginação suave: quando passa da borda direita, pula p/ deixar o playhead perto da esquerda
       if (x > right - 40 || x < left) el.scrollLeft = Math.max(0, x - HEADER_W - 60);
     } else if (live) {
-      if (x > right - 80 || x < left + 20) el.scrollTo({ left: Math.max(0, x - HEADER_W - (el.clientWidth - HEADER_W) / 2), behavior: 'smooth' });
+      // instantâneo: o cursor da IA lê a posição na tela logo em seguida
+      if (x > right - 48 || x < left + 24) el.scrollLeft = Math.max(0, x - HEADER_W - (el.clientWidth - HEADER_W) * 0.3);
     } else if (t !== last.current && (x > right || x < left)) {
       // saltos (Home/End, setas) trazem o playhead para a vista
       el.scrollLeft = Math.max(0, x - HEADER_W - (el.clientWidth - HEADER_W) / 2);

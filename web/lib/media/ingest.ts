@@ -202,6 +202,9 @@ export function listenAttachFiles(): () => void {
   return on('ep:attach-files', async ({ files, role }) => {
     if (!files?.length) return;
     const assets = await ingestFiles(files, role);
+    // vídeo modelo (estilo): fica só na biblioteca (nunca na timeline) e vira a referência do projeto
+    const ref = role === 'reference' ? assets.find((x) => x.kind === 'video') : undefined;
+    if (ref) useEditor.getState().dispatch({ op: 'set_project', patch: { referenceAssetId: ref.id } }, { history: false });
     if (assets.length) emit('ep:toast', { text: assets.length === 1 ? `“${assets[0].name}” adicionado à mídia` : `${assets.length} arquivos adicionados à mídia`, kind: 'ok' });
   });
 }

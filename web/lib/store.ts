@@ -65,7 +65,8 @@ export interface EditorState {
 
   /** aplica ops da IA uma a uma, com pausa, movendo o playhead e destacando ("editando ao vivo").
    *  Tudo vira UM passo de desfazer. Retorna os ids das ops aplicadas. */
-  applyLive: (ops: EditOp[], opts?: { delayMs?: number; onStep?: (op: EditOp, i: number) => void }) => Promise<Id[]>;
+  /** delayMs pode ser função: lida a cada passo (ex.: botão "Mais rápido" no meio da edição) */
+  applyLive: (ops: EditOp[], opts?: { delayMs?: number | (() => number); onStep?: (op: EditOp, i: number) => void }) => Promise<Id[]>;
   cancelLive: () => void;
 }
 
@@ -143,7 +144,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   applyLive: async (rawOps, opts = {}) => {
     const token = ++liveToken;
     const ops = rawOps.map(normalizeOp);
-    const delay = opts.delayMs ?? 450;
+    const delayOf = () => (typeof opts.delayMs === 'function' ? opts.delayMs() : opts.delayMs ?? 450);
     const before = get().project;
     const applied: Id[] = [];
     set({ live: { running: true, done: 0, total: ops.length }, playing: false });
@@ -157,7 +158,7 @@ export const useEditor = create<EditorState>((set, get) => ({
         playhead: focus.time ?? s.playhead,
       }));
       opts.onStep?.(op, i);
-      await sleep(delay / 2);
+      await sleep(delayOf() / 2);
       try {
         const next = applyOp(get().project, op);
         const f2 = opFocus(next, op);
@@ -166,7 +167,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       } catch (e) {
         console.warn('[editor] op da IA ignorada', op, e);
       }
-      await sleep(delay / 2);
+      await sleep(delayOf() / 2);
     }
     // um único passo de desfazer para o lote inteiro
     if (get().project !== before) set((s) => ({ past: [...s.past, before].slice(-HISTORY_LIMIT), future: [] }));

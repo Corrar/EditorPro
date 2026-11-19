@@ -8,7 +8,7 @@ import { IconChev, IconCog, IconCollapse, IconDownload, IconFolder, IconLogout, 
 import Logo from './Logo';
 import { logout } from './session';
 import { usePendingComments } from '@/components/panels/ReviewTab';
-import { TOOLS, type ToolId } from './tools';
+import { TOOLS, toolAttr, type ToolId } from './tools';
 
 export interface NavProps {
   view: 'home' | 'editor';
@@ -87,7 +87,7 @@ export default function Sidebar({ min, onToggleMin, ...p }: NavProps & { min: bo
           {tools.map(({ id, label, Icon }) => {
             const active = p.view === 'editor' && p.tool === id && p.toolOpen;
             return (
-              <button key={id} type="button" className={`ep-navitem${active ? ' active' : ''}`} onClick={() => p.onTool(id)} title={label} aria-pressed={active}>
+              <button key={id} type="button" data-ep-tool={toolAttr(id)} className={`ep-navitem${active ? ' active' : ''}`} onClick={() => p.onTool(id)} title={label} aria-pressed={active}>
                 <span className="ib"><Icon size={19} /></span><span className="t">{label}</span>
                 {id === 'review' && pendingCm ? <span className="nb">{pendingCm}</span> : counts[id] ? <span className="c">{counts[id]}</span> : null}
               </button>

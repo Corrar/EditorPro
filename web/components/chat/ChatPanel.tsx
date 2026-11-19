@@ -11,6 +11,7 @@ import Icon from '@/components/ui/Icon';
 import { useEditor } from '@/lib/store';
 import { emit } from '@/lib/events';
 import { useAIBridge } from '@/lib/ai/bridge';
+import { FastButton } from './FastButton';
 import { useAIChat, type RunState } from '@/lib/ai/chatStore';
 import type { ChatMessage } from '@/lib/types';
 
@@ -30,6 +31,7 @@ function Steps({ run }: { run: RunState }) {
     <div className="ep-ch-steps">
       <div className="ep-ch-stepshead">
         <span>{live ? 'Editando ao vivo' : 'Edições aplicadas'}</span>
+        {live && done < total ? <FastButton /> : null}
         <b className="mono">{done}/{total}</b>
       </div>
       <div className="ep-ch-bar"><i style={{ width: `${total ? (done / total) * 100 : 0}%` }} /></div>

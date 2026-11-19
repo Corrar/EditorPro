@@ -77,3 +77,5 @@
 .ep-genprog { position:relative; height:30px; border-radius:999px; background:var(--track); overflow:hidden; }
 .ep-genprog i { position:absolute; inset:0 auto 0 0; background:linear-gradient(90deg,var(--green),var(--greenD)); transition:width .3s; }
 .ep-genprog span { position:relative; display:grid; place-items:center; height:100%; font-size:11.5px; font-weight:600; color:var(--ink); }
+.ep-asset-usemodel { display:flex; align-items:center; justify-content:center; gap:6px; width:100%; min-height:36px; margin-top:6px; border:0; border-radius:10px; background:var(--tintG, rgba(242,104,31,.12)); color:var(--green); font:inherit; font-size:12px; font-weight:700; cursor:pointer; }
+.ep-asset-usemodel:active { transform:scale(.98); }

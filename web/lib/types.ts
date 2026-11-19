@@ -47,6 +47,10 @@ export interface MediaAsset {
   beats?: number[];
   /** veio da biblioteca embutida (stickers, formas, sons) e não do usuário */
   library?: boolean;
+  /** cópia leve (540–720p) usada só no PREVIEW; a original fica para o export */
+  proxyUrl?: string;
+  /** estado da geração do proxy */
+  proxyStatus?: 'pending' | 'ready' | 'failed';
 }
 
 /* ---------- efeitos ---------- */

@@ -503,3 +503,37 @@ describe('biblioteca na IA', () => {
     expect(e.r.reply).toMatch(/CTA/);
   });
 });
+
+describe('cursor da IA: ordem e balão', () => {
+  it('orderForViewing reordena só quando o resultado final é idêntico', async () => {
+    const { orderForViewing, shortExplain } = await import('./order');
+    const p = base();
+    const ops = [
+      { op: 'add_clip', trackId: 'track_text_1', clip: { id: 't1', type: 'text', text: 'Oi', start: 0, duration: 2, style: { fontFamily: 'Inter', fontSize: 60, fontWeight: 800, color: '#fff' }, position: { x: 0.5, y: 0.3 }, animation: 'pop' }, id: 'o1', explain: 'Título' },
+      { op: 'set_caption_style', style: { fontSize: 90 }, id: 'o2', explain: 'Legenda maior' },
+      { op: 'split_clip', clipId: 'c1', at: 8, newId: 'c1b', id: 'o3', explain: 'Dividindo em 0:08' },
+      { op: 'split_clip', clipId: 'c1', at: 4, newId: 'c1a', id: 'o4', explain: 'Dividindo em 0:04' },
+    ] as EditOp[];
+    const out = orderForViewing(ops, p);
+    // cortes primeiro; os dois splits não podem trocar entre si (o 2º depende do 1º)
+    expect(out.map((o) => o.id)).toEqual(['o3', 'o4', 'o2', 'o1']);
+    // dependência: atualizar um clipe criado antes não pode vir antes da criação
+    const dep = [
+      { op: 'add_clip', trackId: 'track_text_1', clip: { id: 't2', type: 'text', text: 'A', start: 1, duration: 2, style: { fontFamily: 'Inter', fontSize: 60, fontWeight: 800, color: '#fff' }, position: { x: 0.5, y: 0.3 }, animation: 'pop' }, id: 'd1', explain: 'a' },
+      { op: 'update_clip', clipId: 't2', patch: { filters: [] }, id: 'd2', explain: 'b' },
+      { op: 'ripple_delete', start: 0, end: 1, id: 'd3', explain: 'c' },
+    ] as unknown as EditOp[];
+    const out2 = orderForViewing(dep, p);
+    expect(out2.findIndex((o) => o.id === 'd1')).toBeLessThan(out2.findIndex((o) => o.id === 'd2'));
+    expect(shortExplain('ajustando a cor do vídeo inteiro para ficar com aparência de filme antigo dos anos setenta.')).toMatch(/^Ajustando .{10,}…$/);
+    expect(shortExplain('  ')).toBe('Editando');
+  });
+
+  it('stepDelay: 900 ms normal, 350 ms no "Mais rápido"', async () => {
+    const { stepDelay } = await import('./chatStore');
+    expect(stepDelay(false)).toBe(900);
+    expect(stepDelay(true)).toBe(350);
+    expect(stepDelay(true, 200)).toBe(200);
+    expect(stepDelay(false, 260)).toBe(260);
+  });
+});

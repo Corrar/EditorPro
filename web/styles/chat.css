@@ -177,7 +177,7 @@
 }
 
 /* pílula "IA editando 3/8" sobre o preview (popup minimizado) */
-.ep-ailive { position:relative; overflow:hidden; display:inline-flex; align-items:center; gap:8px; height:40px; padding:0 16px 0 8px; border:0; border-radius:999px; background:rgba(20,20,20,.82); color:#fff; font:inherit; font-size:13.5px; font-weight:700; cursor:pointer; box-shadow:0 6px 24px rgba(0,0,0,.28); -webkit-backdrop-filter:blur(12px); backdrop-filter:blur(12px); animation:rise .25s ease both; }
+.ep-ailive { position:relative; overflow:hidden; display:inline-flex; align-items:center; gap:4px; height:40px; padding:0 4px 0 0; border:0; border-radius:999px; background:rgba(20,20,20,.82); color:#fff; font:inherit; font-size:13.5px; font-weight:700; box-shadow:0 6px 24px rgba(0,0,0,.28); -webkit-backdrop-filter:blur(12px); backdrop-filter:blur(12px); animation:rise .25s ease both; }
 .ep-ailive-ic { width:26px; height:26px; flex:none; border-radius:50%; background:var(--green); display:grid; place-items:center; }
 .ep-ailive-ic .ep-ch-spin.light { width:14px; height:14px; border-width:2px; }
 .ep-ailive.waiting .ep-ailive-ic { animation:epAipPulseBg 1.4s ease-in-out infinite; }
@@ -185,3 +185,16 @@
 .ep-ailive-t { white-space:nowrap; font-variant-numeric:tabular-nums; }
 .ep-ailive-bar { position:absolute; left:0; bottom:0; height:3px; background:var(--green); transition:width .3s ease; }
 @media (pointer: coarse) { .ep-ailive { height:44px; } }
+
+.ep-ailive-main { display:inline-flex; align-items:center; gap:8px; height:100%; padding:0 12px 0 8px; border:0; background:none; color:inherit; font:inherit; cursor:pointer; border-radius:999px; }
+.ep-ailive .ep-ch-fast.ep-ailive-fast { background:rgba(255,255,255,.14); color:#fff; height:30px; }
+.ep-ailive .ep-ch-fast.ep-ailive-fast.on { background:var(--green); }
+
+/* "Mais rápido" (ritmo da edição ao vivo / cursor da IA) */
+.ep-ch-stepshead, .ep-aip-stepshead { gap:8px; align-items:center; }
+.ep-ch-stepshead > span:first-child, .ep-aip-stepshead > span:first-child { flex:1; min-width:0; }
+.ep-ch-fast { flex:none; display:inline-flex; align-items:center; gap:5px; height:28px; padding:0 11px; border:0; border-radius:999px; background:var(--card); color:var(--ink); font:inherit; font-size:12px; font-weight:700; cursor:pointer; white-space:nowrap; transition:background .15s; }
+.ep-aip .ep-ch-fast { background:var(--card); }
+.ep-ch-fast:hover { background:var(--tileHover); }
+.ep-ch-fast.on { background:var(--green); color:#fff; }
+@media (pointer: coarse) { .ep-ch-fast { height:36px; padding:0 13px; } .ep-ailive { height:44px; } }
