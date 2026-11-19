@@ -6,10 +6,12 @@
    ===================================================================== */
 
 import type {
-  AspectRatio, CaptionSegment, CaptionStyle, Clip, Id, Marker, Project, Seconds, Track, TrackKind,
+  AspectRatio, CaptionSegment, CaptionStyle, Clip, Id, Keyframe, Marker, Project, Seconds, SpeedPoint, Track, TrackKind, Transform,
 } from './types';
 import { ASPECT_SIZES } from './types';
 import { uid } from './util';
+import { curveOf, curveSpeedAt, sourceOffset, sourceSpan } from './engine/speed';
+import { interpolateTransform } from './engine/easing';
 
 type ClipPatch = Partial<Omit<Clip, 'id' | 'type'>> & Record<string, unknown>;
 
@@ -119,34 +121,88 @@ function speedOf(c: Clip): number {
   return (c.type === 'video' || c.type === 'audio') && c.speed > 0 ? c.speed : 1;
 }
 
+type SpeedyClip = Parameters<typeof sourceOffset>[0];
+const KF_KEYS = ['x', 'y', 'scale', 'rotation', 'opacity'] as const;
+
+/** curva de velocidade do trecho [u0,u1] (normalizado ao clipe) re-escalada para 0..1 */
+function sliceCurve(curve: SpeedPoint[], u0: number, u1: number): SpeedPoint[] {
+  const w = u1 - u0;
+  const pts: SpeedPoint[] = [{ t: 0, speed: curveSpeedAt(curve, u0) }];
+  for (const p of curve) if (p.t > u0 + 1e-9 && p.t < u1 - 1e-9) pts.push({ t: (p.t - u0) / w, speed: p.speed });
+  pts.push({ t: 1, speed: curveSpeedAt(curve, u1) });
+  return pts;
+}
+
+/** keyframes do trecho local [a,b] re-baseados em 0, com valores interpolados nas bordas (sem saltos) */
+function sliceKeyframes(kfs: Keyframe[], a: Seconds, b: Seconds): Keyframe[] {
+  const sorted = [...kfs].sort((x, y) => x.t - y.t);
+  const animated = KF_KEYS.filter((k) => sorted.some((f) => typeof f.transform[k] === 'number'));
+  const at = (t: Seconds): Partial<Transform> => {
+    const tf = interpolateTransform(undefined, sorted, t);
+    const o: Partial<Transform> = {};
+    for (const k of animated) o[k] = tf[k];
+    return o;
+  };
+  const inner = sorted.filter((k) => k.t > a + EPS && k.t < b - EPS).map((k) => ({ ...k, t: k.t - a }));
+  const next = sorted.find((k) => k.t >= b - EPS);
+  const last: Keyframe = { t: b - a, transform: at(b) };
+  if (next?.easing) last.easing = next.easing;
+  return [{ t: 0, transform: at(a) }, ...inner, last];
+}
+
+/**
+ * Pedaço do clipe que cobre o trecho LOCAL [a,b] (segundos após c.start), mostrando exatamente
+ * os mesmos quadros/valores que o original mostrava nesse trecho: `in` calculado pela integral
+ * da velocidade (constante, curva ou preset) e pelo reverso; curva fatiada; keyframes fatiados.
+ */
+function sliceClip(c: Clip, a: Seconds, b: Seconds): Clip {
+  const out = { ...c, start: c.start + a, duration: b - a } as Clip;
+  if (a <= EPS && b >= c.duration - EPS) return out;
+  if (hasSourceIn(c) && hasSourceIn(out)) {
+    const sc = c as unknown as SpeedyClip;
+    const off = (x: Seconds) => sourceOffset(sc, x);
+    out.in = c.reverse ? c.in + sourceSpan(sc) - off(b) : c.in + off(a);
+    const curve = curveOf(sc);
+    if (curve && c.duration > EPS) {
+      out.speedCurve = sliceCurve(curve, a / c.duration, b / c.duration);
+      delete out.speedPreset;
+    }
+  }
+  const kfs = (c as { keyframes?: Keyframe[] }).keyframes;
+  if (kfs?.length) (out as { keyframes?: Keyframe[] }).keyframes = sliceKeyframes(kfs, a, b);
+  return out;
+}
+
+/** o pedaço da esquerda de um corte não faz saída; o da direita não faz entrada (sem mergulho no preto) */
+function joinEdges(left: Clip | null, right: Clip | null) {
+  if (left) {
+    delete (left as { fadeOut?: unknown }).fadeOut;
+    delete (left as { animationOut?: unknown }).animationOut;
+  }
+  if (right) {
+    delete (right as { fadeIn?: unknown }).fadeIn;
+    delete (right as { animationIn?: unknown }).animationIn;
+    delete (right as { transitionIn?: unknown }).transitionIn;
+    if (right.type === 'text') right.animation = 'none';
+  }
+}
+
 /** divide um clipe em dois em `at` (tempo de timeline) */
 export function splitClipValue(c: Clip, at: Seconds, newId: Id): [Clip, Clip] | null {
   if (at <= c.start + EPS || at >= clipEnd(c) - EPS) return null;
   const leftDur = at - c.start;
-  const left = { ...c, duration: leftDur } as Clip;
-  const right = { ...c, id: newId, start: at, duration: c.duration - leftDur } as Clip;
-  if (hasSourceIn(c) && hasSourceIn(right)) right.in = c.in + leftDur * speedOf(c);
-  // transição de entrada fica só no pedaço esquerdo; keyframes deslocam
-  if ('transitionIn' in right) delete (right as { transitionIn?: unknown }).transitionIn;
-  const kfs = (c as { keyframes?: import('./types').Keyframe[] }).keyframes;
-  if (kfs?.length) {
-    (left as { keyframes?: unknown }).keyframes = kfs.filter((k) => k.t <= leftDur);
-    (right as { keyframes?: unknown }).keyframes = kfs.filter((k) => k.t >= leftDur).map((k) => ({ ...k, t: k.t - leftDur }));
-  }
-  // animação de saída fica só na direita; de entrada só na esquerda
-  if ('animationOut' in left) delete (left as { animationOut?: unknown }).animationOut;
-  if ('animationIn' in right) delete (right as { animationIn?: unknown }).animationIn;
+  const left = sliceClip(c, 0, leftDur);
+  const right = { ...sliceClip(c, leftDur, c.duration), id: newId } as Clip;
+  joinEdges(left, right);
   return [left, right];
 }
 
-/** apara um clipe para [start,end] (tempo de timeline), ajustando `in` */
+/** apara um clipe para [start,end] (tempo de timeline), ajustando `in`, curva e keyframes */
 export function trimClipValue(c: Clip, start: Seconds, end: Seconds): Clip | null {
   const s = Math.max(start, c.start);
   const e = Math.min(end, clipEnd(c));
   if (e - s <= EPS) return null;
-  const out = { ...c, start: s, duration: e - s } as Clip;
-  if (hasSourceIn(c) && hasSourceIn(out)) out.in = c.in + (s - c.start) * speedOf(c);
-  return out;
+  return sliceClip(c, s - c.start, e - c.start);
 }
 
 /** id determinístico p/ o pedaço direito de um clipe cortado por ripple_delete */
@@ -169,14 +225,13 @@ function rippleTrack(track: Track, start: Seconds, end: Seconds): Track {
       // sobrepõe o corte: mantém pedaço da esquerda e/ou da direita
       const left = trimClipValue(c, c.start, start);
       const rightRaw = trimClipValue(c, end, cEnd);
+      // id determinístico (mesma op no mesmo projeto => mesmo id): a IA/simulações podem
+      // referenciar o pedaço direito em ops seguintes e o replay ao vivo bate com a simulação
+      const right = rightRaw ? ({ ...rightRaw, id: left ? rippleRightId(track, c.id, end) : c.id, start: start } as Clip) : null;
+      if (right) delete (right as { transitionIn?: unknown }).transitionIn;
+      if (left && right) joinEdges(left, right);
       if (left) clips.push(left);
-      if (rightRaw) {
-        // id determinístico (mesma op no mesmo projeto => mesmo id): a IA/simulações podem
-        // referenciar o pedaço direito em ops seguintes e o replay ao vivo bate com a simulação
-        const right = { ...rightRaw, id: left ? rippleRightId(track, c.id, end) : c.id, start: start } as Clip;
-        if ('transitionIn' in right) delete (right as { transitionIn?: unknown }).transitionIn;
-        clips.push(right);
-      }
+      if (right) clips.push(right);
     }
   }
   return { ...track, clips: sortClips(clips) };
@@ -324,6 +379,9 @@ function applyOpInner(p: Project, op: EditOp): Project {
       if (start < c.start || end > clipEnd(c)) {
         out = { ...c, start, duration: end - start } as Clip;
         if (hasSourceIn(c) && hasSourceIn(out)) out.in = Math.max(0, c.in + (start - c.start) * speedOf(c));
+        // esticou para trás: keyframes acompanham o conteúdo
+        const kfs = (c as { keyframes?: Keyframe[] }).keyframes;
+        if (kfs?.length && start < c.start) (out as { keyframes?: Keyframe[] }).keyframes = kfs.map((k) => ({ ...k, t: k.t + (c.start - start) }));
       } else out = trimClipValue(c, start, end);
       if (!out || out.duration <= EPS) throw new OpError('corte resultaria em clipe vazio');
       const trimmed = out;
@@ -338,9 +396,13 @@ function applyOpInner(p: Project, op: EditOp): Project {
       return {
         ...mapTracks(p, (t) => rippleTrack(t, op.start, op.end)),
         captions: { ...p.captions, segments: rippleCaptions(p.captions.segments, op.start, op.end) },
-        markers: p.markers
-          ?.filter((m) => !(m.t >= op.start && m.t < op.end))
-          .map((m) => (m.t >= op.end ? { ...m, t: m.t - gap } : m)),
+        markers: p.markers?.flatMap((m) => {
+          const shift = (t: Seconds) => (t >= op.end ? t - gap : t > op.start ? op.start : t);
+          if (m.end === undefined) return m.t >= op.start && m.t < op.end ? [] : [{ ...m, t: shift(m.t) }];
+          // trecho: só some se estiver todo dentro do corte; senão encolhe junto
+          if (m.t >= op.start - EPS && m.end <= op.end + EPS) return [];
+          return [{ ...m, t: shift(m.t), end: shift(m.end) }];
+        }),
       };
     }
 

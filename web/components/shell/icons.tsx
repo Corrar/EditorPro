@@ -49,6 +49,7 @@ export const IconCanvas = mk('formats');
 export const IconEdit = mk('edit');
 export const IconMic = mk('mic');
 export const IconTemplates = mk('templates');
+export const IconColor = mk('filters');
 export const IconCopy = mk('copy');
 export const IconPencil = mk('rename');
 export const IconReview = mk('review');

@@ -4,11 +4,15 @@ import { useEffect, useRef, useState } from 'react';
 import { useEditor } from '@/lib/store';
 import { findClip, clipEnd } from '@/lib/ops';
 import { useTimelineUi } from '@/lib/timeline/ui';
-import { ISliders, IAsk, IAudioSplit, IClipboard, ICopy, IDiamond, IEye, IEyeOff, IGauge, ILock, IMute, IRipple, ISnowflake, ISparkle, ISplit, ITrash, IUnlock, IVolume } from './icons';
+import { IClose, ISliders, IAsk, IAudioSplit, IClipboard, ICopy, IDiamond, IEye, IEyeOff, IGauge, ILock, IMute, IRipple, ISnowflake, ISparkle, ISplit, ITrash, IUnlock, IVolume } from './icons';
 import { askAiAboutCaption, askAiAboutClips, copyClips, detachAudio, freezeFrame, pasteClips, removeClips, setSpeed, toggleKeyframe } from '@/lib/timeline/actions';
 import { supportsKeyframes } from '@/lib/timeline/keyframes';
 import { expandGroups } from '@/lib/timeline/edit';
 import { useFloatAt } from '@/lib/timeline/floating';
+import { thumbIndexAt } from '@/lib/timeline/edit';
+import { assetOf } from '@/lib/timeline/clip';
+import type { MonitorFrame } from '@/lib/timeline/trim';
+import { formatTime } from '@/lib/util';
 
 export function LiveBanner() {
   const running = useEditor((s) => s.live.running);
@@ -142,7 +146,7 @@ export function ClipMenu({ actions }: { actions: MenuActions }) {
         <button role="menuitem" disabled={locked || !inside(clipId)} onClick={run(() => freezeFrame(undefined, { clipId }))}><ISnowflake size={14} /> Congelar quadro</button>
       )}
       {supportsKeyframes(c) && (
-        <button role="menuitem" disabled={locked || !inside(clipId)} onClick={run(() => toggleKeyframe([clipId]))}><IDiamond size={14} /> Keyframe no cursor <kbd>K</kbd></button>
+        <button role="menuitem" disabled={locked || !inside(clipId)} onClick={run(() => toggleKeyframe([clipId]))}><IDiamond size={14} /> Keyframe no cursor <kbd>⇧K</kbd></button>
       )}
       <div className="ep-tl-menusep" />
       <button role="menuitem" className="danger" disabled={locked} onClick={run(() => actions.remove(ids, false))}>
@@ -228,6 +232,85 @@ export function TrackPop() {
           </button>
         );
       })}
+    </div>
+  );
+}
+
+/* monitor de trim (estilo 2-up do DaVinci): quadro de saída × quadro de entrada durante ripple/roll/slip/slide */
+const TOOL_NAMES: Record<string, string> = { ripple: 'Ripple', roll: 'Roll', slip: 'Slip', slide: 'Slide' };
+
+function MonitorSide({ frame }: { frame: MonitorFrame | null }) {
+  const thumb = useEditor((s) => {
+    if (!frame) return null;
+    const f = findClip(s.project, frame.clipId);
+    const asset = f ? assetOf(f.clip, s.assets) : undefined;
+    const th = asset?.thumbnails;
+    if (!th?.length) return null;
+    return th[thumbIndexAt(frame.srcT, asset?.duration ?? 0, th.length)] ?? null;
+  });
+  const fps = useEditor((s) => s.project.fps);
+  if (!frame) return <div className="ep-tl-mon-side empty"><span>—</span></div>;
+  return (
+    <div className="ep-tl-mon-side">
+      {thumb ? <img src={thumb} alt="" draggable={false} /> : <i />}
+      <span className="mono">{frame.label} · {formatTime(Math.max(0, frame.srcT), { fps })}</span>
+    </div>
+  );
+}
+
+export function TrimMonitor() {
+  const drag = useTimelineUi((s) => (s.drag?.mode === 'pro' ? s.drag : null));
+  const fps = useEditor((s) => s.project.fps || 30);
+  if (!drag) return null;
+  const frames = Math.round(drag.delta * fps);
+  return (
+    <div className="ep-tl-monitor" role="status" aria-live="polite">
+      <div className="ep-tl-mon-head">
+        <b>{TOOL_NAMES[drag.tool]}</b>
+        <span className="mono">{frames > 0 ? '+' : ''}{frames} quadros · {drag.delta >= 0 ? '+' : '−'}{Math.abs(drag.delta).toFixed(2)}s</span>
+      </div>
+      <div className="ep-tl-mon-frames">
+        <MonitorSide frame={drag.frames[0]} />
+        <MonitorSide frame={drag.frames[1]} />
+      </div>
+    </div>
+  );
+}
+
+/* tela de ajuda de atalhos (?) — estilo DaVinci */
+const SHORTCUTS: { group: string; items: [string, string][] }[] = [
+  { group: 'Ferramentas', items: [['A', 'Seleção'], ['B', 'Lâmina (clique corta)'], ['T', 'Trim: ripple → roll → slip → slide'], ['N', 'Liga/desliga o ímã'], ['Alt + arrastar', 'Só este clipe (J/L-cut)']] },
+  { group: 'Reprodução', items: [['Espaço', 'Reproduzir / pausar'], ['L', 'Para frente (L de novo: 2×, 4×, 8×)'], ['J', 'Para trás (J de novo acelera)'], ['K', 'Parar'], ['← / →', 'Quadro a quadro (Shift = 1 s)'], ['↑ / ↓', 'Corte anterior / próximo'], ['Home / End', 'Início / fim']] },
+  { group: 'Edição', items: [['S · Ctrl+B', 'Dividir no cursor'], ['Ctrl+Shift+B', 'Cortar todas as trilhas'], ['Delete', 'Excluir'], ['Shift+Delete', 'Excluir com ripple'], ['Ctrl+D', 'Duplicar'], ['Ctrl+C / X / V', 'Copiar / recortar / colar'], [', / .', 'Empurrar 1 quadro (Shift = 5)'], ['Ctrl+Alt+L', 'Vincular / desvincular áudio e vídeo'], ['Ctrl+Z / Ctrl+Shift+Z', 'Desfazer / refazer']] },
+  { group: 'Marcação', items: [['I / O', 'Início / fim do trecho'], ['X', 'Trecho = clipe sob o cursor'], ['Alt+X', 'Limpar trecho'], ['M', 'Marcador'], ['C', 'Comentário de revisão'], ['Shift+K', 'Keyframe no cursor']] },
+  { group: 'Visualização', items: [['Shift+Z', 'Ajustar à janela'], ['+ / −', 'Zoom'], ['Ctrl + roda', 'Zoom no ponteiro'], ['?', 'Esta ajuda']] },
+];
+
+export function ShortcutsHelp() {
+  const open = useTimelineUi((s) => s.helpOpen);
+  const setUi = useTimelineUi((s) => s.set);
+  if (!open) return null;
+  const close = () => setUi({ helpOpen: false });
+  return (
+    <div className="ep-tl-help-back" onPointerDown={(e) => { if (e.target === e.currentTarget) close(); }}>
+      <div className="ep-tl-help" role="dialog" aria-modal="true" aria-label="Atalhos do teclado">
+        <div className="ep-tl-help-head">
+          <b>Atalhos do teclado</b>
+          <button className="ep-tl-btn" onClick={close} aria-label="Fechar" autoFocus><IClose /></button>
+        </div>
+        <div className="ep-tl-help-grid">
+          {SHORTCUTS.map((g) => (
+            <section key={g.group}>
+              <h4>{g.group}</h4>
+              <dl>
+                {g.items.map(([k, v]) => (
+                  <div key={k}><dt><kbd>{k}</kbd></dt><dd>{v}</dd></div>
+                ))}
+              </dl>
+            </section>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

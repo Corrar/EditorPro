@@ -7,16 +7,16 @@ import { useEditor } from '@/lib/store';
 import type { Clip } from '@/lib/types';
 import {
   AdjustSection, AnimationSection, BackgroundSection, BlendSection, ChromaSection, CropSection, EditSection, EffectsSection,
-  FilterSection, MaskSection, MotionSection, SpeedSection, VolumeSection,
+  FilterSection, MaskSection, MotionSection, OpacitySection, SpeedSection, VolumeSection,
 } from '@/components/panels/ClipSections';
 import { ShapeStyleSection, StickerSection } from '@/components/panels/StickersTab';
 import { TextEditor } from '@/components/panels/TextTab';
 
-export type SheetKind = 'speed' | 'volume' | 'anim' | 'effects' | 'filters' | 'adjust' | 'motion' | 'mask' | 'chroma' | 'crop' | 'bg' | 'blend' | 'edit' | 'text' | 'style';
+export type SheetKind = 'opacity' | 'speed' | 'volume' | 'anim' | 'effects' | 'filters' | 'adjust' | 'motion' | 'mask' | 'chroma' | 'crop' | 'bg' | 'blend' | 'edit' | 'text' | 'style';
 
 const TITLE: Record<SheetKind, string> = {
-  speed: 'Velocidade', volume: 'Áudio', anim: 'Animações', effects: 'Efeitos', filters: 'Filtros', adjust: 'Ajustes', motion: 'Posição e escala',
-  mask: 'Máscara', chroma: 'Chroma key', crop: 'Recortar', bg: 'Remover fundo', blend: 'Mesclagem', edit: 'Editar', text: 'Texto', style: 'Estilo',
+  opacity: 'Opacidade', speed: 'Velocidade', volume: 'Áudio', anim: 'Animações', effects: 'Efeitos', filters: 'Filtros', adjust: 'Ajustes', motion: 'Transformar',
+  mask: 'Máscara', chroma: 'Chroma key', crop: 'Recortar', bg: 'Remover fundo', blend: 'Composição', edit: 'Editar', text: 'Texto', style: 'Estilo',
 };
 
 export default function ToolSheet({ kind, clip, onClose }: { kind: SheetKind; clip: Clip; onClose: () => void }) {
@@ -38,6 +38,7 @@ export default function ToolSheet({ kind, clip, onClose }: { kind: SheetKind; cl
   const v = clip.type === 'video' ? clip : null;
   const body = (() => {
     switch (kind) {
+      case 'opacity': return clip.type === 'video' || clip.type === 'image' || clip.type === 'sticker' || clip.type === 'shape' ? <OpacitySection clip={clip} /> : null;
       case 'speed': return clip.type === 'video' || clip.type === 'audio' ? <SpeedSection clip={clip} /> : null;
       case 'volume': return clip.type === 'video' || clip.type === 'audio' ? <VolumeSection clip={clip} /> : null;
       case 'anim': return clip.type === 'video' || clip.type === 'image' || clip.type === 'sticker' || clip.type === 'shape' ? <AnimationSection clip={clip} /> : null;

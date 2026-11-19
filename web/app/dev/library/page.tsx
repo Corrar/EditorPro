@@ -13,6 +13,8 @@ import { makeImageClip, makeTextClip } from '@/lib/defaults';
 import { previewScene } from '@/components/library/mini';
 import type { CaptionSegment, MediaAsset } from '@/lib/types';
 import * as lib from '@/lib/library';
+import { renderFrame } from '@/lib/engine';
+import { textCacheStats } from '@/lib/engine/textDraw';
 
 declare global {
   interface Window { __epLib?: Record<string, unknown> }
@@ -57,7 +59,7 @@ export default function LibraryHarness() {
   const playhead = useEditor((s) => s.playhead);
 
   useEffect(() => {
-    window.__epLib = { useEditor, lib, buildDemo };
+    window.__epLib = { useEditor, lib, buildDemo, renderFrame, textCacheStats };
     void buildDemo();
     return on('ep:toast', ({ text }) => { setToast(text); setTimeout(() => setToast(null), 2600); });
   }, []);

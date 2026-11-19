@@ -7,17 +7,18 @@
    - simula a aplicação em sequência (ops posteriores podem usar clipes criados antes)
    Puro: roda no servidor (rota /api/ai/edit) e no cliente (modo demo).
    ===================================================================== */
-import type { CaptionSegment, Clip, Id, Marker, MediaAsset, Project, TextClip, Track, TrackKind } from '../types';
+import type { CaptionSegment, Clip, Filter, Id, Marker, MediaAsset, Project, TextClip, Track, TrackKind } from '../types';
 import { DEFAULT_TRANSFORM } from '../types';
 import { TRACK_NAMES, allWords, applyOp, clipEnd, findClip, projectDuration, trackKindFor, type EditOp, type EditOpKind } from '../ops';
 import { DEFAULT_TEXT_STYLE } from '../defaults';
 import { uid } from '../util';
 import {
-  ASPECTS, COLOR_PRESETS, MARKER_KINDS, SHAPE_KINDS, TEXT_ANIMATIONS, bool, clampNum, color, isObj, num, oneOf, r3,
+  ASPECTS, COLOR_PRESETS, sanitizeColorGrade, MARKER_KINDS, SHAPE_KINDS, TEXT_ANIMATIONS, bool, clampNum, color, isObj, num, oneOf, r3,
   sanitizeAudioExtras, sanitizeCaptionStyle, sanitizeEffects, sanitizeFilters, sanitizeKeyframes, sanitizePosition,
   sanitizeStyleProfile, sanitizeTextStyle, sanitizeTransform, sanitizeTransition, sanitizeTranscript, sanitizeVisualExtras, str,
 } from './sanitize';
 import { assignWordIds } from './features';
+import { COLOR_GRADE_LIVE, gradeToFilters } from './colormatch';
 import { expandLibraryOp, isLibraryMacro, type SfxRequest } from './library';
 
 export const OP_KINDS: EditOpKind[] = [
@@ -95,6 +96,15 @@ function emojiOf(v: unknown): string | undefined {
 }
 
 /** monta um clipe completo e válido a partir de dados parciais da IA */
+/** sem o motor de cor ligado, um colorGrade pedido vira filtros equivalentes */
+function withGrade(filters: Filter[], rawGrade: unknown): Filter[] {
+  if (COLOR_GRADE_LIVE) return filters;
+  const cg = sanitizeColorGrade(rawGrade);
+  if (!cg) return filters;
+  const eq = gradeToFilters(cg);
+  return [...filters.filter((f) => !eq.some((e) => e.kind === f.kind)), ...eq];
+}
+
 function buildClip(raw: Record<string, unknown>, p: Project, assets: Record<Id, MediaAsset>): Clip {
   const type = oneOf(raw.type, CLIP_TYPES) ?? fail('clip.type inválido');
   let id = str(raw.id, 80);
@@ -129,9 +139,10 @@ function buildClip(raw: Record<string, unknown>, p: Project, assets: Record<Id, 
     const duration = r3(clampNum(raw.duration, 0.1, 24 * 3600) ?? 3);
     const cp = oneOf(raw.colorPreset, COLOR_PRESETS);
     const fx = sanitizeEffects(raw.effects);
-    const filters = sanitizeFilters(raw.filters) ?? [];
-    if (!cp && !fx?.length && !filters.length) fail('camada de ajuste vazia');
-    return { id, type, start, duration, filters, ...(cp ? { colorPreset: cp } : {}), ...(fx?.length ? { effects: fx } : {}), ...lbl };
+    const filters = withGrade(sanitizeFilters(raw.filters) ?? [], raw.colorGrade);
+    const cg = COLOR_GRADE_LIVE ? sanitizeColorGrade(raw.colorGrade) ?? undefined : undefined;
+    if (!cp && !fx?.length && !filters.length && !cg) fail('camada de ajuste vazia');
+    return { id, type, start, duration, filters, ...(cp ? { colorPreset: cp } : {}), ...(cg ? { colorGrade: cg } : {}), ...(fx?.length ? { effects: fx } : {}), ...lbl };
   }
 
   if (type === 'shape') {
@@ -220,10 +231,11 @@ function buildClip(raw: Record<string, unknown>, p: Project, assets: Record<Id, 
   return {
     id, type, assetId, start, duration, in: inPt, speed, volume,
     transform: { ...DEFAULT_TRANSFORM, ...(sanitizeTransform(raw.transform) ?? {}) },
-    filters: sanitizeFilters(raw.filters) ?? [],
+    filters: withGrade(sanitizeFilters(raw.filters) ?? [], raw.colorGrade),
     ...(kf?.length ? { keyframes: kf } : {}),
     ...(tr ? { transitionIn: tr } : {}),
     ...(cp ? { colorPreset: cp } : {}),
+    ...(COLOR_GRADE_LIVE && sanitizeColorGrade(raw.colorGrade) ? { colorGrade: sanitizeColorGrade(raw.colorGrade)! } : {}),
     ...(muted !== undefined ? { muted } : {}),
     ...(fadeIn ? { fadeIn } : {}), ...(fadeOut ? { fadeOut } : {}),
     ...sanitizeVisualExtras(raw, duration),
@@ -275,8 +287,19 @@ function buildClipPatch(raw: Record<string, unknown>, clip: Clip, assets: Record
     if (raw.transitionIn === null || ('transitionIn' in raw && raw.transitionIn === undefined)) out.transitionIn = undefined;
     else { const tr = sanitizeTransition(raw.transitionIn, d); if (tr) out.transitionIn = tr; }
   }
-  if (clip.type === 'video' || clip.type === 'adjustment') {
+  if (clip.type === 'video' || clip.type === 'adjustment' || clip.type === 'image') {
     const cp = oneOf(raw.colorPreset, COLOR_PRESETS); if (cp) out.colorPreset = cp;
+    if ('colorGrade' in raw) {
+      const cg = sanitizeColorGrade(raw.colorGrade);
+      if (cg === null) out.colorGrade = undefined;
+      else if (cg && COLOR_GRADE_LIVE) out.colorGrade = cg;
+      else if (cg) {
+        // motor de cor ainda não renderiza colorGrade: vira filtros equivalentes (que já aparecem)
+        const base = (out.filters as Filter[] | undefined) ?? ('filters' in clip ? clip.filters : []) ?? [];
+        const eq = gradeToFilters(cg);
+        out.filters = [...base.filter((f) => !eq.some((e) => e.kind === f.kind)), ...eq];
+      }
+    }
   }
   if (clip.type === 'adjustment') {
     const fl = sanitizeFilters(raw.filters); if (fl) out.filters = fl;
