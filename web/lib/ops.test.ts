@@ -138,7 +138,10 @@ describe('ops — recursos estilo CapCut', () => {
     const right = findClip(p, 'sh2')!.clip as typeof shape;
     expect(left.animationOut).toBeUndefined();
     expect(right.animationOut?.kind).toBe('fade');
-    expect(right.keyframes!.map((k) => k.t)).toEqual([1]);
+    // keyframes deslocados + valores interpolados nas bordas (sem salto no corte)
+    expect(right.keyframes!.map((k) => k.t)).toEqual([0, 1, 2]);
+    expect(right.keyframes![0].transform.scale).toBeCloseTo(0.2 + 0.4 * (2 / 3), 6);
+    expect(left.keyframes!.map((k) => k.t)).toEqual([0, 2]);
   });
 
   it('move_track reordena camadas', () => {

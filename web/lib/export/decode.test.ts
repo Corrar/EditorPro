@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { keyIndexFor, frameIndexAt, editListShift } from './demux';
+import { keyIndexFor, frameIndexAt, editListShift, readPlan } from './demux';
 import { decodeFallbackReason } from './decodePool';
 import { videoBitrate, estimateExportSeconds, SPEED_PROFILE } from './options';
 import type { MediaAsset, VideoClip } from '../types';
@@ -60,5 +60,24 @@ describe('velocidade do export', () => {
     expect(estimateExportSeconds(30, 30, 720, 1280)).toBeLessThan(a);
     expect(estimateExportSeconds(60, 30, 1080, 1920)).toBeGreaterThan(a);
     expect(estimateExportSeconds(30, 30, 1080, 1920, { mobile: true })).toBeGreaterThan(a);
+  });
+});
+
+describe('leitura sob demanda (readPlan)', () => {
+  // vídeo intercalado com áudio: amostras de 100 B a cada 150 B
+  const s = Array.from({ length: 100 }, (_, i) => ({ offset: 1000 + i * 150, size: 100 }));
+  it('janela de até 48 amostras num trecho contíguo', () => {
+    expect(readPlan(s, 0)).toEqual({ from: 0, to: 48, start: 1000, end: 1000 + 47 * 150 + 100 });
+    expect(readPlan(s, 90)).toEqual({ from: 90, to: 100, start: 1000 + 90 * 150, end: 1000 + 99 * 150 + 100 });
+  });
+  it('respeita o limite de bytes (amostra 4K grande) e sempre lê ao menos uma', () => {
+    const big = [{ offset: 0, size: 10 }, { offset: 10, size: 20 << 20 }, { offset: (20 << 20) + 10, size: 10 }];
+    expect(readPlan(big, 0, 48, 16 << 20)).toEqual({ from: 0, to: 1, start: 0, end: 10 });
+    expect(readPlan(big, 1, 48, 16 << 20)).toEqual({ from: 1, to: 2, start: 10, end: (20 << 20) + 10 });
+  });
+  it('para em amostra já carregada e no fim', () => {
+    const m = s.slice(0, 5).map((x, i) => (i === 3 ? { ...x, data: new Uint8Array(1) } : x));
+    expect(readPlan(m, 0)?.to).toBe(3);
+    expect(readPlan(s, 100)).toBeNull();
   });
 });

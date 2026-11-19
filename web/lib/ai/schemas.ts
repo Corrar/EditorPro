@@ -69,7 +69,19 @@ const clipAnim = z.object({ kind: z.enum(CLIP_ANIMATIONS), duration: z.number() 
 const mask = z.object({ shape: z.enum(MASK_SHAPES), x: z.number(), y: z.number(), w: z.number(), h: z.number(), rotation: z.number(), feather: z.number(), invert: z.boolean().optional() });
 
 /** campos de clipe (para add_clip.clip e update_clip.patch) */
+const wheel = z.object({ r: z.number(), g: z.number(), b: z.number(), y: z.number() }).describe('-1..1 por canal; y = luminância');
+const curve = z.array(z.object({ x: z.number(), y: z.number() }));
+const colorGrade = z.object({
+  lift: wheel.optional(), gamma: wheel.optional(), gain: wheel.optional(), offset: wheel.optional(),
+  exposure: z.number().optional(), contrast: z.number().optional(), pivot: z.number().optional(), saturation: z.number().optional(),
+  vibrance: z.number().optional(), temperature: z.number().optional(), tint: z.number().optional(),
+  highlights: z.number().optional(), shadows: z.number().optional(),
+  curves: z.object({ master: curve.optional(), r: curve.optional(), g: curve.optional(), b: curve.optional() }).optional(),
+  mix: z.number().optional(),
+}).describe('correção de cor estilo DaVinci; ajustes -1..1 (0 = neutro)');
+
 const clipFields = {
+  colorGrade: colorGrade.nullable().optional(),
   groupId: z.string().optional().describe('mesmo valor em todos os clipes de um modelo (lower third, CTA…)'),
   // estilo CapCut
   fit: z.enum(FIT_MODES).optional(),

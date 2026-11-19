@@ -36,6 +36,7 @@ export default function PerfHud({ stats, pool, canvas }: { stats: PreviewStats; 
         { k: 'fonte', v: el ? `${el.videoWidth}×${el.videoHeight} · ${proxy ? 'proxy' : 'original'}` : '—' },
         { k: 'codec', v: asset?.mime || '—' },
         { k: 'espera/busca', v: `${pool?.stats.waiting ?? 0} / ${pool?.stats.seeks ?? 0}` },
+        { k: 'erros', v: String(pool?.stats.errors ?? 0), warn: (pool?.stats.errors ?? 0) > 0 },
         { k: 'canvas', v: canvas ? `${canvas.width}×${canvas.height} · ${stats.costEma.toFixed(1)} ms` : '—' },
       ]);
       prev = { at: now, draws: stats.draws, frames, dropped, el };

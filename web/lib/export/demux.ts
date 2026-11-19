@@ -137,8 +137,105 @@ export async function demuxMp4(file: Blob, opts: { audio?: boolean } = {}): Prom
   return { video, audio };
 }
 
+/* ---------- índice sob demanda (export: não carrega o arquivo inteiro na memória) ---------- */
+
+/** amostra só com posição no arquivo; os bytes são lidos sob demanda (Blob.slice) */
+export interface SampleRef {
+  cts: number;
+  dts: number;
+  duration: number;
+  sync: boolean;
+  offset: number;
+  size: number;
+  /** bytes já carregados (índice completo, ex.: fallback do demux em memória) */
+  data?: Uint8Array;
+}
+
+export interface VideoIndex {
+  codec: string;
+  width: number;
+  height: number;
+  duration: number;
+  rotation: 0 | 90 | 180 | 270;
+  description?: Uint8Array;
+  samples: SampleRef[];
+}
+
+function boxDescription(MP4Box: Any, entry: Any): Uint8Array | undefined {
+  const box = entry?.avcC ?? entry?.hvcC ?? entry?.vpcC ?? entry?.av1C;
+  if (!box) return undefined;
+  const ds = new MP4Box.DataStream(undefined, 0, MP4Box.DataStream.BIG_ENDIAN ?? 1);
+  box.write(ds);
+  return new Uint8Array(ds.buffer, 8);
+}
+
+/**
+ * Lê só as caixas de cabeçalho (moov) do MP4/MOV em blocos de 4 MB — pulando o mdat
+ * (celulares gravam o moov no fim) — e devolve a tabela de amostras de vídeo com
+ * offset/tamanho. Arquivo de 500 MB = poucos MB de memória. null se não indexável
+ * (sem moov, MP4 fragmentado sem amostras no moov, sem vídeo).
+ */
+export async function indexMp4Video(file: Blob, chunk = 4 << 20): Promise<VideoIndex | null> {
+  const MP4Box: Any = await import('mp4box');
+  const mp4 = MP4Box.createFile();
+  let info: Any = null;
+  let failed = false;
+  mp4.onReady = (i: Any) => { info = i; };
+  mp4.onError = () => { failed = true; };
+  let pos = 0;
+  let guard = 0;
+  try {
+    while (!info && !failed && pos < file.size && guard++ < 4096) {
+      const end = Math.min(file.size, pos + chunk);
+      const ab = await file.slice(pos, end).arrayBuffer();
+      const buf = MP4Box.MP4BoxBuffer ? MP4Box.MP4BoxBuffer.fromArrayBuffer(ab, pos) : Object.assign(ab, { fileStart: pos });
+      const next = mp4.appendBuffer(buf, end >= file.size);
+      pos = typeof next === 'number' && next > pos ? next : end;
+    }
+    if (!info && !failed) mp4.flush();
+  } catch { return null; }
+  if (!info || failed) return null;
+  const vt = info.videoTracks?.[0];
+  if (!vt) return null;
+  const trak = mp4.getTrackById(vt.id);
+  const raw: Any[] = mp4.getTrackSamplesInfo?.(vt.id) ?? trak?.samples ?? [];
+  if (!raw.length) return null;
+  const entry: Any = trak?.mdia?.minf?.stbl?.stsd?.entries?.[0];
+  const ts: number = vt.timescale;
+  const shift = editListShift(trak?.edts?.elst?.entries, ts, info.timescale);
+  const samples: SampleRef[] = raw.map((x) => ({
+    cts: x.cts / ts + shift, dts: x.dts / ts + shift, duration: x.duration / ts, sync: !!x.is_sync, offset: x.offset, size: x.size,
+  }));
+  if (samples.some((x) => !(x.size > 0) || !(x.offset >= 0) || x.offset + x.size > file.size)) return null;
+  mp4.stop?.();
+  return {
+    codec: String(vt.codec), width: vt.video?.width ?? entry?.width, height: vt.video?.height ?? entry?.height,
+    duration: vt.duration ? vt.duration / ts : 0, rotation: matrixRotation(vt.matrix ?? trak?.tkhd?.matrix),
+    description: boxDescription(MP4Box, entry), samples,
+  };
+}
+
+/**
+ * Plano de leitura sob demanda: a partir da amostra `from`, até `max` amostras cujos bytes caibam
+ * num único trecho contíguo de até `maxBytes` (o vídeo vem intercalado com o áudio no mdat; o trecho
+ * inclui esses bytes, tudo bem). Devolve [início, fim) em índices e o intervalo de bytes.
+ */
+export function readPlan(samples: Pick<SampleRef, 'offset' | 'size' | 'data'>[], from: number, max = 48, maxBytes = 16 << 20): { from: number; to: number; start: number; end: number } | null {
+  if (from >= samples.length) return null;
+  let start = Infinity, end = -Infinity, to = from;
+  for (let i = from; i < samples.length && i - from < max; i++) {
+    const s = samples[i];
+    if (s.data) break; // já carregada (from é sempre uma não carregada)
+    const ns = Math.min(start, s.offset), ne = Math.max(end, s.offset + s.size);
+    if (i > from && ne - ns > maxBytes) break;
+    start = ns; end = ne; to = i + 1;
+  }
+  if (!(end > start)) return null;
+  return { from, to, start, end };
+}
+
 /** config do VideoDecoder p/ a trilha (tenta hardware; null se o navegador não decodifica) */
-export async function decoderConfigFor(v: DemuxVideo): Promise<VideoDecoderConfig | null> {
+export async function decoderConfigFor(v: Pick<DemuxVideo, 'codec' | 'width' | 'height' | 'description'>): Promise<VideoDecoderConfig | null> {
   if (typeof VideoDecoder === 'undefined') return null;
   const cfg: VideoDecoderConfig = { codec: v.codec, codedWidth: v.width, codedHeight: v.height, description: v.description, hardwareAcceleration: 'prefer-hardware' };
   const ok = async (c: VideoDecoderConfig) => (await VideoDecoder.isConfigSupported(c).catch(() => ({ supported: false }))).supported;
