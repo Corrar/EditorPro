@@ -19,6 +19,8 @@ import { useCatalogs } from './catalog';
 import { ColorField, Section, Seg, Slider, Toggle } from './controls';
 import { clearPropKfs, propAnimated, propKfAt, removePropKf, setPropKf, type KfProp } from './kf';
 import { interpolateTransform } from '@/lib/engine/easing';
+import { effectDisplayName } from '@/lib/fx/catalog';
+import { ShaderCode } from './ShaderCode';
 import { pct, secs, signed, useClipPatch } from './hooks';
 import {
   ADJUST_DEFS, AUDIO_EFFECTS, COLOR_PRESETS, SPEED_PRESETS,
@@ -511,7 +513,7 @@ export function EffectsSection({ clip }: { clip: VisualClip | FilterableClip }) 
   return (
     <Section title="Efeitos" onReset={fx.length ? () => patch({ effects: [] }) : undefined}>
       <div className="ep-fxgrid">
-        {effects.map((e) => {
+        {effects.filter((e) => e.id !== 'custom').map((e) => {
           const on = fx.some((x) => x.kind === e.id);
           return (
             <button key={e.id} type="button" className={`ep-fx${on ? ' on' : ''} fx-${e.id}`} onClick={() => toggle(e.id)} aria-pressed={on}>
@@ -522,10 +524,20 @@ export function EffectsSection({ clip }: { clip: VisualClip | FilterableClip }) 
         })}
       </div>
       {fx.map((e, i) => (
-        <div key={e.kind} className="ep-fxctl">
-          <b>{effects.find((v) => v.id === e.kind)?.label ?? e.kind}</b>
+        <div key={`${e.kind}-${i}`} className="ep-fxctl">
+          <b>{e.kind === 'custom' ? effectDisplayName(e) : effects.find((v) => v.id === e.kind)?.label ?? e.kind}</b>
           <Slider label="Intensidade" value={e.intensity} min={0} max={1} onChange={(v, h) => patch({ effects: fx.map((x, j) => (j === i ? { ...x, intensity: v } : x)) }, h)} format={pct} />
           <Slider label="Velocidade" value={e.speed ?? 1} min={0} max={2} onChange={(v, h) => patch({ effects: fx.map((x, j) => (j === i ? { ...x, speed: v } : x)) }, h)} format={(v) => `${v.toFixed(1)}×`} reset={1} />
+          {e.kind === 'custom' && (
+            <>
+              {(e.params ?? []).slice(0, 8).map((pv, k) => (
+                <Slider key={k} label={`Parâmetro ${k + 1}`} value={pv} min={Math.min(0, pv)} max={Math.max(1, pv)} onChange={(v, h) => patch({ effects: fx.map((x, j) => (j === i ? { ...x, params: (x.params ?? []).map((q, m) => (m === k ? v : q)) } : x)) }, h)} format={(v) => v.toFixed(2)} />
+              ))}
+              {e.color && <ColorField label="Cor" value={e.color} onChange={(c) => patch({ effects: fx.map((x, j) => (j === i ? { ...x, color: c } : x)) })} />}
+              <ShaderCode code={e.code ?? ''} stage="effect" />
+              <button type="button" className="ep-btn sec ep-wide" onClick={() => patch({ effects: fx.filter((_, j) => j !== i) })}>Remover efeito</button>
+            </>
+          )}
         </div>
       ))}
     </Section>
