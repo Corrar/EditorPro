@@ -16,6 +16,7 @@ import {
 } from '@/lib/library/animations';
 import { MiniCanvas, drawMini, miniProject } from './mini';
 import { PillRow, Empty } from './shared';
+import { matchesQuery } from '@/lib/library/search';
 
 type Mode = 'text' | 'clip';
 const SLOTS: { id: AnimSlot; label: string }[] = (['in', 'out', 'loop'] as AnimSlot[]).map((id) => ({ id, label: ANIM_SLOT_LABELS[id] }));
@@ -61,8 +62,8 @@ function AnimTile({ name, selected, project, slot, onPick, none }: { name: strin
   );
 }
 
-export default function AnimationPicker({ mode: modeProp, value, onSelect }: {
-  mode?: Mode; value?: Partial<Record<AnimSlot, string>>; onSelect?: (slot: AnimSlot, id: string | null) => void;
+export default function AnimationPicker({ mode: modeProp, value, onSelect, query }: {
+  mode?: Mode; value?: Partial<Record<AnimSlot, string>>; onSelect?: (slot: AnimSlot, id: string | null) => void; query?: string;
 }) {
   const [slot, setSlot] = useState<AnimSlot>('in');
   const selection = useEditor((s) => s.selection);
@@ -91,8 +92,8 @@ export default function AnimationPicker({ mode: modeProp, value, onSelect }: {
     dispatch(targets.map((c): EditOp => clipAnimationOp(c.id, slot, id)));
   };
 
-  const textList = useMemo(() => textAnimationsFor(slot), [slot]);
-  const clipList = useMemo(() => clipAnimationsFor(slot), [slot]);
+  const textList = useMemo(() => textAnimationsFor(slot).filter((a) => a.id === 'none' || matchesQuery(query, [a.name, a.description, TEXT_ANIM_GROUP_LABELS[a.group], 'texto'])), [slot, query]);
+  const clipList = useMemo(() => clipAnimationsFor(slot).filter((a) => matchesQuery(query, [a.name, a.description, CLIP_ANIM_GROUP_LABELS[a.group], 'clipe'])), [slot, query]);
   const previews = useMemo(() => new Map<string, Project>(
     mode === 'text' ? textList.filter((a) => a.id !== 'none').map((a) => [a.id, textPreview(slot, a.id)]) : clipList.map((a) => [a.id, clipPreview(slot, a.id)]),
   ), [mode, slot, textList, clipList]);
@@ -117,6 +118,7 @@ export default function AnimationPicker({ mode: modeProp, value, onSelect }: {
         <AnimTile name="Nenhuma" none selected={current === 'none' || current === null} project={null} slot={slot}
           onPick={() => (mode === 'text' ? pickText('none') : pickClip(null))} />
       </div>
+      {query && !groups.some((x) => x.items.length) && <Empty>Nenhuma animação encontrada para “{query}”.</Empty>}
       {groups.filter((x) => x.items.length).map((x) => (
         <section key={x.g} className="ep-lib-sect">
           <div className="ep-lib-secttl">{x.label}</div>

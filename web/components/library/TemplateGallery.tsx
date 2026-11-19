@@ -17,7 +17,8 @@ import {
 import { ensureFont, nearestWeight } from '@/lib/library/fonts';
 import { MiniCanvas, drawMiniRegion, miniProject, type Region } from './mini';
 import { shapeAspect } from '@/lib/engine/shapes';
-import { PillRow } from './shared';
+import { PillRow, Empty } from './shared';
+import { matchesQuery } from '@/lib/library/search';
 
 const PREVIEW_ASPECT: AspectRatio = '4:5';
 const BRAND_KEY = 'ep-lib-brand';
@@ -113,7 +114,7 @@ function TemplateTile({ def, selected, brand, values, onPick }: {
 
 /* ---------- galeria ---------- */
 
-export default function TemplateGallery({ kind, onInserted }: { kind: TemplateKind; onInserted?: (clipIds: string[]) => void }) {
+export default function TemplateGallery({ kind, onInserted, query }: { kind: TemplateKind; onInserted?: (clipIds: string[]) => void; query?: string }) {
   const all = useMemo(() => templatesOf(kind), [kind]);
   const cats = useMemo(() => {
     const ids = [...new Set(all.map((t) => t.category))];
@@ -154,11 +155,12 @@ export default function TemplateGallery({ kind, onInserted }: { kind: TemplateKi
     onInserted?.(ids);
   };
 
-  const list = all.filter((t) => cat === 'todos' || t.category === cat);
+  const list = all.filter((t) => (cat === 'todos' || t.category === cat) && matchesQuery(query, [t.name, t.description, TEMPLATE_CATEGORY_LABELS[t.category]]));
 
   return (
     <div className="ep-lib ep-lib-templates">
       {cats.length > 2 && <PillRow value={cat} options={cats} onChange={setCat} label="Categorias de modelo" />}
+      {!list.length && <Empty>Nenhum modelo encontrado{query ? ` para “${query}”` : ''}.</Empty>}
       <div className="ep-lib-grid">
         {list.map((d) => (
           <TemplateTile key={d.id} def={d} selected={sel?.id === d.id} brand={brand}
