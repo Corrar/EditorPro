@@ -108,9 +108,9 @@ export class LiveMediaPool implements MediaSources {
     return el;
   }
 
-  private release(id: string, el: AV) {
+  private release(id: string, el: AV, pause = true) {
     this.byClip.delete(id);
-    el.pause();
+    if (pause) el.pause();
     const assetId = el.dataset.asset!;
     const list = this.idle.get(assetId) ?? [];
     list.push(el);
@@ -174,6 +174,15 @@ export class LiveMediaPool implements MediaSources {
     let lead: LeadState | null = null;
     let pending = false;
 
+    // libera ANTES de pegar elementos: depois de um corte (split/ripple) os pedaços ganham ids
+    // novos; o elemento do clipe antigo (já carregado, no quadro certo) volta ao pool livre e é
+    // reaproveitado pelo pedaço novo — em vez de criar um <video> do zero (quadro preto/travada).
+    const wanted = new Set<string>();
+    const usable = (c: Clip) => (c.type === 'video' || c.type === 'audio') && !!assets[c.assetId]?.url && assets[c.assetId]?.kind !== 'image';
+    for (const { clip } of active) if (usable(clip)) wanted.add(clip.id);
+    if (playing) for (const { clip } of prerollPlan(p, t)) if (usable(clip)) wanted.add(clip.id);
+    for (const [id, el] of [...this.byClip]) if (!wanted.has(id)) this.release(id, el, false);
+
     const keep = new Set<string>();
     for (const item of active) {
       const { clip, track } = item;
@@ -191,7 +200,6 @@ export class LiveMediaPool implements MediaSources {
       if (!routed) el.volume = Math.min(1, Math.max(0, gain));
       el.muted = !this.unlocked || gain <= 0.0001;
       const rate = Math.min(16, Math.max(0.0625, clipSpeed(clip, t)));
-      if (clip.type === 'video' && el instanceof HTMLVideoElement && !frameReady(el, target)) pending = true;
       if (playing && reverse) {
         if (!el.paused) el.pause();
         if (!el.seeking && Math.abs(el.currentTime - target) > 0.5 / fps) this.seek(el, target, now);
@@ -215,6 +223,9 @@ export class LiveMediaPool implements MediaSources {
         if (el.playbackRate !== rate) el.playbackRate = rate;
         if (Math.abs(el.currentTime - target) > 0.5 / fps) this.seek(el, target, now);
       }
+      // conferido DEPOIS do play/seek: um seek recém-pedido derruba o readyState na hora;
+      // conferir antes deixava desenhar com o vídeo sem quadro (tela preta após cada corte)
+      if (clip.type === 'video' && el instanceof HTMLVideoElement && !frameReady(el, target)) pending = true;
     }
     // pré-carga: o próximo clipe ganha elemento próprio, pausado no ponto de entrada
     if (playing) {
@@ -241,6 +252,8 @@ export class LiveMediaPool implements MediaSources {
       }
     }
     for (const [id, el] of [...this.byClip]) if (!keep.has(id)) this.release(id, el);
+    // livres que não foram reaproveitados neste passo: pausa (sem pausar/retomar o reaproveitado)
+    for (const list of this.idle.values()) for (const el of list) if (!el.paused) el.pause();
     return { lead, pending };
   }
 
