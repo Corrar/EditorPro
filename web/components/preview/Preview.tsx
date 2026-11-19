@@ -431,7 +431,7 @@ export default function Preview() {
             title="Guias de área segura (TikTok/Reels)" aria-label="Área segura" aria-pressed={safe}>
             <IcSafe size={17} />
           </button>
-          <button className="ep-circle sm ep-pv-c" onClick={() => emit('ep:open-export', {})} title="Exportar" aria-label="Exportar" disabled={empty}><IcExport size={17} /></button>
+          <button className="ep-circle sm ep-pv-c ep-pv-exp" onClick={() => emit('ep:open-export', {})} title="Exportar" aria-label="Exportar" disabled={empty}><IcExport size={17} /></button>
           <button className="ep-circle sm ep-pv-c" onClick={toggleFull} title={fullscreen || cssFull ? 'Sair da tela cheia' : 'Tela cheia'} aria-label="Tela cheia"><IcFull size={17} /></button>
         </div>
       </div>

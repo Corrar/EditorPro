@@ -85,14 +85,16 @@
 .ep-pv-scrub::before { content:''; position:absolute; left:0; right:0; height:6px; border-radius:999px; background:var(--tile); }
 .ep-pv-scrub .fill { position:absolute; left:0; right:0; height:6px; border-radius:999px; background:var(--green); transform-origin:left center; transform:scaleX(0); }
 .ep-pv-tools { flex:none; display:flex; gap:6px; }
-/* pílula estreita: barra vai para uma linha própria em cima */
-@container (max-width: 520px) {
-  .ep-pv-controls { flex-wrap:wrap; }
-}
-@media (max-width: 640px) {
-  .ep-pv-controls { flex-wrap:wrap; border-radius:28px; padding:8px 10px 8px; row-gap:2px; }
-  .ep-pv-scrub { order:-1; flex-basis:100%; height:24px; margin:0 6px; }
-  .ep-pv-tools { margin-left:auto; }
+/* celular (layout empilhado ≤899px): uma linha só e baixa — barra fina em cima, play 44px,
+   tempo, Apontar / Área segura / Tela cheia (Exportar e "voltar ao início" saem: já estão no topo / na barra) */
+@media (max-width: 899px) {
+  .ep-pv-controls { position:relative; flex-wrap:nowrap; width:100%; gap:6px; border-radius:22px; padding:10px 8px 6px 8px; }
+  .ep-pv-scrub { position:absolute; left:18px; right:18px; top:-6px; height:18px; min-width:0; flex:none; margin:0; }
+  .ep-pv-scrub::before, .ep-pv-scrub .fill { height:3px; }
+  .ep-pv-play { width:44px; height:44px; box-shadow:0 6px 16px rgba(242,104,31,.32); }
+  .ep-pv-rew, .ep-pv-exp { display:none; }
+  .ep-pv-tools { margin-left:auto; gap:4px; }
+  .ep-pv-time { font-size:12.5px; }
 }
 
 /* "apontar para qualquer coisa" */
@@ -109,8 +111,6 @@
   .ep-pv { padding:8px 10px; gap:8px; }
   .ep-pv-box { padding:8px; border-radius:18px; }
   .ep-pv-empty p { display:none; }
-  .ep-pv-controls { flex-wrap:nowrap; border-radius:999px; padding:4px 6px; }
-  .ep-pv-scrub { order:0; flex-basis:auto; }
   .ep-pv-play { width:44px; height:44px; }
 }
 @media (max-width: 700px) {
@@ -118,9 +118,8 @@
   .ep-pv-box { padding:10px; border-radius:20px; }
   .ep-pv-live .txt { display:none; }
 }
-@media (max-width: 480px) {
-  .ep-pv-rew, .ep-pv-time .tot, .ep-pv-time i { display:none; }
-  .ep-pv-tools { gap:4px; }
+@media (max-width: 380px) {
+  .ep-pv-time .tot, .ep-pv-time i { display:none; }
 }
 @media (pointer: coarse) {
   .ep-pv-controls .ep-circle.sm { width:44px; height:44px; }
