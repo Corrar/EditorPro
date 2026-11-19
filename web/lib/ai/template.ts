@@ -122,6 +122,8 @@ export interface MotionSpec {
   direction: 'in' | 'out' | 'alternate';
   /** só modo punch: pancadas por tomada (0..1 = fração das tomadas) */
   punchFrequency?: number;
+  /** só modo punch: intervalo médio entre pancadas DENTRO de uma tomada (s), medido no modelo */
+  punchEvery?: number;
 }
 
 /** movimento a usar: o MEDIDO no modelo; sem medição, aproximação lenta suave (padrão) */
@@ -129,7 +131,10 @@ export function motionSpecOf(style?: StyleProfile, wantsPunch = false): MotionSp
   if (wantsPunch) return { mode: 'punch', zoom: 1.12, easing: 'easeOut', direction: 'alternate', punchFrequency: 1 };
   const tm = style?.template?.motion;
   if (tm) {
+    const punches = tm.perShot.reduce((n, s) => n + s.punches, 0);
+    const span = tm.perShot.filter((s) => s.punches > 0).reduce((n, s) => n + (s.end - s.start), 0);
     return {
+      ...(punches > 1 && span > 0 ? { punchEvery: Math.max(0.5, span / punches) } : {}),
       mode: tm.mode,
       zoom: tm.avgZoomPerShot,
       easing: tm.easing === 'linear' ? 'easeInOut' : tm.easing,
@@ -170,6 +175,16 @@ export function motionKeyframes(dur: Seconds, spec: MotionSpec, i: number): Keyf
     // pancada em ~freq das tomadas (determinístico pelo índice)
     if (Math.floor((i + 1) * freq) === Math.floor(i * freq)) return [{ t: 0, transform: { scale: 1 } }];
     const z = Math.max(1.12, Math.min(1.25, spec.zoom > 1.1 ? spec.zoom : 1.12));
+    // várias pancadas por tomada (como no modelo): alterna 1 ↔ z a cada `punchEvery` s, rampa de 0,18 s
+    if (spec.punchEvery && dur >= spec.punchEvery * 1.5) {
+      const kf: Keyframe[] = [{ t: 0, transform: { scale: 1 } }];
+      for (let a = 0.05, k = 0; a < dur - 0.3; a += spec.punchEvery, k++) {
+        const from = k % 2 === 0 ? 1 : z, to = k % 2 === 0 ? z : 1;
+        if (a > 0.05) kf.push({ t: r3(a), transform: { scale: from } });
+        kf.push({ t: r3(Math.min(dur, a + 0.18)), transform: { scale: to }, easing: 'easeOut' });
+      }
+      return kf;
+    }
     const hit = r3(Math.min(0.18, dur / 3));
     const kf: Keyframe[] = [{ t: 0, transform: { scale: 1 } }, { t: hit, transform: { scale: z }, easing: 'easeOut' }];
     if (dur > 1.2) kf.push({ t: r3(Math.max(hit + 0.1, dur - 0.6)), transform: { scale: z } }, { t: end, transform: { scale: 1 }, easing: 'easeInOut' });
@@ -281,7 +296,7 @@ export function templateOps(p: Project, style: StyleProfile, opts: { wantsPunch?
     const lens = templateLengths(style);
     const splits = rhythmSplitOps(sim, lens, MAX_TEMPLATE_CUTS);
     const med = lens.length ? [...lens].sort((a, b) => a - b)[Math.floor(lens.length / 2)] : 0;
-    push(splits, splits.length ? `${splits.length} cortes no ritmo do modelo (tomadas de ~${med.toFixed(1).replace('.', ',')} s, nos respiros da fala)` : undefined);
+    push(splits, splits.length ? `${splits.length} corte${splits.length > 1 ? "s" : ""} no ritmo do modelo (tomadas de ~${med.toFixed(1).replace('.', ',')} s, nos respiros da fala)` : undefined);
   }
   if (opts.motion !== false) {
     const spec = motionSpecOf(style, opts.wantsPunch);

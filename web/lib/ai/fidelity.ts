@@ -88,6 +88,18 @@ export function clipMotion(c: VideoClip): { zoomTotal: number; peakOverMean: num
   return { zoomTotal: prev / first, peakOverMean: mean > 1e-6 ? Math.max(...v) / mean : 1, px: edgePxPerFrame(c.keyframes as Keyframe[], c.duration) };
 }
 
+/** quantas rampas de escala bruscas (>8 px/quadro) o clipe tem */
+export function punchCount(c: VideoClip): number {
+  const kf = (c.keyframes ?? []).filter((k) => typeof k.transform.scale === 'number').sort((a, b) => a.t - b.t);
+  let n = 0;
+  for (let i = 1; i < kf.length; i++) {
+    const ds = Math.abs((kf[i].transform.scale ?? 1) - (kf[i - 1].transform.scale ?? 1));
+    const dt = kf[i].t - kf[i - 1].t;
+    if (ds > 0.05 && dt > 0 && (540 * ds * 3) / (30 * dt) > 8) n++;
+  }
+  return n;
+}
+
 /* ---------- fidelidade ---------- */
 
 /**
@@ -120,22 +132,29 @@ export function fidelityOf(p: Project, style: StyleProfile, resultColor?: { r: n
   const spec = motionSpecOf(style);
   const ms = clips.map(clipMotion);
   const moving = ms.filter((m) => Math.abs(Math.log(m.zoomTotal)) > 0.01);
+  const refMag = Math.abs(Math.log(t.motion.avgZoomPerShot)) || 0.06;
   if (spec.mode === 'static' || spec.mode === 'handheld') {
     scores.movimento = r2(1 - moving.length / clips.length);
     if (scores.movimento < FIDELITY_MIN) deltas.movimento = `o modelo tem câmera parada e ${moving.length} tomada(s) ganharam zoom`;
+  } else if (spec.mode === 'punch') {
+    // pancadas por segundo no resultado × no modelo (pancada = rampa de escala >8 px/quadro)
+    const refRate = t.motion.perShot.reduce((a, x) => a + x.punches, 0) / Math.max(1, refTotal);
+    const hits = clips.reduce((a, c) => a + punchCount(c), 0);
+    const rate = hits / Math.max(1, total);
+    const rateScore = refRate > 0 ? ratioScore(Math.max(1e-3, rate), refRate) : hits ? 1 : 0;
+    const peak = Math.max(1, ...clips.flatMap((c) => (c.keyframes ?? []).map((k) => k.transform.scale ?? 1)));
+    const magS = clamp01(1 - Math.abs(Math.log(Math.log(Math.max(1.001, peak)) / Math.max(0.05, refMag))) / Math.log(3));
+    scores.movimento = r2(0.7 * rateScore + 0.3 * magS);
+    if (scores.movimento < FIDELITY_MIN) deltas.movimento = `${fmt(rate * 10)} pancadas por 10 s (modelo: ${fmt(refRate * 10)}), zoom máx. ${pct(peak - 1)}`;
   } else {
     const share = moving.length / clips.length;
-    const refMag = Math.abs(Math.log(t.motion.avgZoomPerShot)) || 0.06;
     const mag = median(moving.map((m) => Math.abs(Math.log(m.zoomTotal))));
     const magScore = moving.length ? clamp01(1 - Math.abs(Math.log(Math.max(1e-3, mag) / refMag)) / Math.log(3)) : 0;
-    const punch = spec.mode === 'punch';
-    // suave: pico/média baixo e ≤8 px/quadro; pancada: precisa ter pico
-    const smoothScore = punch
-      ? clamp01(ms.filter((m) => m.px > 8).length / Math.max(1, Math.round(clips.length * (t.motion.punchFrequency ?? 1))))
-      : moving.length ? moving.filter((m) => m.px <= 8.5).length / moving.length : 0;
+    // suave: ≤8 px/quadro (folga de meio px)
+    const smoothScore = moving.length ? moving.filter((m) => m.px <= 8.5).length / moving.length : 0;
     scores.movimento = r2(0.35 * share + 0.35 * magScore + 0.3 * smoothScore);
     if (scores.movimento < FIDELITY_MIN) {
-      deltas.movimento = `${moving.length}/${clips.length} tomadas com movimento, zoom típico ${pct(Math.exp(mag) - 1)} (modelo: ${pct(t.motion.avgZoomPerShot - 1)}), ${punch ? 'faltou pancada' : `${ms.filter((m) => m.px > 8.5).length} tomada(s) bruscas (>8 px/quadro)`}`;
+      deltas.movimento = `${moving.length}/${clips.length} tomadas com movimento, zoom típico ${pct(Math.exp(mag) - 1)} (modelo: ${pct(t.motion.avgZoomPerShot - 1)}), ${ms.filter((m) => m.px > 8.5).length} tomada(s) bruscas (>8 px/quadro)`;
     }
   }
 
