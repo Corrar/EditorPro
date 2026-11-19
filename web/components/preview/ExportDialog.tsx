@@ -120,111 +120,113 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
   const cancel = () => abortRef.current?.abort();
   const close = () => { if (phase === 'running') return; onClose(); };
 
+  const busy = phase === 'running';
+  const fmtLabel = format === 'mp4' ? 'H.264 · MP4' : 'VP9 · WebM';
+
   return (
     <div className="ep-modal-bg ep-ex-bg" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
-      <div className="ep-modal ep-ex" role="dialog" aria-modal="true" aria-labelledby="ep-ex-title">
-        <div className="ep-modal-top">
-          <div>
-            <div className="ep-title" id="ep-ex-title">Exportar vídeo</div>
-            <div className="ep-cardsub">{project.name} · {formatTime(duration, { decimals: true })} · {project.fps} fps</div>
+      <div className="ep-sheet2 ep-ex" role="dialog" aria-modal="true" aria-labelledby="ep-ex-title">
+        <div className="ep-sheet2-head">
+          <div className="ep-ex-title">
+            <b id="ep-ex-title">Exportar</b>
+            <span>{project.name} · {formatTime(duration, { decimals: true })}</span>
           </div>
-          <button className="ep-iconbtn sm" onClick={close} aria-label="Fechar" disabled={phase === 'running'}><IcClose size={16} /></button>
+          <button className="ep-circle" onClick={close} aria-label="Fechar" disabled={busy}><IcClose size={18} /></button>
         </div>
 
         <div className="ep-ex-sect">
-          <span className="ep-label">Formato</span>
-          <div className="ep-seg">
-            <button className={format === 'mp4' ? 'on' : ''} onClick={() => setFormat('mp4')} disabled={phase === 'running'}>MP4</button>
-            <button className={format === 'webm' ? 'on' : ''} onClick={() => setFormat('webm')} disabled={phase === 'running'}>WebM</button>
-          </div>
-        </div>
-        <div className="ep-ex-sect">
-          <span className="ep-label">Qualidade</span>
-          <div className="ep-ex-q">
-            {QUALITIES.map((q) => (
-              <button key={q.id} className={`ep-ex-qbtn${quality === q.id ? ' on' : ''}`} onClick={() => setQuality(q.id)} disabled={phase === 'running'}>
-                <b>{q.label}</b><span>{q.hint}</span>
-              </button>
+          <span className="ep-ex-h">Formato</span>
+          <div className="ep-ex-seg" role="radiogroup" aria-label="Formato">
+            {(['mp4', 'webm'] as const).map((f) => (
+              <button key={f} role="radio" aria-checked={format === f} className={format === f ? 'on' : ''} onClick={() => setFormat(f)} disabled={busy}>{f === 'mp4' ? 'MP4' : 'WebM'}</button>
             ))}
           </div>
-          <div className="ep-ex-info mono">{size.width}×{size.height} · {fps} fps · {format === 'mp4' ? 'H.264 · MP4' : 'VP9 · WebM'}</div>
         </div>
+
+        <span className="ep-ex-h">Qualidade</span>
+        <div className="ep-tiles ep-ex-tiles" role="radiogroup" aria-label="Qualidade">
+          {QUALITIES.map((q) => (
+            <button key={q.id} role="radio" aria-checked={quality === q.id} className={`ep-tile${quality === q.id ? ' on' : ''}`} onClick={() => setQuality(q.id)} disabled={busy}>
+              <span className="ep-ex-res mono">{q.hint}</span>
+              <span className="lb">{q.label}</span>
+            </button>
+          ))}
+        </div>
+
         <div className="ep-ex-sect">
-          <span className="ep-label">Quadros por segundo</span>
-          <div className="ep-seg">
+          <span className="ep-ex-h">Quadros por segundo</span>
+          <div className="ep-ex-seg" role="radiogroup" aria-label="Quadros por segundo">
             {FPS.map((f) => (
-              <button key={f} className={fps === f ? 'on' : ''} onClick={() => setFps(f)} disabled={phase === 'running'}>{f}</button>
+              <button key={f} role="radio" aria-checked={fps === f} className={fps === f ? 'on' : ''} onClick={() => setFps(f)} disabled={busy}>{f}</button>
             ))}
           </div>
         </div>
+        <div className="ep-ex-info mono">{size.width}×{size.height} · {fps} fps · {fmtLabel}</div>
+
         {path?.path === 'mediarecorder' && (
-          <div className="ep-ex-warn">Modo compatível: o vídeo é gravado em tempo real ({formatTime(duration)}) e sai em {path.container?.toUpperCase()}. Mantenha esta aba aberta até terminar. Para exportar mais rápido, use Chrome ou Edge.</div>
+          <div className="ep-ex-note">Modo compatível: o vídeo é gravado em tempo real ({formatTime(duration)}) e sai em {path.container?.toUpperCase()}. Deixe esta aba aberta até terminar.</div>
         )}
         {path?.path === 'none' && (
-          <div className="ep-ex-err">Este navegador não consegue gerar vídeo. Use Chrome, Edge, Safari 16.4+ ou Firefox atualizados, ou leve o projeto para outro editor pelos botões abaixo.</div>
+          <div className="ep-ex-note err">Este navegador não consegue gerar vídeo. Use Chrome, Edge, Safari 16.4+ ou Firefox atualizados, ou leve o projeto para outro editor abaixo.</div>
         )}
         {smallDevice && (quality === 'fhd' || quality === '4k') && (
-          <div className="ep-ex-warn">Em celular, 1080p/4K podem ficar sem memória e travar. Recomendado: HD 720p.</div>
+          <div className="ep-ex-note">No celular, 1080p/4K podem ficar sem memória. Recomendado: HD 720p.</div>
         )}
         {!smallDevice && quality === '4k' && (
-          <div className="ep-ex-warn">4K é pesado: pode demorar bastante. Se o aparelho não aguentar, a resolução cai automaticamente.</div>
+          <div className="ep-ex-note">4K é pesado e pode demorar. Se o aparelho não aguentar, a resolução cai sozinha.</div>
         )}
 
-        {phase === 'running' && (
+        {busy && (
           <div className="ep-ex-prog" aria-live="polite">
-            <div className="bar"><div className="fill" style={{ width: `${(progress * 100).toFixed(1)}%` }} /></div>
             <div className="row"><span>{stage || 'Preparando…'}</span><b className="mono">{Math.round(progress * 100)}%</b></div>
+            <div className="bar"><div className="fill" style={{ width: `${(progress * 100).toFixed(1)}%` }} /></div>
           </div>
         )}
-        {phase === 'error' && <div className="ep-ex-err">Não deu para exportar: {error}</div>}
+        {phase === 'error' && <div className="ep-ex-note err">Não deu para exportar: {error}</div>}
         {phase === 'done' && result && (
           <div className="ep-ex-done">
-            <div className="ok">✓</div>
+            <div className="ok" aria-hidden="true">✓</div>
             <div className="meta">
               <b>{result.name}</b>
               <span>{fmtSize(result.size)} · {result.type.toUpperCase()} · pronto em {result.secs.toFixed(1)} s
-                {job === 'video' && format === 'mp4' && result.type !== 'mp4' ? ' · (MP4 indisponível neste navegador, salvo em WebM)' : ''}</span>
+                {job === 'video' && format === 'mp4' && result.type !== 'mp4' ? ' · MP4 indisponível aqui, salvo em WebM' : ''}</span>
             </div>
             <div className="ep-ex-dlrow">
               {canShareFiles() && (
-                <button className="ep-btn sec ep-ex-dl" onClick={() => shareFile(result.blob, result.name)}>Compartilhar</button>
+                <button className="ep-ex-pill" onClick={() => shareFile(result.blob, result.name)}>Compartilhar</button>
               )}
-              <a className="ep-btn primary ep-ex-dl" href={result.url} download={result.name} target="_blank" rel="noopener"><IcDownload size={15} /> Baixar</a>
+              <a className="ep-ex-pill accent" href={result.url} download={result.name} target="_blank" rel="noopener"><IcDownload size={16} /> Baixar</a>
             </div>
           </div>
         )}
 
-        <div className="ep-ex-actions">
-          {phase === 'running' ? (
-            <button className="ep-btn danger" onClick={cancel}>Cancelar</button>
-          ) : (
-            <button className="ep-btn primary" onClick={start} disabled={duration <= 0 || path?.path === 'none'}>
-              <IcExport size={15} /> {phase === 'done' ? 'Exportar de novo' : 'Exportar vídeo'}
-            </button>
-          )}
-        </div>
+        {busy ? (
+          <button className="ep-ex-cta cancel" onClick={cancel}>Cancelar exportação</button>
+        ) : (
+          <button className="ep-cta accent ep-ex-cta" onClick={start} disabled={duration <= 0 || path?.path === 'none'}>
+            <IcExport size={20} /> {phase === 'done' ? 'Exportar de novo' : 'Exportar vídeo'}
+          </button>
+        )}
 
-        <div className="ep-ex-sep"><span>Outros formatos</span></div>
-        <div className="ep-ex-links">
-          <div className="ep-ex-pair">
-            <button className="ep-ex-link" disabled={duration <= 0 || phase === 'running'} onClick={() => startAudio('wav')}>
-              <IcAudio size={18} /><span><b>Só áudio (.wav)</b><i>Sem perdas</i></span>
-            </button>
-            <button className="ep-ex-link" disabled={duration <= 0 || phase === 'running' || !m4a} onClick={() => startAudio('m4a')}>
-              <IcAudio size={18} /><span><b>Só áudio (.m4a)</b><i>{m4a ? 'AAC, menor' : 'Indisponível neste navegador'}</i></span>
-            </button>
-          </div>
-          <button className="ep-ex-link" disabled={duration <= 0 || frameBusy} onClick={saveFrame}>
-            <IcImage size={18} /><span><b>{frameBusy ? 'Gerando imagem…' : 'Quadro atual (.png)'}</b><i>Capa/miniatura a partir da posição do cursor</i></span>
+        <span className="ep-ex-h sep">Outros formatos</span>
+        <div className="ep-rows">
+          <button className="ep-row" disabled={duration <= 0 || busy} onClick={() => startAudio('wav')}>
+            <span className="ep-ex-rowtxt"><b>Só áudio (.wav)</b><span className="meta">Sem perdas</span></span><IcAudio size={20} />
           </button>
-          <button className="ep-ex-link" disabled={!cues} onClick={() => downloadBlob(toSRT(project), safeFileName(project.name, 'srt'), 'application/x-subrip;charset=utf-8')}>
-            <IcCaption size={18} /><span><b>Baixar legendas (.srt)</b><i>{cues ? `${cues} blocos · YouTube, CapCut, Premiere` : 'Sem legendas no projeto'}</i></span>
+          <button className="ep-row" disabled={duration <= 0 || busy || !m4a} onClick={() => startAudio('m4a')}>
+            <span className="ep-ex-rowtxt"><b>Só áudio (.m4a)</b><span className="meta">{m4a ? 'AAC, arquivo menor' : 'Indisponível neste navegador'}</span></span><IcAudio size={20} />
           </button>
-          <button className="ep-ex-link" disabled={!cues} onClick={() => downloadBlob(toVTT(project), safeFileName(project.name, 'vtt'), 'text/vtt;charset=utf-8')}>
-            <IcCaption size={18} /><span><b>Legendas web (.vtt)</b><i>Para players HTML5</i></span>
+          <button className="ep-row" disabled={duration <= 0 || frameBusy} onClick={saveFrame}>
+            <span className="ep-ex-rowtxt"><b>{frameBusy ? 'Gerando imagem…' : 'Quadro atual (.png)'}</b><span className="meta">Capa ou miniatura da posição do cursor</span></span><IcImage size={20} />
           </button>
-          <button className="ep-ex-link" disabled={duration <= 0} onClick={() => downloadBlob(toFCPXML(project, assets), safeFileName(project.name, 'fcpxml'), 'application/xml;charset=utf-8')}>
-            <IcProject size={18} /><span><b>Projeto para DaVinci/Final Cut (.fcpxml)</b><i>Cortes, textos e legendas; reconecte os arquivos de mídia ao abrir</i></span>
+          <button className="ep-row" disabled={!cues} onClick={() => downloadBlob(toSRT(project), safeFileName(project.name, 'srt'), 'application/x-subrip;charset=utf-8')}>
+            <span className="ep-ex-rowtxt"><b>Legendas (.srt)</b><span className="meta">{cues ? `${cues} blocos · YouTube, CapCut, Premiere` : 'Sem legendas no projeto'}</span></span><IcCaption size={20} />
+          </button>
+          <button className="ep-row" disabled={!cues} onClick={() => downloadBlob(toVTT(project), safeFileName(project.name, 'vtt'), 'text/vtt;charset=utf-8')}>
+            <span className="ep-ex-rowtxt"><b>Legendas web (.vtt)</b><span className="meta">Para players HTML5</span></span><IcCaption size={20} />
+          </button>
+          <button className="ep-row" disabled={duration <= 0} onClick={() => downloadBlob(toFCPXML(project, assets), safeFileName(project.name, 'fcpxml'), 'application/xml;charset=utf-8')}>
+            <span className="ep-ex-rowtxt"><b>DaVinci / Final Cut (.fcpxml)</b><span className="meta">Cortes, textos e legendas; reconecte a mídia ao abrir</span></span><IcProject size={20} />
           </button>
         </div>
       </div>
