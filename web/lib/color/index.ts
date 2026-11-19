@@ -37,11 +37,18 @@ export function resolvedFor(g: ColorGrade): ResolvedGrade {
   let r = resolved.get(g);
   // LUT que ainda não tinha carregado: resolve de novo
   if (!r || (g.lut && !r.lut && getLut(g.lut.id))) {
-    r = resolveGrade(g, getLut);
+    // grade animada (Keyframe.props) gera um objeto novo por quadro: reaproveita pelo VALOR
+    const key = JSON.stringify(g);
+    const hit = byValue.get(key);
+    r = hit && !(g.lut && !hit.lut && getLut(g.lut.id)) ? hit : resolveGrade(g, getLut);
     resolved.set(g, r);
+    byValue.delete(key);
+    byValue.set(key, r);
+    if (byValue.size > 48) byValue.delete(byValue.keys().next().value as string);
   }
   return r;
 }
+const byValue = new Map<string, ResolvedGrade>();
 
 /** precisa passar pelo canvas (não dá para o preview nativo só com CSS)? */
 export function gradeNeedsCanvas(g?: ColorGrade | null): boolean {

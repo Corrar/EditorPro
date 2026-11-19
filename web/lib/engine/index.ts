@@ -70,7 +70,8 @@ export function renderFrame(ctx: CanvasRenderingContext2D, project: Project, t: 
         const { c: to, ctx: tc } = scratch(ctx.canvas, W, H, 22);
         tc.drawImage(base as CanvasImageSource, 0, 0);
         drawLayer(tc, plain(inL), t, elFor(inL.clip), W, H, { offline: media.offline });
-        const mixed = runShaderTransition(inL.transition!.kind as never, from as TexImageSource, to as TexImageSource, inL.transition!.progress, W, H);
+        const mixed = runShaderTransition(inL.transition!.kind as never, from as TexImageSource, to as TexImageSource, inL.transition!.progress, W, H,
+          'transitionIn' in inL.clip ? inL.clip.transitionIn : undefined); // (fx) código da transição 'custom'
         ctx.drawImage((mixed ?? to) as CanvasImageSource, 0, 0);
         for (const l of layers) if (l !== inL && l !== outL) drawLayer(ctx, l, t, elFor(l.clip), W, H, { offline: media.offline });
       } else {

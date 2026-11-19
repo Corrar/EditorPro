@@ -10,6 +10,7 @@ import { FX_EFFECT_LABELS } from '../fx/catalog';
 import { addFxGeometry, isGeometryEffect } from '../fx/geometry';
 import { paint2DEffect, type FxOpts } from '../fx/effects2d';
 import { applyGLEffect } from '../fx/effectsGL';
+import { applyCustomEffect } from '../fx/customRender';
 
 /** rótulos PT-BR (derivados do catálogo único em lib/fx/catalog.ts) */
 export const EFFECT_LABELS: Record<VisualEffectKind, string> = FX_EFFECT_LABELS;
@@ -353,6 +354,7 @@ export function applySurfaceEffects(ctx: Ctx, W: number, H: number, effects: Vis
         ctx.fillRect(0, H - bh, W, bh);
         break;
       }
+      case 'custom': applyCustomEffect(ctx, W, H, e, t, opts); break; // shader da IA (falha = passagem direta)
       default:
         if (!paint2DEffect(ctx, W, H, e, t, opts)) applyGLEffect(ctx, W, H, e, t);
         break;
