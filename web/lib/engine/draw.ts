@@ -30,6 +30,8 @@ import type { MediaElement } from './index';
 export type { Ctx } from './surface';
 
 export function mediaSize(el: MediaElement | AnyCanvas): { w: number; h: number } | null {
+  // quadro decodificado pelo WebCodecs (export rápido)
+  if (typeof VideoFrame !== 'undefined' && el instanceof VideoFrame) return el.displayWidth ? { w: el.displayWidth, h: el.displayHeight } : null;
   if (typeof HTMLVideoElement !== 'undefined' && el instanceof HTMLVideoElement) {
     if (el.readyState < 2 || !el.videoWidth) return null;
     return { w: el.videoWidth, h: el.videoHeight };

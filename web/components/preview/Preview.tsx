@@ -12,6 +12,8 @@ import { emit, on } from '@/lib/events';
 import { formatTime } from '@/lib/util';
 import { LiveMediaPool } from './livePool';
 import { PlaybackClock, QualityGovernor, frameInterval } from './syncPolicy';
+import { nativePlan } from './hybrid';
+import PerfHud, { type PreviewStats } from './PerfHud';
 import ExportDialog from './ExportDialog';
 import Icon from '@/components/ui/Icon';
 
@@ -21,7 +23,12 @@ const PREVIEW_MAX_SHORT_WEAK = 540;
 const PREVIEW_MIN_SHORT = 360;
 
 /** métricas do preview (lidas pelos testes de desempenho em window.__epPreviewStats) */
-const STATS = { draws: 0, held: 0, costEma: 0, quality: 1, width: 0 };
+const STATS: PreviewStats = { draws: 0, held: 0, costEma: 0, quality: 1, width: 0, mode: 'canvas', reason: '' };
+
+/** modo nativo ligado? (localStorage ep:pv-native = '0' força a composição total, p/ comparar) */
+function nativeAllowed(): boolean {
+  try { return localStorage.getItem('ep:pv-native') !== '0'; } catch { return true; }
+}
 
 /** aparelho modesto (poucos núcleos / pouca memória): resolução interna menor */
 function isWeakDevice(): boolean {
@@ -64,7 +71,13 @@ export default function Preview() {
   const pendingRef = useRef(0);
 
   const [fit, setFit] = useState({ w: 0, h: 0 });
+  const fitRef = useRef(fit);
+  fitRef.current = fit;
   const [safe, setSafe] = useState(false);
+  /* "Mostrar desempenho" (lembrado no aparelho) */
+  const [perf, setPerfState] = useState(false);
+  useEffect(() => { try { setPerfState(localStorage.getItem('ep:pv-perf') === '1'); } catch { /* sem storage */ } }, []);
+  const setPerf = (v: boolean) => { setPerfState(v); try { localStorage.setItem('ep:pv-perf', v ? '1' : '0'); } catch { /* sem storage */ } };
   const [exportOpen, setExportOpen] = useState(false);
   /** valores iniciais vindos do shell (pílula "1080p ▾" do celular) */
   const [exportInit, setExportInit] = useState<{ quality?: 'draft' | 'hd' | 'fhd' | '4k' | 'full'; fps?: number }>({});
@@ -114,7 +127,7 @@ export default function Preview() {
     }
     cv.width = w;
     cv.height = h;
-    if (keep) cv.getContext('2d', { alpha: false })?.drawImage(keep, 0, 0, w, h);
+    if (keep) cv.getContext('2d')?.drawImage(keep, 0, 0, w, h);
     return true;
   }, []);
 
@@ -125,21 +138,28 @@ export default function Preview() {
   }, []);
 
   /* ---------- desenho ---------- */
-  const draw = useCallback((t: number) => {
+  /** desenha o quadro t; false = vídeo nativo ainda sem quadro (mantém o que está na tela) */
+  const draw = useCallback((t: number): boolean => {
     const cv = canvasRef.current;
     const pool = poolRef.current;
-    if (!cv || !pool) return;
+    if (!cv || !pool) return true;
+    const st = useEditor.getState();
+    // modo híbrido: <video> nativo como base + canvas transparente por cima (ou composição total)
+    const plan = nativeAllowed() ? nativePlan(st.project, t) : ({ native: false, reason: 'desligado' } as const);
+    const { w: fw, h: fh } = fitRef.current;
+    if (!pool.present(plan, t, fw, fh)) return false;
     // troca de qualidade pendente: redimensiona e desenha no MESMO quadro
     if (wantQRef.current !== qualityRef.current) { qualityRef.current = wantQRef.current; applySize(); }
-    const ctx = cv.getContext('2d', { alpha: false });
-    if (!ctx) return;
-    const st = useEditor.getState();
+    const ctx = cv.getContext('2d');
+    if (!ctx) return true;
     const t0 = performance.now();
     try {
-      renderFrame(ctx, st.project, t, pool);
+      renderFrame(ctx, st.project, t, pool, plan.native ? { overlayOnly: { skipTrackId: plan.track.id } } : {});
     } catch (e) {
       console.error('[preview] falha ao desenhar', e);
     }
+    STATS.mode = plan.native ? 'nativo' : 'canvas';
+    STATS.reason = plan.native ? '' : plan.reason;
     // qualidade adaptativa (só na reprodução), em degraus com histerese — não fica alternando
     const cost = performance.now() - t0;
     STATS.draws++;
@@ -151,6 +171,7 @@ export default function Preview() {
       if (q !== null) wantQRef.current = q;
     }
     showTime(t);
+    return true;
   }, [applySize, showTime]);
 
   /** re-render quando pausado (agrupa pedidos num único rAF) */
@@ -168,8 +189,12 @@ export default function Preview() {
         if (!waitSinceRef.current) waitSinceRef.current = now;
         if (now - waitSinceRef.current < 2500) { showTime(st.playhead); window.setTimeout(requestStill, 120); return; }
       }
+      if (!draw(st.playhead) && now - (waitSinceRef.current || now) < 900) {
+        if (!waitSinceRef.current) waitSinceRef.current = now;
+        window.setTimeout(requestStill, 120);
+        return;
+      }
       waitSinceRef.current = 0;
-      draw(st.playhead);
     });
   }, [draw, showTime]);
 
@@ -214,7 +239,8 @@ export default function Preview() {
     const targetShort = Math.max(Math.min(PREVIEW_MIN_SHORT, short), Math.min(maxShort, cssShort, short));
     const k = targetShort / short;
     baseRef.current = { w: Math.round((projW * k) / 2) * 2, h: Math.round((projH * k) / 2) * 2 };
-    if (applySize()) requestStill();
+    applySize();
+    requestStill();
   }, [fit.w, fit.h, projW, projH, requestStill, applySize]);
 
   /* ---------- pausado: re-renderiza ao mudar playhead/projeto/mídia ---------- */
@@ -280,8 +306,7 @@ export default function Preview() {
       const s = pool.sync(st.project, st.assets, t, true, st.project.fps);
       lead = s.lead;
       // falta o quadro do vídeo (corte/seek ainda decodificando): mantém o último quadro bom
-      if (!s.pending) draw(t);
-      else { STATS.held++; showTime(t); }
+      if (s.pending || !draw(t)) { STATS.held++; showTime(t); }
       lastSetRef.current = t;
       st.setPlayhead(t);
     };
@@ -410,6 +435,7 @@ export default function Preview() {
     <div className={`ep-pv${fullscreen ? ' is-full' : ''}${cssFull ? ' is-cssfull' : ''}`}>
       <div className="ep-pv-box" ref={boxRef}>
         <div className="ep-pv-frame" ref={frameRef} style={{ width: fit.w, height: fit.h }} data-aspect={aspect}>
+          <div ref={hostRef} className="ep-pv-host" aria-hidden="true" />
           <canvas
             ref={canvasRef} data-ep-preview="" className={`ep-pv-canvas${pointMode ? ' pointing' : ''}`} aria-label="Pré-visualização do vídeo"
             onClick={empty ? undefined : onCanvasClick} onPointerDown={empty ? undefined : onCanvasDown} onPointerMove={onCanvasMove}
@@ -417,6 +443,7 @@ export default function Preview() {
             onContextMenu={(e) => { if (pressRef.current?.fired) e.preventDefault(); }}
           />
           {glow > 0 && <i className="ep-pv-glow" key={glow} aria-hidden="true" />}
+          {perf && !empty && <PerfHud stats={STATS} pool={poolRef.current} canvas={canvasRef.current} />}
           {chatPoint && markerAt > 0 && (
             <div className="ep-pv-pin" style={{ left: `${chatPoint.x * 100}%`, top: `${chatPoint.y * 100}%` }} aria-hidden="true">
               <i /><span>{formatTime(chatPoint.t)}</span>
@@ -465,7 +492,6 @@ export default function Preview() {
             </div>
           )}
         </div>
-        <div ref={hostRef} className="ep-pv-host" aria-hidden="true" />
       </div>
 
       {/* controles: pílula flutuante (play em círculo laranja, demais em círculos) */}
@@ -483,6 +509,9 @@ export default function Preview() {
                   </button>
                   <button role="menuitemcheckbox" aria-checked={safe} className={safe ? 'on' : ''} onClick={() => { setSafe(!safe); setMoreOpen(false); }}>
                     <Icon name="safearea" size={18} /> Área segura
+                  </button>
+                  <button role="menuitemcheckbox" aria-checked={perf} className={perf ? 'on' : ''} onClick={() => { setPerf(!perf); setMoreOpen(false); }}>
+                    <Icon name="beats" size={18} /> Mostrar desempenho
                   </button>
                 </div>
               )}
@@ -517,6 +546,10 @@ export default function Preview() {
           <button className={`ep-circle sm ep-pv-c${safe ? ' on' : ''}`} onClick={() => setSafe(!safe)} disabled={empty}
             title="Guias de área segura (TikTok/Reels)" aria-label="Área segura" aria-pressed={safe}>
             <Icon name="safearea" size={17}/>
+          </button>
+          <button className={`ep-circle sm ep-pv-c${perf ? ' on' : ''}`} onClick={() => setPerf(!perf)}
+            title="Mostrar desempenho (fps, modo, fonte)" aria-label="Mostrar desempenho" aria-pressed={perf}>
+            <Icon name="beats" size={17}/>
           </button>
           <button className="ep-circle sm ep-pv-c ep-pv-exp" onClick={() => emit('ep:open-export', {})} title="Exportar" aria-label="Exportar" disabled={empty}><Icon name="export" size={17}/></button>
           <button className="ep-circle sm ep-pv-c" onClick={toggleFull} title={fullscreen || cssFull ? 'Sair da tela cheia' : 'Tela cheia'} aria-label="Tela cheia"><Icon name="fullscreen" size={17}/></button>
