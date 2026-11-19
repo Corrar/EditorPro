@@ -20,6 +20,7 @@ import { trackSubject } from './reframe';
 import { distributeWords } from './sanitize';
 import { describeStyle, modelRequestText, styleOps, styleScopeFromText, type StyleScope } from './model';
 import { materializeSfx, sanitizeSfxRequests, type SfxRequest } from './library';
+import { asOwn, isAbort as isRunAbort } from './runGuard';
 import { finalizeClaude, type FinalizeDeps, type Finalized } from './finalize';
 import { runScript } from './script/run';
 import { createGraphicAsset, updateGraphicAsset } from './svg';
@@ -62,7 +63,7 @@ export const finalizeDeps: FinalizeDeps = {
 /** valida + executa script/gráficos + 1 rodada de conserto; devolve as ops prontas (com SFX) */
 async function claudeOps(res: EditResponse, userText: string, opts: PipelineOptions): Promise<Finalized> {
   const f = await finalizeClaude(res, store().project, {
-    ...finalizeDeps, userText, getAssets: () => store().assets, messages: store().messages, context: opts.context, onStatus: (t) => opts.onStatus?.(t),
+    ...finalizeDeps, userText, getAssets: () => store().assets, messages: store().messages, context: opts.context, signal: opts.signal, onStatus: (t) => opts.onStatus?.(t),
   });
   return { ...f, ops: await withSfx(f.ops, f.sfx, opts.onStatus) };
 }
@@ -74,7 +75,7 @@ async function afterClaude(f: Finalized, before: Project, userText: string, appl
     try {
       const r = await generateCaptions({ ...opts, apply, language: f.captions.language });
       if (r.ops.length) notes.push(r.reply);
-    } catch (e) { warnings.push(`legendas: ${errText(e)}`); }
+    } catch (e) { if (isRunAbort(e)) throw e; warnings.push(`legendas: ${errText(e)}`); }
   }
   if (f.errors.length) {
     warnings.push(...f.errors);
@@ -94,10 +95,10 @@ async function reviewPass(before: Project, userText: string, apply: NonNullable<
     const frames = await renderResultFrames(after, store().assets, reviewTimes(before, after));
     if (!frames.length) return null;
     const s = store();
-    const res = await requestEdit({ project: s.project, assets: s.assets, messages: s.messages, userText, mode: 'review', frames, context: opts.context });
+    const res = await requestEdit({ project: s.project, assets: s.assets, messages: s.messages, userText, mode: 'review', frames, context: opts.context, signal: opts.signal });
     if (res.ok || (!res.ops.length && !res.deferred?.length)) return null;
     const f = await finalizeClaude(res, store().project, {
-      ...finalizeDeps, userText, getAssets: () => store().assets, messages: store().messages, context: opts.context, onStatus: (t) => opts.onStatus?.(t), repair: false,
+      ...finalizeDeps, userText, getAssets: () => store().assets, messages: store().messages, context: opts.context, signal: opts.signal, onStatus: (t) => opts.onStatus?.(t), repair: false,
     });
     const ops = await withSfx(f.ops, f.sfx, opts.onStatus);
     if (!ops.length) return null;
@@ -105,6 +106,7 @@ async function reviewPass(before: Project, userText: string, apply: NonNullable<
     await apply(ops);
     return `Conferi o resultado e ajustei: ${res.reply}`;
   } catch (e) {
+    if (isRunAbort(e)) throw e;
     console.warn('[ai] conferência do resultado falhou:', e);
     return null;
   }
@@ -127,6 +129,8 @@ export interface PipelineOptions {
   whisper?: boolean;
   /** para onde o usuário apontou (clipe, trecho, ponto, legenda) */
   context?: ChatContext;
+  /** execução interrompida (Parar, desfazer, edição manual, projeto trocado) */
+  signal?: AbortSignal;
 }
 
 export interface PipelineResult {
@@ -199,8 +203,12 @@ export async function withSingleUndo<T>(fn: () => Promise<T>): Promise<T> {
     return await fn();
   } finally {
     const s = store();
-    if (s.project !== projectBefore && s.past.length >= pastBefore.length + 2) {
-      useEditor.setState({ past: [...pastBefore, projectBefore].slice(-100), future: [] });
+    // ponto de corte pela identidade (funciona com o histórico no limite de 100 passos);
+    // projeto trocado no meio: não mexe no histórico do outro
+    const i = s.past.lastIndexOf(projectBefore);
+    if (s.project !== projectBefore && s.project.id === projectBefore.id) {
+      if (i >= 0 && i < s.past.length - 1) useEditor.setState({ past: s.past.slice(0, i + 1), future: [] });
+      else if (i < 0 && s.past.length >= pastBefore.length + 2) useEditor.setState({ past: [...pastBefore, projectBefore].slice(-100), future: [] });
     }
   }
 }
@@ -358,7 +366,7 @@ export async function runFirstEdit(opts: PipelineOptions & { brief: string }): P
       opts.onStatus?.('Planejando a edição…');
       const frames = await sourceFrames(sources, true, 10);
       const res = await requestEdit({
-        project: store().project, assets: store().assets, messages: store().messages, mode: 'first', frames,
+        project: store().project, assets: store().assets, messages: store().messages, mode: 'first', frames, signal: opts.signal,
         userText: brief || 'Edite este vídeo de forma profissional.',
       });
       const userText = brief || 'Edite este vídeo de forma profissional.';
@@ -486,7 +494,7 @@ async function demoChat(text: string, apply: NonNullable<PipelineOptions['apply'
   }
   const r = chatIntent(text, { project: store().project, assets: store().assets, silencesByAsset: silences, target: opts.context });
   if (r.undo) {
-    store().undo();
+    asOwn(() => store().undo());
     return { reply: r.reply, ops: [], appliedIds: [], provider: 'demo', undo: true, warnings: [] };
   }
   const san = sanitizeOps(r.ops, store().project, store().assets);
@@ -500,7 +508,7 @@ async function claudeChat(text: string, apply: NonNullable<PipelineOptions['appl
   try {
     const s = store();
     const frames = await sourceFrames(sourceAssets(s.assets), false, 6);
-    const res = await requestEdit({ project: s.project, assets: s.assets, messages: s.messages, userText: text, mode: 'chat', frames, context: opts.context });
+    const res = await requestEdit({ project: s.project, assets: s.assets, messages: s.messages, userText: text, mode: 'chat', frames, context: opts.context, signal: opts.signal });
     const fin = await claudeOps(res, text, opts);
     const ops = fin.ops;
     const before = store().project;
@@ -510,6 +518,7 @@ async function claudeChat(text: string, apply: NonNullable<PipelineOptions['appl
     const extra = await afterClaude(fin, before, text, apply, opts, warnings);
     return { reply: fin.reply + extra, ops, appliedIds, provider: 'anthropic', warnings };
   } catch (e) {
+    if (isRunAbort(e)) throw e;
     // IA indisponível: tenta o intérprete local antes de desistir
     const local = chatIntent(canonVerbs(text), { project: store().project, assets: store().assets, target: opts.context });
     if (local.ops.length) {
@@ -673,7 +682,10 @@ async function localFeature(text: string, apply: NonNullable<PipelineOptions['ap
   // cortar vícios (ids das palavras do Whisper) — exato e grátis
   if (RE.fillers.test(t)) {
     if (!(await ensureWords(opts, apply, warnings))) return { reply: 'Para cortar vícios eu preciso transcrever a fala primeiro (ligue o CC e tente de novo).', ops: [], appliedIds: [], provider, warnings };
-    const { ops, count } = fillerOps(store().project);
+    // conta o que sobra depois da validação (não promete cortes que caíram)
+    const f = fillerOps(store().project);
+    const ops = sanitizeOps(f.ops, store().project, store().assets).ops;
+    const count = ops.length === f.ops.length ? f.count : ops.length;
     if (!ops.length) return { reply: 'Não encontrei vícios de linguagem (né, tipo, éé, hum…) na fala.', ops: [], appliedIds: [], provider, warnings };
     return done(ops, `Cortei ${count} vício${count > 1 ? 's' : ''} de linguagem pelas palavras da transcrição.`);
   }
@@ -744,7 +756,7 @@ export async function applyComments(opts: PipelineOptions & { markerIds?: Id[] }
     if (status.configured) {
       opts.onStatus?.(`Lendo ${pending.length} comentário${pending.length > 1 ? 's' : ''}…`);
       const s = store();
-      const res = await requestEdit({ project: s.project, assets: s.assets, messages: s.messages, mode: 'comments', frames: await sourceFrames(sourceAssets(s.assets), false, 6), userText: `Aplique estes comentários de revisão:\n${list}` });
+      const res = await requestEdit({ project: s.project, assets: s.assets, messages: s.messages, mode: 'comments', frames: await sourceFrames(sourceAssets(s.assets), false, 6), userText: `Aplique estes comentários de revisão:\n${list}`, signal: opts.signal });
       fin = await claudeOps(res, `Aplique estes comentários de revisão:\n${list}`, opts);
       ops = fin.ops; // já validadas (scripts/gráficos/SFX incluídos)
       for (const c of res.comments ?? []) replies.set(c.markerId, c.reply);

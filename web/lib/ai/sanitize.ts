@@ -115,7 +115,7 @@ export function sanitizeKeyframeProps(v: unknown): Record<string, number | strin
 }
 
 /* ---------- efeitos/transições escritos pela IA (GLSL) ---------- */
-export const MAX_SHADER_CHARS = 8000;
+export const MAX_SHADER_CHARS = 16 * 1024; // igual ao SHADER_MAX_CHARS da fx
 function shaderCode(v: unknown, entry: 'effect' | 'transition'): string | undefined {
   if (typeof v !== 'string') return undefined;
   const code = v.replace(/\r\n/g, '\n').trim();
@@ -611,5 +611,45 @@ export function sanitizeColorGrade(v: unknown): ColorGrade | null | undefined {
     if (Object.keys(h).length) out.hsl = h;
   }
   if (isObj(v.lut)) { const id = str(v.lut.id, 80); if (id && /^[\w.:-]+$/.test(id) && !id.includes('..')) out.lut = { id, intensity: clampNum(v.lut.intensity, 0, 1) ?? 1 }; }
+  return Object.keys(out).length ? out : undefined;
+}
+
+/**
+ * update_clip.colorGrade da IA MESCLA com a correção atual (não apaga LUT/curvas/rodas do usuário).
+ * Só muda os campos enviados; 0 ou null num campo remove esse campo; null no todo é tratado por quem chama.
+ */
+export function mergeColorGrade(cur: ColorGrade | undefined, raw: unknown): ColorGrade | undefined {
+  if (!isObj(raw)) return cur;
+  const add = sanitizeColorGrade(raw) ?? {};
+  const out: ColorGrade = { ...(cur ?? {}) };
+  const o = out as Record<string, unknown>;
+  for (const k of ['exposure', 'contrast', 'saturation', 'vibrance', 'temperature', 'tint', 'highlights', 'shadows', 'pivot', 'mix'] as const) {
+    if (raw[k] === null || raw[k] === 0) delete o[k];
+    else if (add[k] !== undefined) o[k] = add[k];
+  }
+  for (const k of ['lift', 'gamma', 'gain', 'offset'] as const) {
+    if (raw[k] === null || (isObj(raw[k]) && !add[k])) delete o[k];
+    else if (add[k]) o[k] = add[k];
+  }
+  if (raw.lut === null) delete out.lut; else if (add.lut) out.lut = add.lut;
+  if (raw.curves === null) delete out.curves;
+  else if (isObj(raw.curves)) {
+    const c = { ...(cur?.curves ?? {}) } as Record<string, unknown>;
+    for (const k of ['master', 'r', 'g', 'b'] as const) {
+      if ((raw.curves as Record<string, unknown>)[k] === null) delete c[k];
+      else if (add.curves?.[k]) c[k] = add.curves[k];
+    }
+    if (Object.keys(c).length) out.curves = c as ColorGrade['curves']; else delete out.curves;
+  }
+  if (raw.hsl === null) delete out.hsl;
+  else if (isObj(raw.hsl)) {
+    const h = { ...(cur?.hsl ?? {}) } as Record<string, unknown>;
+    for (const b of HSL_BANDS) {
+      const v = (raw.hsl as Record<string, unknown>)[b];
+      if (v === null || (isObj(v) && !add.hsl?.[b])) delete h[b];
+      else if (add.hsl?.[b]) h[b] = add.hsl[b];
+    }
+    if (Object.keys(h).length) out.hsl = h as ColorGrade['hsl']; else delete out.hsl;
+  }
   return Object.keys(out).length ? out : undefined;
 }

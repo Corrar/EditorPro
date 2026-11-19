@@ -38,6 +38,8 @@ export interface FinalizeOptions extends FinalizeDeps {
   onStatus?: (s: string) => void;
   /** faz a rodada de conserto quando algo falha (padrão true) */
   repair?: boolean;
+  /** execução interrompida */
+  signal?: AbortSignal;
 }
 
 export interface Finalized {
@@ -176,7 +178,7 @@ export async function finalizeClaude(res: EditResponse, base: Project, o: Finali
   if (errors.length && o.repair !== false && o.request) {
     o.onStatus?.('Consertando o que falhou…');
     try {
-      const r2 = await o.request({ project, assets: o.getAssets(), messages: o.messages ?? [], userText: repairText(o.userText, errors), mode: 'repair', context: o.context });
+      const r2 = await o.request({ project, assets: o.getAssets(), messages: o.messages ?? [], userText: repairText(o.userText, errors), mode: 'repair', context: o.context, signal: o.signal });
       const b = await materialize(r2, project, o);
       repaired = true;
       ops = [...ops, ...b.ops];
@@ -186,6 +188,7 @@ export async function finalizeClaude(res: EditResponse, base: Project, o: Finali
       errors = b.errors;
       if (r2.reply && r2.reply !== reply && (b.ops.length || b.errors.length)) reply = `${reply}\n${r2.reply}`;
     } catch (e) {
+      if (e instanceof Error && e.name === 'AbortError') throw e;
       errors = [...errors, `conserto falhou: ${e instanceof Error ? e.message : String(e)}`];
     }
   }

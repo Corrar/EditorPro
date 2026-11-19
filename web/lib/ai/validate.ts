@@ -13,7 +13,7 @@ import { TRACK_NAMES, allWords, applyOp, clipEnd, findClip, projectDuration, tra
 import { DEFAULT_TEXT_STYLE } from '../defaults';
 import { uid } from '../util';
 import {
-  ASPECTS, COLOR_PRESETS, sanitizeColorGrade, MARKER_KINDS, SHAPE_KINDS, TEXT_ANIMATIONS, bool, clampNum, color, isObj, num, oneOf, r3,
+  ASPECTS, COLOR_PRESETS, sanitizeColorGrade, mergeColorGrade, MARKER_KINDS, SHAPE_KINDS, TEXT_ANIMATIONS, bool, clampNum, color, isObj, num, oneOf, r3,
   sanitizeAudioExtras, sanitizeCaptionStyle, sanitizeEffects, sanitizeFilters, sanitizeKeyframes, sanitizePosition,
   sanitizeStyleProfile, sanitizeTextStyle, sanitizeTransform, sanitizeTransition, sanitizeTranscript, sanitizeVisualExtras, str,
 } from './sanitize';
@@ -21,6 +21,8 @@ import { assignWordIds } from './features';
 import { COLOR_GRADE_LIVE, gradeToFilters } from './colormatch';
 import { expandLibraryOp, isLibraryMacro, type SfxRequest } from './library';
 import { isDeferredMacro, toDeferred, type Deferred } from './deferred';
+import { kfPropsOf, mergeKfProps } from './features';
+import type { Keyframe as KF } from '../types';
 
 export const OP_KINDS: EditOpKind[] = [
   'set_project', 'set_aspect', 'add_track', 'update_track', 'remove_track', 'move_track', 'add_clip', 'update_clip',
@@ -61,6 +63,12 @@ const DEFAULT_EXPLAIN: Record<EditOpKind, string> = {
   update_marker: 'Atualizando o marcador',
   remove_marker: 'Removendo o marcador',
 };
+
+/** keyframes do patch MESCLAM por propriedade com os do clipe (zoom não apaga reenquadramento); [] limpa tudo */
+function mergeKeyframes(clip: Clip, kf: KF[]): KF[] {
+  const cur = (clip as { keyframes?: KF[] }).keyframes;
+  return kf.length && cur?.length ? mergeKfProps(cur, kf, kfPropsOf(kf)) : kf;
+}
 
 class Drop extends Error {}
 const fail = (reason: string): never => { throw new Drop(reason); };
@@ -285,7 +293,7 @@ function buildClipPatch(raw: Record<string, unknown>, clip: Clip, assets: Record
 
   if (clip.type === 'video' || clip.type === 'image' || clip.type === 'sticker' || clip.type === 'shape') {
     const tf = sanitizeTransform(raw.transform, clip.transform); if (tf) out.transform = tf;
-    const kf = sanitizeKeyframes(raw.keyframes, d); if (kf) out.keyframes = kf;
+    const kf = sanitizeKeyframes(raw.keyframes, d); if (kf) out.keyframes = mergeKeyframes(clip, kf);
     Object.assign(out, sanitizeVisualExtras(raw, d));
   }
   if (clip.type === 'video' || clip.type === 'image') {
@@ -298,7 +306,7 @@ function buildClipPatch(raw: Record<string, unknown>, clip: Clip, assets: Record
     if ('colorGrade' in raw) {
       const cg = sanitizeColorGrade(raw.colorGrade);
       if (cg === null) out.colorGrade = undefined;
-      else if (cg && COLOR_GRADE_LIVE) out.colorGrade = cg;
+      else if (COLOR_GRADE_LIVE && isObj(raw.colorGrade)) out.colorGrade = mergeColorGrade('colorGrade' in clip ? clip.colorGrade : undefined, raw.colorGrade);
       else if (cg) {
         // motor de cor ainda não renderiza colorGrade: vira filtros equivalentes (que já aparecem)
         const base = (out.filters as Filter[] | undefined) ?? ('filters' in clip ? clip.filters : []) ?? [];
@@ -328,7 +336,7 @@ function buildClipPatch(raw: Record<string, unknown>, clip: Clip, assets: Record
     const al = textAnim(raw.animationLoop); if (al) out.animationLoop = al;
     const rot = clampNum(raw.rotation, -360, 360); if (rot !== undefined) out.rotation = rot;
     const sc = clampNum(raw.scale, 0.1, 5); if (sc !== undefined) out.scale = sc;
-    const kf = sanitizeKeyframes(raw.keyframes, d); if (kf) out.keyframes = kf;
+    const kf = sanitizeKeyframes(raw.keyframes, d); if (kf) out.keyframes = mergeKeyframes(clip, kf);
   }
   if (!Object.keys(out).length) fail('patch vazio');
   return out;
@@ -365,6 +373,13 @@ export function sanitizeOp(raw: unknown, p: Project, assets: Record<Id, MediaAss
   const clipOf = (key = 'clipId') => {
     const cid = str(r[key], 80) ?? fail(`${key} ausente`);
     return findClip(p, cid) ?? fail(`clipe não existe: ${cid}`);
+  };
+  /** clipe que pode ser alterado: nem ele nem a trilha estão travados (igual à timeline manual) */
+  const editableClip = (key = 'clipId') => {
+    const f = clipOf(key);
+    if (f.track.locked) fail('trilha travada — peça para o usuário destravar');
+    if (f.clip.locked) fail('clipe travado — peça para o usuário destravar');
+    return f;
   };
 
   switch (kind) {
@@ -420,6 +435,7 @@ export function sanitizeOp(raw: unknown, p: Project, assets: Record<Id, MediaAss
       const tid = str(r.trackId, 80) ?? fail('trackId ausente');
       const t = p.tracks.find((x) => x.id === tid) ?? fail(`trilha não existe: ${tid}`);
       if (t.kind === 'video' && p.tracks.filter((x) => x.kind === 'video').length <= 1) fail('não remove a única trilha de vídeo');
+      if (t.locked) fail('trilha travada — peça para o usuário destravar');
       return { op: 'remove_track', trackId: tid, ...meta };
     }
     case 'move_track': {
@@ -437,13 +453,12 @@ export function sanitizeOp(raw: unknown, p: Project, assets: Record<Id, MediaAss
       return { op: 'add_clip', trackId, clip, ...meta };
     }
     case 'update_clip': {
-      const { clip } = clipOf();
-      if (clip.locked) fail('clipe travado');
+      const { clip } = editableClip();
       const patch = buildClipPatch(isObj(r.patch) ? r.patch : fail('patch ausente'), clip, assets);
       return { op: 'update_clip', clipId: clip.id, patch, ...meta };
     }
     case 'remove_clip': {
-      const { clip } = clipOf();
+      const { clip } = editableClip();
       return { op: 'remove_clip', clipId: clip.id, ...(bool(r.ripple) ? { ripple: true } : {}), ...meta };
     }
     case 'duplicate_clip': {
@@ -453,11 +468,17 @@ export function sanitizeOp(raw: unknown, p: Project, assets: Record<Id, MediaAss
       const start = clampNum(r.start, 0, 24 * 3600);
       const tid = str(r.trackId, 80);
       const dest = tid ? p.tracks.find((t) => t.id === tid) : undefined;
-      const trackOk = dest && dest.kind === track.kind && !dest.locked;
-      return { op: 'duplicate_clip', clipId: clip.id, newId, ...(start !== undefined ? { start: r3(start) } : {}), ...(trackOk ? { trackId: dest!.id } : {}), ...meta };
+      let trackOk = !!dest && dest.kind === track.kind && !dest.locked;
+      let destId = trackOk ? dest!.id : undefined;
+      if (!trackOk && track.locked) {
+        // a cópia cairia na trilha travada: vai para outra destravada do mesmo tipo
+        const alt = p.tracks.find((t) => t.kind === track.kind && !t.locked) ?? fail('trilha travada — peça para o usuário destravar');
+        trackOk = true; destId = alt.id;
+      }
+      return { op: 'duplicate_clip', clipId: clip.id, newId, ...(start !== undefined ? { start: r3(start) } : {}), ...(trackOk ? { trackId: destId! } : {}), ...meta };
     }
     case 'move_clip': {
-      const { clip, track } = clipOf();
+      const { clip, track } = editableClip();
       const start = r3(clampNum(r.start, 0, 24 * 3600) ?? fail('start inválido'));
       const tid = str(r.trackId, 80);
       const dest = tid ? p.tracks.find((t) => t.id === tid) : undefined;
@@ -465,7 +486,7 @@ export function sanitizeOp(raw: unknown, p: Project, assets: Record<Id, MediaAss
       return { op: 'move_clip', clipId: clip.id, start, ...(trackOk ? { trackId: dest!.id } : {}), ...meta };
     }
     case 'split_clip': {
-      const { clip } = clipOf();
+      const { clip } = editableClip();
       const at = num(r.at) ?? fail('at inválido');
       if (at <= clip.start + 0.05 || at >= clipEnd(clip) - 0.05) fail('ponto de corte fora do clipe');
       let newId = str(r.newId, 80);
@@ -473,7 +494,7 @@ export function sanitizeOp(raw: unknown, p: Project, assets: Record<Id, MediaAss
       return { op: 'split_clip', clipId: clip.id, at: r3(at), newId, ...meta };
     }
     case 'trim_clip': {
-      const { clip } = clipOf();
+      const { clip } = editableClip();
       let start = num(r.start) ?? clip.start;
       let end = num(r.end) ?? clipEnd(clip);
       if (clip.type === 'video' || clip.type === 'audio') {
@@ -497,8 +518,8 @@ export function sanitizeOp(raw: unknown, p: Project, assets: Record<Id, MediaAss
       return { op: 'ripple_delete', start: r3(start), end: r3(end), ...meta };
     }
     case 'remove_words': {
-      const from = str(r.fromWordId, 20) ?? fail('fromWordId ausente');
-      const to = str(r.toWordId, 20) ?? from;
+      const from = str(r.fromWordId, 80) ?? fail('fromWordId ausente');
+      const to = str(r.toWordId, 80) ?? from;
       const words = allWords(p);
       const a = words.findIndex((w) => w.id === from);
       const b = words.findIndex((w) => w.id === to);
@@ -527,10 +548,19 @@ export function sanitizeOp(raw: unknown, p: Project, assets: Record<Id, MediaAss
       if (e !== seg.end) out.end = r3(e);
       if (text) {
         out.text = text;
-        // palavras antigas não batem mais com o texto novo: redistribui (ids novos derivados do segmento)
         const words = text.split(/\s+/).filter(Boolean);
         const t0 = out.start ?? seg.start; const t1 = out.end ?? seg.end;
-        out.words = words.map((w, i) => ({ id: `${sid}_${i}`, text: w, start: r3(t0 + ((t1 - t0) * i) / words.length), end: r3(t0 + ((t1 - t0) * (i + 1)) / words.length) }));
+        const old = seg.words ?? [];
+        if (old.length && old.length === words.length) {
+          // mesma quantidade de palavras (correção de grafia): mantém ids e tempos reais da fala
+          const k = (t1 - t0) / Math.max(1e-3, seg.end - seg.start);
+          const map = (t: number) => (t0 === seg.start && t1 === seg.end ? t : r3(t0 + (t - seg.start) * k));
+          out.words = old.map((w, i) => ({ ...w, text: words[i], start: map(w.start), end: map(w.end) }));
+        } else {
+          // quantidade mudou: redistribui com ids curtos que continuam a numeração wNNNNN
+          let next = allWords(p).reduce((m, w) => { const n = /^w(\d+)$/.exec(w.id ?? '')?.[1]; return n ? Math.max(m, +n) : m; }, 0) + 1;
+          out.words = words.map((w, i) => ({ id: `w${String(next++).padStart(5, '0')}`, text: w, start: r3(t0 + ((t1 - t0) * i) / words.length), end: r3(t0 + ((t1 - t0) * (i + 1)) / words.length) }));
+        }
       }
       if (Array.isArray(patch.emphasis)) out.emphasis = patch.emphasis.map((x) => str(x, 40)).filter((x): x is string => !!x).slice(0, 6);
       if (!Object.keys(out).length) fail('patch vazio');
