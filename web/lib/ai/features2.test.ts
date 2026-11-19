@@ -78,3 +78,22 @@ describe('combinar cor com o modelo (ColorGrade)', () => {
       .toEqual({ exposure: 1, lift: { r: 1, g: 0, b: 0, y: 0 }, curves: { master: [{ x: 0, y: 0 }, { x: 1, y: 1 }] } });
   });
 });
+
+describe('catálogo derivado dos donos', () => {
+  it('IA aceita transições em shader e efeitos do engine; prompt lista com rótulos', async () => {
+    const { CATALOG, engineCatalogForAI } = await import('./catalogs');
+    const { TRANSITION_LABELS } = await import('../engine/transitions');
+    expect(CATALOG.transitions).toEqual(Object.keys(TRANSITION_LABELS));
+    expect(CATALOG.transitions).toContain('whip-pan');
+    const p = applyOps(createProject(), [
+      { op: 'add_clip', trackId: 'track_video_1', clip: { ...makeVideoClip(src, 0), id: 'c1', duration: 5 } },
+      { op: 'add_clip', trackId: 'track_video_1', clip: { ...makeVideoClip(src, 5), id: 'c2', duration: 5, in: 5 } },
+    ]).project;
+    const r = sanitizeOps([{ op: 'update_clip', clipId: 'c2', patch: { transitionIn: { kind: 'swirl-vortex', duration: 0.5 } } }], p, { a1: src });
+    expect(r.dropped).toEqual([]);
+    expect(engineCatalogForAI()).toMatch(/swirl-vortex \(/);
+    const { EditOpSchema } = await import('./schemas');
+    const { z } = await import('zod');
+    expect(JSON.stringify(z.toJSONSchema(EditOpSchema))).toContain('cinematic-zoom');
+  });
+});

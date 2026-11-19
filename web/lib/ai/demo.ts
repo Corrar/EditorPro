@@ -215,6 +215,15 @@ const PRESET_WORDS: [RegExp, ColorPreset, string][] = [
 ];
 
 const TRANSITION_WORDS: [RegExp, TransitionKind, string][] = [
+  [/vortice|redemoinho|espiral|swirl/, 'swirl-vortex', 'redemoinho'],
+  [/onda|ripple|agua/, 'ripple-waves', 'ondas'],
+  [/lente|gravitac|buraco negro/, 'gravitational-lens', 'lente gravitacional'],
+  [/vazamento de luz|light leak/, 'light-leak', 'vazamento de luz'],
+  [/zoom cinemat|cinematic zoom/, 'cinematic-zoom', 'zoom cinematográfico'],
+  [/whip ?pan|chicote cinemat/, 'whip-pan', 'whip pan'],
+  [/termic|calor|thermal/, 'thermal-distortion', 'distorção térmica'],
+  [/morph|deform/, 'cross-warp-morph', 'morph'],
+  [/glitch digital|digital glitch/, 'digital-glitch', 'glitch digital'],
   [/\bgir[oa]r?\b|spin|rodar|rotac/, 'spin', 'de giro'],
   [/cortina|wipe|varr/, 'wipe-left', 'cortina'],
   [/circul|iris|bolinha/, 'circle-open', 'círculo'],

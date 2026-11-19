@@ -10,40 +10,22 @@ import type {
   ColorGrade, ColorWheel, CurvePoint, HslBand,
 } from '../types';
 import { uid } from '../util';
+// listas derivadas dos catálogos dos donos (engine/biblioteca) — ver catalogs.ts
+import { CATALOG } from './catalogs';
 
 export const ASPECTS: AspectRatio[] = ['9:16', '16:9', '1:1', '4:5'];
-export const COLOR_PRESETS: ColorPreset[] = ['none', 'cinematic', 'warm', 'cool', 'vibrant', 'vintage', 'bw', 'moody'];
-export const TRANSITIONS: TransitionKind[] = [
-  'cut', 'fade', 'crossfade', 'slide-left', 'slide-right', 'slide-up', 'zoom-in', 'zoom-out', 'whip', 'glitch', 'flash',
-  'slide-down', 'dip-black', 'dip-white', 'blur', 'spin', 'wipe-left', 'wipe-right', 'wipe-up', 'circle-open', 'pixelate',
-  'shake', 'rgb-split', 'film-burn',
-];
-export const FILTER_KINDS: FilterKind[] = [
-  'brightness', 'contrast', 'saturation', 'temperature', 'blur', 'vignette', 'grain', 'bw', 'sepia',
-  'exposure', 'highlights', 'shadows', 'tint', 'hue', 'sharpen', 'fade',
-];
-export const TEXT_ANIMATIONS: TextAnimation[] = [
-  'none', 'fade', 'pop', 'slide-up', 'typewriter', 'bounce', 'karaoke',
-  'slide-down', 'slide-left', 'slide-right', 'zoom', 'blur', 'wave', 'glitch', 'flicker', 'spin',
-  'word-pop', 'word-fade', 'word-slide', 'word-bounce', 'word-drop', 'word-highlight',
-  'char-wave', 'char-fade', 'char-pop', 'char-typewriter',
-  'scale-in', 'blur-in', 'stomp', 'drop', 'highlight-sweep', 'underline-draw', 'box-reveal', 'shake',
-];
-export const EFFECT_KINDS: VisualEffectKind[] = [
-  'shake', 'glitch', 'rgb-split', 'zoom-pulse', 'vhs', 'film-grain', 'light-leak', 'pixelate', 'mirror', 'kaleidoscope',
-  'blur-motion', 'flash-strobe', 'old-film', 'vignette-pulse', 'sparkle', 'soft-glow', 'neon-edge', 'black-bars',
-];
+export const COLOR_PRESETS: ColorPreset[] = CATALOG.colorPresets;
+export const TRANSITIONS: TransitionKind[] = CATALOG.transitions;
+export const FILTER_KINDS: FilterKind[] = CATALOG.filters;
+export const TEXT_ANIMATIONS: TextAnimation[] = CATALOG.textAnimations;
+export const EFFECT_KINDS: VisualEffectKind[] = CATALOG.effects;
 export const BLEND_MODES: BlendMode[] = ['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 'add', 'difference'];
-export const MASK_SHAPES: MaskShape[] = ['rect', 'circle', 'heart', 'star', 'line', 'mirror'];
+export const MASK_SHAPES: MaskShape[] = CATALOG.masks;
 export const FIT_MODES: FitMode[] = ['cover', 'contain', 'fill'];
-export const SPEED_PRESETS: SpeedPreset[] = ['montage', 'hero', 'bullet', 'jump-cut', 'flash-in', 'flash-out'];
-export const AUDIO_EFFECTS: AudioEffectKind[] = [
-  'noise-reduction', 'normalize', 'voice-enhance', 'chipmunk', 'deep', 'robot', 'echo', 'reverb', 'telephone', 'megaphone', 'bass-boost',
-];
-export const CLIP_ANIMATIONS: ClipAnimation[] = [
-  'fade', 'zoom-in', 'zoom-out', 'slide-left', 'slide-right', 'slide-up', 'slide-down', 'spin', 'bounce', 'pop', 'shake', 'swing', 'blur', 'flip',
-];
-export const SHAPE_KINDS: ShapeKind[] = ['rect', 'rounded-rect', 'circle', 'triangle', 'star', 'arrow', 'line', 'heart', 'speech-bubble'];
+export const SPEED_PRESETS: SpeedPreset[] = CATALOG.speedPresets;
+export const AUDIO_EFFECTS: AudioEffectKind[] = CATALOG.audioEffects;
+export const CLIP_ANIMATIONS: ClipAnimation[] = CATALOG.clipAnimations;
+export const SHAPE_KINDS: ShapeKind[] = CATALOG.shapes;
 export const MARKER_KINDS = ['user', 'beat', 'chapter', 'comment'] as const;
 export const CAPTION_PRESETS: CaptionPreset[] = ['classic', 'bold-pop', 'karaoke', 'minimal', 'boxed', 'neon'];
 export const EASINGS: Easing[] = ['linear', 'easeIn', 'easeOut', 'easeInOut'];
