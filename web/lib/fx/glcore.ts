@@ -21,6 +21,9 @@ interface State {
   gl: WebGLRenderingContext;
   vs: WebGLShader;
   progs: Map<string, Prog | null>;
+  /** compilações iniciadas pelo aquecimento e ainda não consultadas (KHR_parallel_shader_compile) */
+  pending: Map<string, { p: WebGLProgram; fs: WebGLShader }>;
+  parallel: boolean;
   tex: WebGLTexture[];
   maxTex: number;
   buf: WebGLBuffer;
@@ -79,7 +82,7 @@ function init(): State | null {
     };
     (canvas as HTMLCanvasElement).addEventListener?.('webglcontextlost', lost as EventListener, false);
     glStats.inits++;
-    st = { canvas, gl, vs, progs: new Map(), tex, maxTex: gl.getParameter(gl.MAX_TEXTURE_SIZE) as number, buf };
+    st = { canvas, gl, vs, progs: new Map(), pending: new Map(), parallel: !!gl.getExtension('KHR_parallel_shader_compile'), tex, maxTex: gl.getParameter(gl.MAX_TEXTURE_SIZE) as number, buf };
   } catch (e) {
     failures++;
     console.warn('[fx] WebGL indisponível, usando fallback 2D', e);
@@ -100,6 +103,8 @@ function program(S: State, key: string, frag: string): Prog | null {
     return hit;
   }
   const { gl } = S;
+  const pend = S.pending.get(key);
+  if (pend) { S.pending.delete(key); return finalize(S, key, pend.p, pend.fs); }
   if (key.startsWith('c:')) {
     const customs = [...S.progs.keys()].filter((k) => k.startsWith('c:'));
     for (const k of customs.slice(0, Math.max(0, customs.length - CUSTOM_MAX + 1))) {
@@ -110,14 +115,21 @@ function program(S: State, key: string, frag: string): Prog | null {
   }
   const fs = gl.createShader(gl.FRAGMENT_SHADER)!;
   gl.shaderSource(fs, frag); gl.compileShader(fs);
+  const p = gl.createProgram()!;
+  gl.attachShader(p, S.vs); gl.attachShader(p, fs); gl.linkProgram(p);
+  return finalize(S, key, p, fs);
+}
+
+/** consulta o resultado (bloqueia só o que faltar da compilação) e guarda no cache */
+function finalize(S: State, key: string, p: WebGLProgram, fs: WebGLShader): Prog | null {
+  const { gl } = S;
   if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) {
     console.warn('[fx] shader', key, gl.getShaderInfoLog(fs));
     gl.deleteShader(fs);
+    gl.deleteProgram(p);
     S.progs.set(key, null); // não recompila a cada quadro
     return null;
   }
-  const p = gl.createProgram()!;
-  gl.attachShader(p, S.vs); gl.attachShader(p, fs); gl.linkProgram(p);
   gl.deleteShader(fs); // fica vivo enquanto anexado ao programa
   if (!gl.getProgramParameter(p, gl.LINK_STATUS)) { gl.deleteProgram(p); S.progs.set(key, null); return null; }
   glStats.programs++;
@@ -234,4 +246,41 @@ export function hexToRgb01(hex: string | undefined, fallback: [number, number, n
 /** só p/ testes (/dev/fx): contexto compartilhado atual */
 export function fxContextForTests(): WebGLRenderingContext | null {
   return init()?.gl ?? null;
+}
+
+const COMPLETION_STATUS_KHR = 0x91B1;
+
+export type WarmState = 'ready' | 'pending' | 'failed' | 'unavailable';
+
+/**
+ * Aquecimento sem travar a thread principal: inicia a compilação/ligação de `frag` (chave `key`)
+ * e devolve na hora. Com KHR_parallel_shader_compile o driver compila em segundo plano; chame de
+ * novo (no ócio) até dar 'ready'. Sem a extensão, a 1ª chamada só dispara e a 2ª finaliza (bloqueia
+ * o que faltar). O uso real (runFx) sempre finaliza antes de desenhar: o export nunca pula efeito.
+ */
+export function prewarmFx(key: string, frag: string): WarmState {
+  const S = init();
+  if (!S) return 'unavailable';
+  if (blacklist.has(key)) return 'failed';
+  if (S.progs.has(key)) return S.progs.get(key) ? 'ready' : 'failed';
+  const { gl } = S;
+  if (gl.isContextLost()) return 'unavailable';
+  const pend = S.pending.get(key);
+  if (pend) {
+    if (S.parallel && !gl.getProgramParameter(pend.p, COMPLETION_STATUS_KHR)) return 'pending';
+    S.pending.delete(key);
+    return finalize(S, key, pend.p, pend.fs) ? 'ready' : 'failed';
+  }
+  const fs = gl.createShader(gl.FRAGMENT_SHADER);
+  const p = gl.createProgram();
+  if (!fs || !p) return 'unavailable';
+  gl.shaderSource(fs, frag); gl.compileShader(fs);
+  gl.attachShader(p, S.vs); gl.attachShader(p, fs); gl.linkProgram(p);
+  S.pending.set(key, { p, fs });
+  return 'pending';
+}
+
+/** o driver compila em paralelo? (KHR_parallel_shader_compile) */
+export function fxParallelCompile(): boolean {
+  return !!init()?.parallel;
 }

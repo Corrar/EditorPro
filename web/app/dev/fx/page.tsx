@@ -9,7 +9,8 @@ import { EFFECT_CATALOG, TRANSITION_CATALOG, EFFECT_CATEGORIES, type EffectEntry
 import { applySurfaceEffects, effectGeometry } from '@/lib/engine/effects';
 import { isShaderTransition, runShaderTransition } from '@/lib/engine/shaderTransitions';
 import { transitionVisual } from '@/lib/engine/transitions';
-import { glStats, fxContextForTests } from '@/lib/fx/glcore';
+import { glStats, fxContextForTests, fxParallelCompile } from '@/lib/fx/glcore';
+import { warmupEffect, warmupTransition, warmupCustom } from '@/lib/fx/warm';
 import { glContextForTests, processPixels } from '@/lib/engine/gl';
 import { shapeCanvas, shapeCacheStats } from '@/lib/engine/shapes';
 import { canvasFilterSupported, resetCanvasFilterSupport } from '@/lib/fx/sprites';
@@ -313,7 +314,31 @@ export default function FxHarness() {
       out.fxLoss = { threw, duringFx, afterFx: Array.from(ec.getImageData(32, 32, 1, 1).data), newContext: fxContextForTests() !== fgl };
       return out;
     };
-    (window as unknown as { __epFx: unknown }).__epFx = { r2, benchEffects, benchTransitions, compileAll, drawAllAt, checkExamples, exampleDiffs, benchCustom };
+    /** aquecimento: custo da chamada (deve ser pequeno) e se o uso real encontra o programa pronto */
+    const warmTest = async () => {
+      const kinds = EFFECT_CATALOG.filter((e) => e.render === 'gl' && e.kind !== 'custom').map((e) => e.kind);
+      const trs = TRANSITION_CATALOG.filter((t) => t.render === 'shader' && t.kind !== 'custom').map((t) => t.kind);
+      const t0 = performance.now(); let maxCall = 0;
+      const start = (f: () => string) => { const a = performance.now(); const r = f(); maxCall = Math.max(maxCall, performance.now() - a); return r; };
+      kinds.forEach((k) => start(() => warmupEffect(k)));
+      trs.forEach((k) => start(() => warmupTransition(k)));
+      start(() => warmupCustom(SHADER_EXAMPLES[0].code, 'effect'));
+      const firstPass = performance.now() - t0;
+      let pending = 1, rounds = 0;
+      while (pending && rounds < 200) {
+        await new Promise((r) => setTimeout(r, 16)); rounds++;
+        pending = [...kinds.map((k) => warmupEffect(k)), ...trs.map((k) => warmupTransition(k))].filter((x) => x === 'pending').length;
+      }
+      const states = [...kinds.map((k) => warmupEffect(k)), ...trs.map((k) => warmupTransition(k))];
+      const before = glStats.programs;
+      const c = offscreen('w', 64, 64); const ctx = c.getContext('2d')!; ctx.fillStyle = '#888'; ctx.fillRect(0, 0, 64, 64);
+      const r0 = performance.now();
+      applySurfaceEffects(ctx, 64, 64, [{ kind: 'crt', intensity: 1 }], 0);
+      const useMs = performance.now() - r0;
+      return { parallel: fxParallelCompile(), count: kinds.length + trs.length, firstPassMs: +firstPass.toFixed(1), maxCallMs: +maxCall.toFixed(1), rounds,
+        ready: states.filter((x) => x === 'ready').length, failed: states.filter((x) => x === 'failed').length, programsCompiledOnUse: glStats.programs - before, firstUseMs: +useMs.toFixed(1) };
+    };
+    (window as unknown as { __epFx: unknown }).__epFx = { warmTest, r2, benchEffects, benchTransitions, compileAll, drawAllAt, checkExamples, exampleDiffs, benchCustom };
   }, []);
 
   const cats = tab === 'efeitos' ? ['Todos', ...EFFECT_CATEGORIES] : ['Todos', ...new Set(TRANSITION_CATALOG.map((t) => t.category))];

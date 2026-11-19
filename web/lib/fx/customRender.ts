@@ -76,6 +76,11 @@ export function runCustomTransition(tr: Transition | undefined, from: TexImageSo
   return runFx('tr:custom-crossfade', CROSSFADE, [['uFrom', from], ['uTo', to]], W, H, { uProgress: p });
 }
 
+/** chave + fonte do programa de um código da IA (null = inválido nas checagens estáticas) */
+export function customProgram(code: string | undefined, stage: ShaderStage): { key: string; src: string } | null {
+  return prepared(code, stage);
+}
+
 /** compila antes de precisar (evita engasgo no 1º quadro ao trocar nativo→canvas) */
 export function warmCustomShader(code: string | undefined, stage: ShaderStage): void {
   const prep = prepared(code, stage);
