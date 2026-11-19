@@ -10,6 +10,8 @@ import type { EditOp } from '../ops';
 import { useEditor } from '../store';
 import { emit } from '../events';
 import { getStatus, type AIStatus } from './client';
+import { AI_CURSOR_STEP_MS } from '../aiCursor';
+import { orderForViewing, shortExplain } from './order';
 import { applyComments, chatEdit, generateCaptions, runFirstEdit, type AskOption, type PipelineOptions, type PipelineResult } from './pipeline';
 
 export type StepState = 'pending' | 'active' | 'done' | 'skipped';
@@ -53,6 +55,16 @@ interface AIChatState {
   /** transcrição local com Whisper ligada? (preferência do aparelho) */
   whisper: boolean;
   setWhisper: (on: boolean) => void;
+  /** ritmo da edição ao vivo: false = 900 ms por passo (dá para ver o cursor da IA), true = 350 ms */
+  fast: boolean;
+  setFast: (on: boolean) => void;
+}
+
+/** ms por passo do applyLive: lento p/ ver o cursor; "Mais rápido" encurta (lido a cada passo) */
+export const FAST_STEP_MS = 350;
+export function stepDelay(fast: boolean, requested?: number): number {
+  const base = requested ?? AI_CURSOR_STEP_MS;
+  return fast ? Math.min(FAST_STEP_MS, base) : base;
 }
 
 const WHISPER_KEY = 'ep_ai_whisper';
@@ -85,13 +97,16 @@ export const useAIChat = create<AIChatState>((set, get) => {
 
     const apply: PipelineOptions['apply'] = async (ops: EditOp[], o) => {
       const base = get().runs[msgId]?.steps.length ?? 0;
-      const ids = ops.map((op, i) => op.id ?? `${msgId}_${base + i}`);
-      const withIds = ops.map((op, i) => ({ ...op, id: ids[i] }));
+      // ordem boa de assistir (cortes -> legendas -> efeitos -> textos -> áudio) e balão curto no cursor
+      const ordered = orderForViewing(ops, editor().project);
+      const ids = ordered.map((op, i) => op.id ?? `${msgId}_${base + i}`);
+      const withIds = ordered.map((op, i) => ({ ...op, id: ids[i], explain: shortExplain(op.explain) }));
       patchRun(msgId, (r) => ({ steps: [...r.steps, ...withIds.map((op) => ({ id: op.id!, text: op.explain || 'Editando', state: 'pending' as StepState }))] }));
       editor().updateMessage(msgId, { status: 'applying' });
       patchRun(msgId, { phase: 'Editando…', progress: undefined });
       const applied = await editor().applyLive(withIds, {
         ...o,
+        delayMs: () => stepDelay(get().fast, o?.delayMs),
         onStep: (_op, i) =>
           patchRun(msgId, (r) => ({
             steps: r.steps.map((st) => (st.id === ids[i] ? { ...st, state: 'active' } : ids.slice(0, i).includes(st.id) && st.state === 'active' ? { ...st, state: 'done' } : st)),
@@ -152,6 +167,9 @@ export const useAIChat = create<AIChatState>((set, get) => {
     busy: false,
     runs: {},
     whisper: true,
+
+    fast: false,
+    setFast: (on) => set({ fast: on }),
 
     setWhisper: (on) => {
       try { localStorage.setItem(WHISPER_KEY, on ? 'on' : 'off'); } catch {}

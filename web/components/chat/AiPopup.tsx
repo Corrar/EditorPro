@@ -13,6 +13,7 @@ import { useAIChat, type RunState } from '@/lib/ai/chatStore';
 import { useAIBridge } from '@/lib/ai/bridge';
 import { joinDictation, useDictation } from '@/lib/ai/speech';
 import { liveLabel, liveSummary } from '@/lib/ai/live';
+import { FastButton } from './FastButton';
 
 const QUICK = [
   'Cortar silêncios', 'Legendas estilo TikTok', 'Deixar mais dinâmico', 'Gancho com zoom e flash',
@@ -31,6 +32,7 @@ function MiniSteps({ run }: { run: RunState }) {
     <div className="ep-aip-steps">
       <div className="ep-aip-stepshead">
         <span>{run.done ? 'Edições aplicadas' : 'Editando ao vivo'}</span>
+        {!run.done && done < total ? <FastButton /> : null}
         <b className="mono">{done}/{total}</b>
       </div>
       <div className="ep-ch-bar"><i style={{ width: `${(done / total) * 100}%` }} /></div>
@@ -53,9 +55,11 @@ export interface AiPopupProps {
   onExpand?: () => void;
   /** foca o campo ao abrir (padrão: não, para não abrir o teclado do celular sem pedir) */
   autoFocus?: boolean;
+  /** texto para preencher o campo (ex.: ep:open-ai-popup {prompt}); trocar o valor preenche de novo */
+  initialText?: string;
 }
 
-export default function AiPopup({ onMinimize, onExpand, autoFocus = false }: AiPopupProps) {
+export default function AiPopup({ onMinimize, onExpand, autoFocus = false, initialText }: AiPopupProps) {
   const messages = useEditor((s) => s.messages);
   const project = useEditor((s) => s.project);
   const chatContext = useEditor((s) => s.chatContext);
@@ -69,6 +73,16 @@ export default function AiPopup({ onMinimize, onExpand, autoFocus = false }: AiP
   useEffect(() => { loadStatus(); }, [loadStatus]);
   useAIBridge();
   useEffect(() => { if (autoFocus) inputRef.current?.focus(); }, [autoFocus]);
+  useEffect(() => {
+    if (initialText === undefined) return;
+    setText(initialText);
+    baseRef.current = initialText;
+    if (initialText) {
+      const el = inputRef.current;
+      el?.focus();
+      el?.setSelectionRange(initialText.length, initialText.length);
+    }
+  }, [initialText]);
 
   const dict = useDictation((spoken, final) => {
     setText(joinDictation(baseRef.current, spoken));
@@ -220,10 +234,13 @@ export function AiLiveBadge({ onClick, showIdle = false }: { onClick?: () => voi
   if (!live.working && !live.waiting && !showIdle) return null;
   const pct = live.total ? Math.round((live.done / live.total) * 100) : undefined;
   return (
-    <button className={`ep-ailive${live.working ? ' working' : ''}${live.waiting ? ' waiting' : ''}`} onClick={onClick} aria-label={`${liveLabel(live)} — abrir`}>
-      <span className="ep-ailive-ic">{live.working ? <span className="ep-ch-spin light" /> : <Icon name="ai" size={14} />}</span>
-      <span className="ep-ailive-t">{liveLabel(live)}</span>
+    <div className={`ep-ailive${live.working ? ' working' : ''}${live.waiting ? ' waiting' : ''}`}>
+      <button className="ep-ailive-main" onClick={onClick} aria-label={`${liveLabel(live)} — abrir`}>
+        <span className="ep-ailive-ic">{live.working ? <span className="ep-ch-spin light" /> : <Icon name="ai" size={14} />}</span>
+        <span className="ep-ailive-t">{liveLabel(live)}</span>
+      </button>
+      {live.working && live.total > 0 && live.done < live.total ? <FastButton className="ep-ailive-fast" /> : null}
       {pct !== undefined && live.working ? <i className="ep-ailive-bar" style={{ width: `${pct}%` }} /> : null}
-    </button>
+    </div>
   );
 }
