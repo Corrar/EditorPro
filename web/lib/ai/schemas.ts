@@ -4,6 +4,7 @@
    modelo; a validação real é validate.ts/sanitize.ts.
    ===================================================================== */
 import { LIBRARY_MACROS } from './library';
+import { DEFERRED_MACROS } from './deferred';
 import { z } from 'zod';
 import {
   ASPECTS, AUDIO_EFFECTS, BLEND_MODES, CAPTION_PRESETS, CLIP_ANIMATIONS, COLOR_PRESETS, EASINGS, EFFECT_KINDS, FILTER_KINDS, FIT_MODES,
@@ -136,7 +137,7 @@ const word = z.object({ start: z.number(), end: z.number(), text: z.string() });
 const segment = z.object({ start: z.number(), end: z.number(), text: z.string(), words: z.array(word).optional() });
 
 export const EditOpSchema = z.object({
-  op: z.enum([...OP_KINDS, ...LIBRARY_MACROS] as string[] as [string, ...string[]]),
+  op: z.enum([...OP_KINDS, ...LIBRARY_MACROS, ...DEFERRED_MACROS] as string[] as [string, ...string[]]),
   explain: z.string().describe('frase curta em PT-BR mostrada ao usuário enquanto aplica'),
   clipId: z.string().optional(),
   trackId: z.string().optional(),
@@ -175,6 +176,15 @@ export const EditOpSchema = z.object({
   clipIds: z.array(z.string()).optional(),
   sfxId: z.string().optional().describe('add_sfx: id do efeito sonoro'),
   musicId: z.string().optional().describe('add_music: id da música livre do catálogo'),
+  // ---- sem limites (executados no navegador) ----
+  code: z.string().optional().describe('run_script: corpo JS que usa `ep` e devolve/empurra ops'),
+  svg: z.string().optional().describe('add_graphic/update_graphic: código SVG completo (<svg viewBox=…>)'),
+  name: z.string().optional().describe('add_graphic: nome do gráfico'),
+  assetId: z.string().optional().describe('update_graphic: id do gráfico'),
+  transform: transform.optional().describe('add_graphic: posição/escala'),
+  animationIn: clipAnim.optional(),
+  animationOut: clipAnim.optional(),
+  animationLoop: clipAnim.optional(),
   atCuts: z.boolean().optional().describe('add_sfx: um em cada corte/transição da trilha principal'),
   volume: z.number().optional(),
 });
@@ -184,6 +194,8 @@ export const EditResponseSchema = z.object({
   ops: z.array(EditOpSchema),
   /** só ao aplicar comentários de revisão: uma resposta curta por comentário */
   comments: z.array(z.object({ markerId: z.string(), reply: z.string() })).optional(),
+  /** só na conferência do resultado: true = está bom */
+  ok: z.boolean().optional(),
 });
 
 export const TranslateSchema = z.object({

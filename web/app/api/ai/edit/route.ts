@@ -6,6 +6,7 @@
    timeline e o StyleProfile) e algumas miniaturas do material.
    As ops são validadas/sanitizadas aqui (lib/ai/validate.ts).
    ===================================================================== */
+import { shaderDocForAI } from '@/lib/ai/optional';
 import type { ChatMessage, MediaAsset, Project } from '@/lib/types';
 import { AIError, generateStructured, imageBlock, type UserContent } from '@/lib/ai/server/anthropic';
 import { fail, ok, readJson } from '@/lib/ai/server/http';
@@ -23,13 +24,15 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
 const MAX_FRAMES = 12;
+/** a IA pode mandar mais ops que o chat manual (planos longos); scripts geram as suas no navegador */
+const MAX_AI_OPS = 400;
 
 interface Body {
   project?: Project;
   assets?: Record<string, MediaAsset>;
   messages?: ChatMessage[];
   userText?: string;
-  mode?: 'first' | 'chat' | 'comments';
+  mode?: 'first' | 'chat' | 'comments' | 'repair' | 'review';
   /** para onde o usuário apontou (clipe, trecho, ponto, legenda, marcador) */
   context?: unknown;
   /** miniaturas do material: {assetId, t (s na mídia), data (base64), mediaType} */
@@ -77,17 +80,26 @@ export async function POST(req: Request) {
     const messages = Array.isArray(body.messages) ? body.messages : [];
     const first = body.mode === 'first';
     const commentsMode = body.mode === 'comments';
+    const repairMode = body.mode === 'repair';
+    const reviewMode = body.mode === 'review';
 
     const content: UserContent = [];
     for (const f of (Array.isArray(body.frames) ? body.frames : []).filter(isObj).slice(0, MAX_FRAMES)) {
       const img = typeof f.data === 'string' ? imageBlock(f.data, typeof f.mediaType === 'string' ? f.mediaType : 'image/jpeg') : null;
       if (!img) continue;
       const t = num(f.t);
-      content.push({ type: 'text', text: `Miniatura do material "${str(f.assetId, 80) ?? '?'}" em ${t !== undefined ? t.toFixed(1) : '?'} s da mídia:` }, img);
+      const label = f.assetId === 'resultado'
+        ? `Quadro do RESULTADO (como ficou a edição) em ${t !== undefined ? t.toFixed(2) : '?'} s da timeline:`
+        : `Miniatura do material "${str(f.assetId, 80) ?? '?'}" em ${t !== undefined ? t.toFixed(1) : '?'} s da mídia:`;
+      content.push({ type: 'text', text: label }, img);
     }
 
     const summary = summarizeProject(project, assets, messages);
-    const task = first
+    const task = repairMode
+      ? 'CONSERTO: parte da sua resposta anterior falhou (erros no pedido abaixo, com a linha quando houver). O que deu certo JÁ está no projeto atual. Devolva SOMENTE as ops/macros que faltam, corrigidas (script, shader GLSL, SVG ou op). Se algo for impossível, use a alternativa mais próxima e explique no reply.'
+      : reviewMode
+        ? 'CONFERÊNCIA DO RESULTADO: veja os quadros do RESULTADO renderizado e compare com o pedido do usuário. Se estiver certo, devolva ops: [] e ok: true. Se houver problema visível (texto cortado/ilegível/fora do quadro, cor ou posição errada, efeito invisível ou exagerado), devolva só as ops de ajuste e ok: false. Não refaça o que já está bom.'
+        : first
       ? 'PRIMEIRA EDIÇÃO: transforme o material bruto no vídeo descrito no brief, aplicando o estilo do vídeo-exemplo (se houver). Use a transcrição (palavras com ids e tempos) para cortar silêncios, erros, repetições e vícios com remove_words/ripple_delete e para achar frases fortes. Aplique legendas no estilo certo, gancho, zooms, cor, efeitos e transições.'
       : commentsMode
         ? 'APLICAR COMENTÁRIOS: atenda cada comentário de revisão no tempo indicado, marque cada um com update_marker {"resolved": true} e devolva "comments" com uma resposta curta por comentário.'
@@ -97,20 +109,24 @@ export async function POST(req: Request) {
 
     const raw = await generateStructured({
       signal: req.signal,
-      system: `${await loadPrompt('edit-system')}${COLOR_GRADE_LIVE ? '' : '\n\nOBS.: o motor de `colorGrade` ainda não está ligado — para cor use `colorPreset`, `filters` (temperature, tint, exposure, contrast, saturation…) ou `apply_look`.'}\n\n## Catálogo do editor (ids válidos)\n${engineCatalogForAI()}\n\n## Catálogo da biblioteca (ids válidos)\n${libraryCatalogForAI()}`,
+      system: `${await loadPrompt('edit-system')}${COLOR_GRADE_LIVE ? '' : '\n\nOBS.: o motor de `colorGrade` ainda não está ligado — para cor use `colorPreset`, `filters` (temperature, tint, exposure, contrast, saturation…) ou `apply_look`.'}\n\n## Catálogo do editor (ids válidos)\n${engineCatalogForAI()}\n\n## Catálogo da biblioteca (ids válidos)\n${libraryCatalogForAI()}\n\n## Shaders GLSL custom (prelúdio e exemplos testados)\n${shaderDocForAI()}`,
       content,
       schema: EditResponseSchema,
-      effort: first || commentsMode ? 'high' : 'medium',
-      maxTokens: 32000,
+      effort: first || commentsMode ? 'high' : reviewMode ? 'low' : 'medium',
+      // scripts/shaders/SVG longos cabem; o timeout do cliente (240 s) fica abaixo do maxDuration (300 s)
+      maxTokens: reviewMode ? 12000 : repairMode ? 24000 : 32000,
     });
 
     const reply = (isObj(raw) && str(raw.reply, 800)) || 'Pronto, apliquei as mudanças.';
-    const { ops, dropped, sfx } = sanitizeOps(isObj(raw) ? raw.ops : raw, project, assets);
+    const { ops, dropped, sfx, deferred } = sanitizeOps(isObj(raw) ? raw.ops : raw, project, assets, MAX_AI_OPS);
     if (dropped.length) console.warn('[ai/edit] ops descartadas:', dropped.map((d) => d.reason));
     const comments = isObj(raw) && Array.isArray(raw.comments)
       ? raw.comments.filter(isObj).map((c) => ({ markerId: str(c.markerId, 80) ?? '', reply: str(c.reply, 300) ?? '' })).filter((c) => c.markerId && c.reply)
       : [];
-    return ok({ reply, ops, dropped: dropped.length, comments, sfx });
+    // motivos do que caiu na validação: o navegador manda de volta numa rodada de conserto
+    const droppedReasons = dropped.slice(0, 20).map((d) => `${isObj(d.op) && typeof d.op.op === 'string' ? d.op.op : 'op'}: ${d.reason}`.slice(0, 200));
+    const review = isObj(raw) && raw.ok === true;
+    return ok({ reply, ops, dropped: dropped.length, droppedReasons, comments, sfx, deferred, ...(review ? { ok: true } : {}) });
   } catch (e) {
     return fail(e);
   }

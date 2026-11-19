@@ -93,6 +93,8 @@ export function waitForAsset(name: string, before: Set<Id>, ms = 30000): Promise
 
 /** ms por passo do applyLive: lento p/ ver o cursor; "Mais rápido" encurta (lido a cada passo) */
 export const FAST_STEP_MS = 350;
+/** acima disso o lote não passa inteiro pelo cursor ao vivo */
+export const LIVE_MAX_STEPS = 40;
 export function stepDelay(fast: boolean, requested?: number): number {
   const base = requested ?? AI_CURSOR_STEP_MS;
   return fast ? Math.min(FAST_STEP_MS, base) : base;
@@ -129,23 +131,47 @@ export const useAIChat = create<AIChatState>((set, get) => {
     const apply: PipelineOptions['apply'] = async (ops: EditOp[], o) => {
       const base = get().runs[msgId]?.steps.length ?? 0;
       // ordem boa de assistir (cortes -> legendas -> efeitos -> textos -> áudio) e balão curto no cursor
-      const ordered = orderForViewing(ops, editor().project);
-      const ids = ordered.map((op, i) => op.id ?? `${msgId}_${base + i}`);
-      const withIds = ordered.map((op, i) => ({ ...op, id: ids[i], explain: shortExplain(op.explain) }));
-      patchRun(msgId, (r) => ({ steps: [...r.steps, ...withIds.map((op) => ({ id: op.id!, text: op.explain || 'Editando', state: 'pending' as StepState }))] }));
+      // lote enorme (ex.: run_script com centenas de ops): mostra as primeiras ao vivo e aplica o resto de uma vez
+      const big = ops.length > LIVE_MAX_STEPS;
+      const ordered = big ? ops : orderForViewing(ops, editor().project);
+      const allIds = ordered.map((op, i) => op.id ?? `${msgId}_${base + i}`);
+      const live = big ? ordered.slice(0, LIVE_MAX_STEPS - 1) : ordered;
+      const rest = big ? ordered.slice(LIVE_MAX_STEPS - 1).map((op, i) => ({ ...op, id: allIds[LIVE_MAX_STEPS - 1 + i] })) : [];
+      const restId = `${msgId}_rest_${base}`;
+      const ids = allIds.slice(0, live.length);
+      const withIds = live.map((op, i) => ({ ...op, id: ids[i], explain: shortExplain(op.explain) }));
+      patchRun(msgId, (r) => ({
+        steps: [
+          ...r.steps,
+          ...withIds.map((op) => ({ id: op.id!, text: op.explain || 'Editando', state: 'pending' as StepState })),
+          ...(rest.length ? [{ id: restId, text: `Mais ${rest.length} mudanças de uma vez`, state: 'pending' as StepState }] : []),
+        ],
+      }));
       editor().updateMessage(msgId, { status: 'applying' });
       patchRun(msgId, { phase: 'Editando…', progress: undefined });
+      let lastStep = -1;
+      const idx = new Map(ids.map((id, i) => [id, i]));
       const applied = await editor().applyLive(withIds, {
         ...o,
         delayMs: () => stepDelay(get().fast, o?.delayMs),
-        onStep: (_op, i) =>
+        onStep: (_op, i) => {
+          lastStep = i;
           patchRun(msgId, (r) => ({
-            steps: r.steps.map((st) => (st.id === ids[i] ? { ...st, state: 'active' } : ids.slice(0, i).includes(st.id) && st.state === 'active' ? { ...st, state: 'done' } : st)),
-          })),
+            steps: r.steps.map((st) => (st.id === ids[i] ? { ...st, state: 'active' } : st.state === 'active' && (idx.get(st.id) ?? Infinity) < i ? { ...st, state: 'done' } : st)),
+          }));
+        },
       });
       const ok = new Set(applied);
-      patchRun(msgId, (r) => ({ steps: r.steps.map((st) => (ids.includes(st.id) ? { ...st, state: ok.has(st.id) ? 'done' : 'skipped' } : st)) }));
-      return applied;
+      let restDone = false;
+      if (rest.length && lastStep === withIds.length - 1 && applied.length > 0) {
+        patchRun(msgId, (r) => ({ steps: r.steps.map((st) => (st.id === restId ? { ...st, state: 'active' } : st)) }));
+        editor().dispatch(rest);
+        restDone = true;
+      }
+      patchRun(msgId, (r) => ({
+        steps: r.steps.map((st) => (ids.includes(st.id) ? { ...st, state: ok.has(st.id) ? 'done' : 'skipped' } : st.id === restId ? { ...st, state: restDone ? 'done' : 'skipped' } : st)),
+      }));
+      return restDone ? [...applied, ...rest.map((o) => o.id!)] : applied;
     };
 
     try {
