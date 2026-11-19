@@ -113,7 +113,7 @@ function Wizard({ onStart, onEmpty, onBack, busy, focus }: { onStart: (w: Wizard
   return (
     <div className="ep-wiz">
       <div className="ep-wiz-top">
-        <button type="button" className="ep-circle" onClick={onBack} aria-label="Voltar"><IconArrowLeft size={20} /></button>
+        <button type="button" className="ep-circle" onClick={onBack} aria-label="Voltar" disabled={!!busy} title={busy ? 'Aguarde a preparação da mídia' : undefined}><IconArrowLeft size={20} /></button>
         <h1 className="ep-h-sheet">Novo vídeo com IA</h1>
         <span />
       </div>

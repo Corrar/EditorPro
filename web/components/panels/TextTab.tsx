@@ -178,7 +178,7 @@ export default function TextTab() {
       <Section title="Modelos de texto"><TextTemplateGallery onInserted={afterInsert} /></Section>
       {clip ? (
         <>
-          <TextEditor clip={clip} />
+          <TextEditor key={clip.id} clip={clip} />
           <Section title="Fontes"><FontPicker /></Section>
           <Section title="Animações"><AnimationPicker mode="text" /></Section>
         </>

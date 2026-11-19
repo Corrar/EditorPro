@@ -8,7 +8,9 @@ import { useRef, useState } from 'react';
 import { emit } from '@/lib/events';
 import { ingestFile } from '@/lib/media/ingest';
 import { freezeFrameOps } from '@/lib/media/place';
-import { analyzeBeats, captureFrame, extractAudio } from '@/lib/media/tools';
+import { analyzeBeats, captureFrame } from '@/lib/media/tools';
+import { sourceTime } from '@/lib/engine/timing';
+import { detachAudioOps } from '@/lib/timeline/edit';
 import { useEditor } from '@/lib/store';
 import type { AudioEffectKind, BlendMode, ChromaKey, ClipAnimation, FitMode, Mask, Transform, VisualEffect } from '@/lib/types';
 import { DEFAULT_TRANSFORM } from '@/lib/types';
@@ -72,24 +74,19 @@ export function EditSection({ clip }: { clip: Clip }) {
     if (clip.type !== 'video' || !asset || !inside) return;
     setBusy('Capturando quadro…');
     try {
-      const frame = await captureFrame(asset, clip.in + (playhead - clip.start) * (clip.speed || 1));
+      // tempo real na mídia (reverso e curva de velocidade incluídos) — B7
+      const frame = await captureFrame(asset, sourceTime(clip, playhead));
       dispatch(freezeFrameOps(useEditor.getState().project, clip.id, playhead, frame, 2));
       toast('Quadro congelado por 2s');
     } catch (e) { toast(errMsg(e), 'error'); } finally { setBusy(null); }
   };
   const extract = async () => {
     if (clip.type !== 'video' || !asset) return;
-    setBusy('Extraindo áudio…');
-    try {
-      const a = await extractAudio(asset);
-      const st = useEditor.getState();
-      const trackId = st.project.tracks.find((t) => t.kind === 'audio' && !t.locked)?.id ?? uid('track_audio');
-      dispatch([
-        { op: 'add_clip', trackId, clip: { id: uid('clip'), type: 'audio', assetId: a.id, start: clip.start, duration: clip.duration, in: clip.in, speed: clip.speed, volume: clip.volume, label: a.name } },
-        { op: 'update_clip', clipId: clip.id, patch: { muted: true } },
-      ]);
-      toast('Áudio extraído para a trilha de áudio');
-    } catch (e) { toast(errMsg(e), 'error'); } finally { setBusy(null); }
+    // mesmo asset como clipe de áudio vinculado (reverso, curva, fades e vínculo A/V) — sem decodificar/gerar WAV (B6/B7)
+    const ops = detachAudioOps(useEditor.getState().project, clip.id);
+    if (!ops.length) return toast('Não deu para extrair o áudio deste clipe', 'error');
+    dispatch(ops);
+    toast('Áudio extraído para a trilha de áudio');
   };
 
   return (

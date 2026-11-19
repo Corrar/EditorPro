@@ -8,6 +8,7 @@ import { useEditor } from '../store';
 import { detectBeats, toMono } from './beats';
 import { ingestFile } from './ingest';
 import { encodeWav } from './wav';
+import { TOO_LONG_TO_DECODE, decodeFits } from './pure';
 
 const baseName = (n: string) => n.replace(/\.[^.]+$/, '');
 
@@ -17,6 +18,7 @@ async function assetBuffer(a: MediaAsset): Promise<ArrayBuffer> {
 }
 
 export async function decodeAsset(a: MediaAsset): Promise<AudioBuffer> {
+  if (!decodeFits(a.duration)) throw new Error(TOO_LONG_TO_DECODE); // antes do fetch/decodificação inteira (B6)
   const AC: typeof AudioContext = (globalThis as { AudioContext?: typeof AudioContext }).AudioContext
     ?? (globalThis as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
   const ctx = new AC();

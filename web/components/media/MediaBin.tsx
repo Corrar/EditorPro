@@ -10,6 +10,8 @@ import { emit } from '@/lib/events';
 import { ingestFiles, useIngestQueue } from '@/lib/media/ingest';
 import { placeAssetOp, sequenceOps } from '@/lib/media/place';
 import { cancelPreviewProxy, useProxyProgress } from '@/lib/media/proxy';
+import { trashAsset } from '@/lib/media/trash';
+import type { EditOp } from '@/lib/ops';
 import { openMediaPicker } from './pickerStore';
 import { useFilePickers } from './pickers';
 import { ROLE_LABEL, formatBytes } from '@/lib/media/pure';
@@ -53,13 +55,16 @@ function AssetCard({ asset, onAdd }: { asset: MediaAsset; onAdd: (a: MediaAsset)
 
   const remove = () => {
     const st = useEditor.getState();
-    const ops = st.project.tracks.flatMap((t) => t.clips.filter((c) => 'assetId' in c && c.assetId === asset.id).map((c) => ({ op: 'remove_clip' as const, clipId: c.id })));
+    const ops: EditOp[] = st.project.tracks.flatMap((t) => t.clips.filter((c) => 'assetId' in c && c.assetId === asset.id).map((c) => ({ op: 'remove_clip' as const, clipId: c.id })));
+    const removed = new Set(ops.map((o) => (o as { clipId: string }).clipId));
+    // tudo num passo só (B2): clipes, vídeo modelo e fundo em imagem
+    if (st.project.referenceAssetId === asset.id) ops.push({ op: 'set_project', patch: { referenceAssetId: undefined } });
+    if (st.project.canvas?.assetId === asset.id) ops.push({ op: 'set_project', patch: { canvas: { ...st.project.canvas, type: 'blur', assetId: undefined } } });
     if (ops.length) st.dispatch(ops);
-    if (st.project.referenceAssetId === asset.id) st.dispatch({ op: 'set_project', patch: { referenceAssetId: undefined } });
-    st.select(st.selection.filter((id) => !ops.some((o) => o.clipId === id)));
+    st.select(st.selection.filter((id) => !removed.has(id)));
     cancelPreviewProxy(asset.id);
-    st.removeAsset(asset.id);
-    emit('ep:toast', { text: `“${asset.name}” removido da biblioteca`, kind: 'info' });
+    trashAsset(asset); // Desfazer devolve o asset junto com os clipes
+    emit('ep:toast', { text: `“${asset.name}” removido da biblioteca`, kind: 'info', action: ops.length ? { label: 'Desfazer', run: () => useEditor.getState().undo() } : undefined });
   };
 
   return (
@@ -141,8 +146,9 @@ export default function MediaBin() {
 
   const importFiles = async (files: File[]) => {
     if (!files.length) return;
+    const pid = useEditor.getState().project.id;
     const done = await ingestFiles(files);
-    if (!done.length) return;
+    if (!done.length || useEditor.getState().project.id !== pid) return; // trocou de projeto no meio (B5)
     // timeline vazia: a 1ª importação já entra em sequência na trilha principal (B9); 1 desfazer
     const st = useEditor.getState();
     const empty = st.project.tracks.every((t) => t.clips.length === 0);

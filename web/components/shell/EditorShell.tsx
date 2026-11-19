@@ -23,6 +23,7 @@ import MobileToolbar from './MobileToolbar';
 import AiCursor from './AiCursor';
 import { initCatalogs } from '@/components/panels/catalog';
 import { initColor } from '@/components/panels/ColorTool';
+import { initAssetTrash } from '@/lib/media/trash';
 import MediaPicker from '@/components/media/MediaPicker';
 import { openMediaPicker } from '@/components/media/pickerStore';
 import AiPopupHost, { type AiPopupMode } from './AiPopupHost';
@@ -48,7 +49,7 @@ export default function EditorShell() {
   const [sideOpen, setSideOpen] = useState(true);
   const [chatOpen, setChatOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  useEffect(() => { initCatalogs(); initColor(); }, []); // catálogos da sessão FX (fallback: listas atuais)
+  useEffect(() => { initCatalogs(); initColor(); return initAssetTrash(); }, []); // catálogos da sessão FX (fallback: listas atuais)
   const [menuSearch, setMenuSearch] = useState(false);
   const [aiAutoMin, setAiAutoMin] = useState(false);
   const [aiMode, setAiModeRaw] = useState<AiPopupMode>('closed');
@@ -204,11 +205,15 @@ export default function EditorShell() {
     const brief = w.brief.trim() || DEFAULT_BRIEF;
     try {
       resetWorkspace({ name: projectNameFromBrief(w.brief, w.material[0]?.name.replace(/\.[^.]+$/, '') ?? 'Novo projeto'), aspect: w.aspect, brief });
+      // se outro projeto for aberto durante a preparação, nada do wizard cai nele (B5)
+      const pid = useEditor.getState().project.id;
+      const moved = () => useEditor.getState().project.id !== pid;
       const total = w.material.length + (w.reference ? 1 : 0);
       let done = 0;
       const tick = () => setBusy(total ? `Preparando mídia ${Math.min(done + 1, total)}/${total}…` : 'Abrindo editor…');
       tick();
       const material = await ingestFiles(w.material, undefined, () => { done++; tick(); });
+      if (moved()) return;
       let referenceAssetId: string | undefined;
       if (w.reference) {
         try {
@@ -217,6 +222,7 @@ export default function EditorShell() {
           emit('ep:toast', { text: e instanceof Error ? e.message : 'Não consegui ler o vídeo de exemplo', kind: 'error' });
         }
       }
+      if (moved()) return;
       const st = useEditor.getState();
       st.dispatch([...sequenceOps(st.project, material), { op: 'set_project', patch: { brief, referenceAssetId } }], { history: false });
       pendingBrief.current = brief;
@@ -230,6 +236,7 @@ export default function EditorShell() {
   };
 
   const openEmpty = (aspect: AspectRatio) => {
+    if (busy) return; // wizard preparando mídia (B5)
     resetWorkspace({ aspect });
     setTool('media');
     setSideOpen(!mq('(max-width: 1099px)')); // telas menores: gaveta começa fechada
@@ -237,6 +244,7 @@ export default function EditorShell() {
   };
 
   const importNew = (files: File[]) => {
+    if (busy) return;
     resetWorkspace({ aspect: '9:16' });
     setTool('media');
     setSideOpen(true);
@@ -245,6 +253,7 @@ export default function EditorShell() {
   };
 
   const fromTemplate = (id: string) => {
+    if (busy) return;
     startFromProject(projectFromTemplate(id));
     setTool('media');
     setSideOpen(!mq('(max-width: 1099px)')); // telas menores: gaveta começa fechada
@@ -252,6 +261,7 @@ export default function EditorShell() {
   };
 
   const open = async (id: string) => {
+    if (busy) return;
     if (id !== useEditor.getState().project.id || !hasContent) {
       const ok = await openProject(id).catch(() => false);
       if (!ok) { emit('ep:toast', { text: 'Não consegui abrir este projeto', kind: 'error' }); return; }

@@ -1,4 +1,5 @@
 'use client';
+import { sourceTime } from '@/lib/engine/timing';
 /* =====================================================================
    Timeline — ações de edição de alto nível (API pública do módulo).
    Usam o store global (useEditor) + estado local (useTimelineUi) e
@@ -144,7 +145,7 @@ export async function freezeFrame(imageAsset?: MediaAsset, opts: { clipId?: Id; 
       const src = st.assets[clip.assetId];
       if (!src) return toast('Mídia do clipe não encontrada', 'error');
       toast('Capturando quadro…');
-      frame = await captureFrame(src, clip.in + (t - clip.start) * (clip.speed || 1));
+      frame = await captureFrame(src, sourceTime(clip, t)); // reverso/curva incluídos
     }
     if (!useEditor.getState().assets[frame.id]) useEditor.getState().addAsset(frame);
     const hold = opts.hold ?? 2;

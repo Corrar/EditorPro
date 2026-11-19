@@ -15,7 +15,7 @@ import { useEditor } from '../store';
 import type { MediaAsset, MediaRole } from '../types';
 import { uid } from '../util';
 import { startPreviewProxy } from './proxy';
-import { UNDECODABLE_MSG, looksUndecodable, defaultRoleFor, mediaKindOf, peakCountFor, reducePeaks, thumbCountFor, thumbSize, thumbTimes } from './pure';
+import { UNDECODABLE_MSG, decodeFits, looksUndecodable, defaultRoleFor, mediaKindOf, peakCountFor, reducePeaks, thumbCountFor, thumbSize, thumbTimes } from './pure';
 
 /* ---------- fila de importação (p/ a UI mostrar progresso) ---------- */
 
@@ -109,6 +109,7 @@ const MAX_DECODE_BYTES = 350 * 1024 * 1024;
 
 async function waveformOf(file: Blob, duration: number): Promise<number[] | undefined> {
   if (file.size > MAX_DECODE_BYTES) return undefined;
+  if (!decodeFits(duration)) return undefined; // áudio longo: sem waveform em vez de estourar a memória (B6)
   const AC: typeof AudioContext | undefined =
     (globalThis as { AudioContext?: typeof AudioContext }).AudioContext ??
     (globalThis as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -145,7 +146,11 @@ export async function ingestFile(file: File, role?: MediaRole): Promise<MediaAss
     mime: file.type || (kind === 'video' ? 'video/mp4' : kind === 'audio' ? 'audio/mpeg' : 'image/jpeg'),
     size: file.size, duration: 0, url,
   };
-  const { addAsset, updateAsset } = useEditor.getState();
+  // projeto de origem: se o usuário trocar de projeto no meio, o asset não entra no projeto errado (B5)
+  const pid = useEditor.getState().project.id;
+  const same = () => useEditor.getState().project.id === pid;
+  const addAsset = (a: MediaAsset) => { if (same()) useEditor.getState().addAsset(a); };
+  const updateAsset = (id: string, patch: Partial<MediaAsset>) => { if (same()) useEditor.getState().updateAsset(id, patch); };
   const blobSaved = putBlob(id, file).catch((e) => console.warn('[ingest] blob não salvo', e));
 
   try {
@@ -181,6 +186,7 @@ export async function ingestFile(file: File, role?: MediaRole): Promise<MediaAss
     }
     await blobSaved;
     void rememberRecent(asset); // galeria "Recentes" do seletor dentro do app
+    if (!same()) URL.revokeObjectURL(url); // projeto trocou: o asset não entrou em lugar nenhum
     return asset;
   } catch (e) {
     if (!useEditor.getState().assets[id]) URL.revokeObjectURL(url);

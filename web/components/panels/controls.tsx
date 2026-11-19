@@ -77,13 +77,15 @@ export function Slider({
 }) {
   const g = useGesture();
   const [editing, setEditing] = useState<string | null>(null);
+  const editTarget = useRef({ onChange, value });
   const pct = ((value - min) / (max - min)) * 100;
   const shown = format ? format(value) : value.toFixed(step >= 1 ? 0 : 2);
   const commit = () => {
     if (editing === null) return;
     const v = typedToValue(editing, shown, min, max);
+    const t = editTarget.current;
     setEditing(null);
-    if (v !== null && Math.abs(v - value) > 1e-9) onChange(v, true);
+    if (v !== null && Math.abs(v - t.value) > 1e-9) t.onChange(v, true);
   };
   return (
     <div className="ep-slider">
@@ -106,7 +108,7 @@ export function Slider({
               onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(null); }}
             />
           ) : (
-            <button type="button" className="ep-slider-num" onClick={() => setEditing(valueToTyped(value, shown))} title="Toque para digitar" aria-label={`${label}: ${shown}. Toque para digitar`}>{shown}</button>
+            <button type="button" className="ep-slider-num" onClick={() => { editTarget.current = { onChange, value }; setEditing(valueToTyped(value, shown)); }} title="Toque para digitar" aria-label={`${label}: ${shown}. Toque para digitar`}>{shown}</button>
           )}
           {reset !== undefined && Math.abs(value - reset) > 1e-6 && (
             <button type="button" className="ep-slider-reset" title="Restaurar" aria-label={`Restaurar ${label}`} onClick={(e) => { e.preventDefault(); onChange(reset, true); }}>↺</button>
@@ -193,17 +195,20 @@ export function CommitInput({ value, format, parse, onCommit, className, ariaLab
 }) {
   const [text, setText] = useState(format(value));
   const [focus, setFocus] = useState(false);
+  // alvo capturado ao focar: se a seleção mudar antes do blur, o valor vai para o clipe que estava sendo editado
+  const target = useRef({ onCommit, value });
   useEffect(() => { if (!focus) setText(format(value)); }, [value, focus, format]);
   const commit = () => {
+    const t = focus ? target.current : { onCommit, value };
     const v = parse(text);
-    if (v !== null && Math.abs(v - value) > 1e-4) onCommit(v);
+    if (v !== null && Math.abs(v - t.value) > 1e-4) t.onCommit(v);
     else setText(format(value));
   };
   return (
     <input
       className={className ?? 'ep-input mono'} aria-label={ariaLabel} value={text}
-      onFocus={() => setFocus(true)}
-      onBlur={() => { setFocus(false); commit(); }}
+      onFocus={() => { target.current = { onCommit, value }; setFocus(true); }}
+      onBlur={() => { commit(); setFocus(false); }}
       onChange={(e) => setText(e.target.value)}
       onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') { setText(format(value)); (e.target as HTMLInputElement).blur(); } }}
     />

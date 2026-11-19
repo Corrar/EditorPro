@@ -50,7 +50,9 @@ function Narration() {
   const t0 = useRef(0);
   const timers = useRef<ReturnType<typeof setInterval>[]>([]);
   const clear = () => { timers.current.forEach(clearInterval); timers.current = []; };
-  useEffect(() => () => { clear(); rec.current?.cancel(); }, []);
+  // painel desmontado com a permissão do microfone pendente: ao voltar, desliga o gravador (B8)
+  const alive = useRef(true);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; clear(); rec.current?.cancel(); rec.current = null; }; }, []);
 
   const begin = async () => {
     try {
@@ -61,8 +63,11 @@ function Narration() {
         const id = setInterval(() => { n -= 1; setCount(n); if (n <= 0) { clearInterval(id); res(); } }, 800);
         timers.current.push(id);
       });
+      if (!alive.current) return;
       startAt.current = Math.round(useEditor.getState().playhead * 100) / 100;
-      rec.current = await startRecording();
+      const r = await startRecording();
+      if (!alive.current) { r.cancel(); return; }
+      rec.current = r;
       t0.current = performance.now();
       setState('rec'); setElapsed(0);
       timers.current.push(setInterval(() => setElapsed((performance.now() - t0.current) / 1000), 200));
@@ -113,8 +118,9 @@ export default function AudioTab() {
   const clip = useSelectedClip()?.clip;
   const input = useRef<HTMLInputElement>(null);
   const importMusic = async (files: File[]) => {
+    const pid = useEditor.getState().project.id;
     const done = await ingestFiles(files, 'music');
-    if (!done.length) return;
+    if (!done.length || useEditor.getState().project.id !== pid) return;
     // importou → já entra na trilha de áudio no cursor (ou em 0 com a timeline vazia); 1 desfazer
     const st = useEditor.getState();
     const ops = musicPlacementOps(st.project, done, st.playhead);
@@ -138,7 +144,7 @@ export default function AudioTab() {
         <input ref={input} type="file" hidden multiple accept="audio/*" onChange={(e) => { void importMusic(Array.from(e.target.files ?? [])); e.target.value = ''; }} />
       </div>
       <Narration />
-      {isSound(clip) && <VolumeSection clip={clip} />}
+      {isSound(clip) && <VolumeSection key={clip.id} clip={clip} />}
       <Section title="Seus áudios"><MusicLibrary /></Section>
     </>
   );

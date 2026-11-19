@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { emit } from '@/lib/events';
 import { gcBlobs, listProjects } from '@/lib/persist';
+import { trashedAssetIds } from '@/lib/media/trash';
 import { useInstallPrompt } from '@/lib/pwa';
 import { useEditor } from '@/lib/store';
 import { IconClose, IconShare } from './icons';
@@ -24,7 +25,7 @@ export default function SettingsModal({ dark, onTheme, onClose }: { dark: boolea
   }, [onClose]);
 
   const clean = async () => {
-    const n = await gcBlobs(Object.keys(useEditor.getState().assets)).catch(() => 0);
+    const n = await gcBlobs([...Object.keys(useEditor.getState().assets), ...trashedAssetIds()]).catch(() => 0);
     emit('ep:toast', { text: n ? `${n} arquivo(s) sem uso removidos` : 'Nada para limpar', kind: 'ok' });
   };
 
