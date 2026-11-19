@@ -18,6 +18,7 @@ import {
   sanitizeStyleProfile, sanitizeTextStyle, sanitizeTransform, sanitizeTransition, sanitizeTranscript, sanitizeVisualExtras, str,
 } from './sanitize';
 import { assignWordIds } from './features';
+import { alignWordTimes } from './words';
 import { COLOR_GRADE_LIVE, gradeToFilters } from './colormatch';
 import { expandLibraryOp, isLibraryMacro, type SfxRequest } from './library';
 import { isDeferredMacro, toDeferred, type Deferred } from './deferred';
@@ -533,7 +534,9 @@ export function sanitizeOp(raw: unknown, p: Project, assets: Record<Id, MediaAss
       const segments = sanitizeSegments(r.segments, p);
       if (!segments.length) fail('nenhuma legenda válida');
       const language = str(r.language, 12);
-      return { op: 'set_captions', segments, ...(language ? { language } : {}), ...meta };
+      const source = oneOf(r.source, ['transcription', 'manual', 'translation'] as const);
+      const model = source ? str(r.model, 60) : undefined;
+      return { op: 'set_captions', segments, ...(language ? { language } : {}), ...(source ? { source } : {}), ...(model ? { model } : {}), ...meta };
     }
     case 'update_caption': {
       const sid = str(r.segmentId, 80) ?? fail('segmentId ausente');
@@ -557,9 +560,12 @@ export function sanitizeOp(raw: unknown, p: Project, assets: Record<Id, MediaAss
           const map = (t: number) => (t0 === seg.start && t1 === seg.end ? t : r3(t0 + (t - seg.start) * k));
           out.words = old.map((w, i) => ({ ...w, text: words[i], start: map(w.start), end: map(w.end) }));
         } else {
-          // quantidade mudou: redistribui com ids curtos que continuam a numeração wNNNNN
+          // quantidade mudou: alinha palavra a palavra e mantém os tempos REAIS da fala (ids novos continuam wNNNNN)
           let next = allWords(p).reduce((m, w) => { const n = /^w(\d+)$/.exec(w.id ?? '')?.[1]; return n ? Math.max(m, +n) : m; }, 0) + 1;
-          out.words = words.map((w, i) => ({ id: `w${String(next++).padStart(5, '0')}`, text: w, start: r3(t0 + ((t1 - t0) * i) / words.length), end: r3(t0 + ((t1 - t0) * (i + 1)) / words.length) }));
+          const newId = () => `w${String(next++).padStart(5, '0')}`;
+          if (old.length && t0 === seg.start && t1 === seg.end) out.words = alignWordTimes(old, words, newId);
+          else out.words = words.map((w, i) => ({ id: newId(), text: w, start: r3(t0 + ((t1 - t0) * i) / words.length), end: r3(t0 + ((t1 - t0) * (i + 1)) / words.length) }));
+          if (out.words.length) { out.start = Math.min(t0, out.words[0].start); out.end = Math.max(t1, out.words[out.words.length - 1].end); if (out.start === seg.start) delete out.start; if (out.end === seg.end) delete out.end; }
         }
       }
       if (Array.isArray(patch.emphasis)) out.emphasis = patch.emphasis.map((x) => str(x, 40)).filter((x): x is string => !!x).slice(0, 6);
@@ -595,6 +601,22 @@ export function sanitizeOp(raw: unknown, p: Project, assets: Record<Id, MediaAss
     }
   }
   return fail('op não tratada');
+}
+
+/**
+ * (plano §1.6) a IA nunca reescreve o TEXTO das legendas por conta própria: o texto é a fala.
+ * Só no chat, quando o pedido aponta para aquela legenda (context.segmentId) ou pede correção
+ * ("corrige", "está errado", "troca a palavra"), a correção passa. Tempo/estilo/ênfase passam sempre.
+ */
+export function guardCaptionText(ops: EditOp[], opts: { mode: 'first' | 'chat' | 'review' | 'repair' | 'comments' | string; userText?: string; segmentId?: string }): EditOp[] {
+  const asks = /corrig|errad|troca(r)? (a|essa|esta) palavra|escrit[oa] errad|grafia|ortograf/i.test(opts.userText ?? '');
+  return ops.flatMap((op) => {
+    if (op.op !== 'update_caption' || op.patch.text === undefined) return [op];
+    const allowed = (opts.mode === 'chat' || opts.mode === 'repair') && (asks || (!!opts.segmentId && opts.segmentId === op.segmentId));
+    if (allowed) return [op];
+    const { text: _t, words: _w, ...rest } = op.patch;
+    return Object.keys(rest).length ? [{ ...op, patch: rest }] : [];
+  });
 }
 
 /** sanitiza a lista inteira simulando a aplicação em sequência */

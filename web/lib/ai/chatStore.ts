@@ -43,6 +43,8 @@ export interface RunState {
   question?: { text: string; options: AskOption[] };
   /** etapa em andamento que pode ser pulada (ex.: "Pular transcrição") */
   skipLabel?: string;
+  /** botões depois da resposta (ex.: "Tentar transcrever de novo", "Ligar CC") */
+  actions?: AskOption[];
 }
 
 interface AIChatState {
@@ -66,6 +68,8 @@ interface AIChatState {
   answer: (msgId: Id, optionId: string) => void;
   /** pula a etapa em andamento (ex.: transcrição) */
   skip: (msgId: Id) => void;
+  /** botão oferecido numa resposta (captions:retry | captions:cc | captions:manual) */
+  action: (msgId: Id, actionId: string) => Promise<void>;
   /** transcrição local com Whisper ligada? (preferência do aparelho) */
   whisper: boolean;
   setWhisper: (on: boolean) => void;
@@ -228,7 +232,7 @@ export const useAIChat = create<AIChatState>((set, get) => {
       });
       const after = editor().project;
       const changed = !res.undo && after !== get().runs[msgId]?.before;
-      patchRun(msgId, { phase: undefined, progress: undefined, done: true, after: changed ? after : undefined, final: after });
+      patchRun(msgId, { phase: undefined, progress: undefined, done: true, after: changed ? after : undefined, final: after, actions: res.actions?.length ? res.actions : undefined });
       editor().updateMessage(msgId, { text: res.reply, status: 'done', opIds: res.appliedIds });
       onDone?.(msgId, res);
       void getStatus().then((st) => set({ status: st })); // o selo Claude/Demo acompanha a última checagem
@@ -313,6 +317,21 @@ export const useAIChat = create<AIChatState>((set, get) => {
     },
 
     answer: (msgId, optionId) => answers.get(msgId)?.(optionId),
+
+    action: async (msgId, actionId) => {
+      if (get().busy) return;
+      patchRun(msgId, { actions: undefined });
+      if (actionId === 'captions:manual') {
+        emit('ep:open-tool', { tool: 'captions' });
+        emit('ep:toast', { text: 'No painel Legendas, toque em "Nova legenda" para escrever a sua.', kind: 'info' });
+        return;
+      }
+      if (actionId === 'captions:cc') get().setWhisper(true);
+      if (actionId === 'captions:retry' || actionId === 'captions:cc' || actionId === 'captions:redo') {
+        editor().pushMessage({ role: 'user', text: actionId === 'captions:redo' ? 'Refazer as legendas pela fala' : actionId === 'captions:cc' ? 'Ligar CC e transcrever' : 'Tentar transcrever de novo', status: 'done' });
+        await run('Transcrevendo a fala…', (o) => generateCaptions({ ...o, whisper: actionId === 'captions:cc' ? true : o.whisper }));
+      }
+    },
 
     skip: (msgId) => {
       const c = skips.get(msgId);
