@@ -4,6 +4,7 @@
    em linhas, animação de bloco e por unidade, caixas, sombra, brilho,
    contorno, gradiente e emoji; drawTextClip/drawCaptions montam os parâmetros.
    ===================================================================== */
+import { animateClip } from './animate';
 import type { CaptionStyle, Project, Seconds, TextClip, TextStyle } from '../types';
 import { interpolateTransform, easeOutBack, easeOutBounce, ease, clamp01 } from './easing';
 import { balanceLines, layoutWords, splitText, textAnimState, fontPx, type AnimState } from './text';
@@ -400,7 +401,9 @@ function isStaticAnim(a: AnimState): boolean {
     && !Number.isFinite(a.visibleChars) && done(a.sweep) && done(a.underlineDraw) && done(a.boxReveal);
 }
 
-export function drawTextClip(ctx: Ctx, clip: TextClip, t: Seconds, W: number, H: number) {
+export function drawTextClip(ctx: Ctx, clip0: TextClip, t: Seconds, W: number, H: number) {
+  // keyframes universais: style.fontSize/color/strokeWidth…, position, scale, rotation
+  const clip = animateClip(clip0, t - clip0.start);
   const style = clip.style;
   const fontReady = requestFont(style.fontFamily, style.fontWeight || 700, !!style.italic);
   const raw = style.uppercase ? clip.text.toLocaleUpperCase('pt-BR') : clip.text;

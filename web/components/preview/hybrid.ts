@@ -20,6 +20,7 @@ import { transitionVisual, type TransitionVisual } from '@/lib/engine/transition
 import { isShaderTransition } from '@/lib/engine/shaderTransitions';
 import { gradeNeedsCanvas, gradeCssEquivalent } from '@/lib/color';
 import { effectsNativeMode } from '@/lib/fx/native';
+import { animateClip } from '@/lib/engine/animate';
 import { effectGeometry } from '@/lib/engine/effects';
 
 /** uma camada nativa: um <video> visível com geometria/opacidade/filtro em CSS */
@@ -83,7 +84,8 @@ export function nativePlan(p: Project, t: Seconds): NativePlan {
   if (items.length > 2) return no('camadas sobrepostas');
   const layers: NativeLayer[] = [];
   for (const it of items) {
-    const clip = it.clip;
+    // keyframes universais: filtros/efeitos/cor/máscara animados entram na decisão e no CSS
+    const clip = animateClip(it.clip, t - it.clip.start);
     if (clip.type !== 'video') return no(clip.type === 'image' ? 'imagem' : 'camada especial');
     const why = clipNeedsCanvas(clip, t);
     if (why) return no(why);

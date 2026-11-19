@@ -23,6 +23,7 @@ import { emojiCanvas, shapeCanvas, clipShapeAspect } from './shapes';
 import { getSegMask, requestSegMask } from './segment';
 import { hash, scratch, type AnyCanvas, type Ctx } from './surface';
 import { gradeLayer } from '../color';
+import { animateClip } from './animate';
 import type { MediaElement } from './index';
 
 export type { Ctx } from './surface';
@@ -82,7 +83,9 @@ export interface LayerOpts {
 
 /** desenha um item visual (vídeo/imagem/sticker/forma) no quadro */
 export function drawLayer(ctx: Ctx, layer: LayerItem, t: Seconds, el: MediaElement | undefined, W: number, H: number, opts: LayerOpts = {}): void {
-  const clip = layer.clip;
+  // keyframes universais (props animadas: efeitos, filtros, cor, máscara, chroma, forma…)
+  const owner = layer.clip; // dono estável dos caches (scratch), mesmo com o clipe animado mudando a cada quadro
+  const clip = animateClip(layer.clip, t - layer.clip.start);
   const local = Math.min(Math.max(0, t - clip.start), clip.duration);
   const tf = interpolateTransform(clip.transform ?? DEFAULT_TRANSFORM, clip.keyframes, local);
   const short = Math.min(W, H);
@@ -122,7 +125,7 @@ export function drawLayer(ctx: Ctx, layer: LayerItem, t: Seconds, el: MediaEleme
     if (!opts.offline) requestSegMask(key, src, sw, sh, t);
     const m = getSegMask(key);
     if (m) {
-      const { c, ctx: rc } = scratch(clip, sw, sh, 1);
+      const { c, ctx: rc } = scratch(owner, sw, sh, 1);
       rc.drawImage(src, 0, 0, sw, sh);
       rc.globalCompositeOperation = 'destination-in';
       rc.drawImage(m as CanvasImageSource, 0, 0, sw, sh);
@@ -144,7 +147,7 @@ export function drawLayer(ctx: Ctx, layer: LayerItem, t: Seconds, el: MediaEleme
     let tsrc: TexImageSource = src as TexImageSource, tsw = sw, tsh = sh;
     // texturas enormes: reduz antes de subir p/ a GPU (upload é o passo caro)
     if (k < 0.6 && !crop) {
-      const { c, ctx: dc } = scratch(clip, Math.max(2, sw * k), Math.max(2, sh * k), 2);
+      const { c, ctx: dc } = scratch(owner, Math.max(2, sw * k), Math.max(2, sh * k), 2);
       dc.drawImage(src, 0, 0, c.width, c.height);
       tsrc = c as TexImageSource; tsw = c.width; tsh = c.height;
     }
@@ -163,7 +166,7 @@ export function drawLayer(ctx: Ctx, layer: LayerItem, t: Seconds, el: MediaEleme
     const kfitG = fitG === 'contain' ? Math.min(W / sw, H / sh) : Math.max(W / sw, H / sh);
     const kk = Math.min(1, 1920 / Math.max(sw, sh), kfitG * Math.max(0.05, tf.scale) * 1.1);
     if (kk < 0.9) {
-      const { c, ctx: pc } = scratch(clip, Math.max(2, Math.round(sw * kk)), Math.max(2, Math.round(sh * kk)), 3);
+      const { c, ctx: pc } = scratch(owner, Math.max(2, Math.round(sw * kk)), Math.max(2, Math.round(sh * kk)), 3);
       pc.drawImage(src, 0, 0, c.width, c.height);
       src = c as CanvasImageSource; sw = c.width; sh = c.height;
     }
@@ -274,7 +277,8 @@ function overlayColor(ctx: Ctx, color: string, alpha: number, W: number, H: numb
 
 /* ---------- camada de ajuste: aplica filtros/efeitos a tudo que já está desenhado ---------- */
 
-export function applyAdjustment(ctx: Ctx, clip: AdjustmentClip, t: Seconds, W: number, H: number) {
+export function applyAdjustment(ctx: Ctx, clip0: AdjustmentClip, t: Seconds, W: number, H: number) {
+  const clip = animateClip(clip0, t - clip0.start);
   const f = resolveFilters(clip.filters, clip.colorPreset, H / 1080);
   const anyFx = f.css !== 'none' || needsPixelGrade(f) || f.temperature || f.tint || f.fade || f.vignette || f.grain || clip.effects?.length || !!clip.colorGrade;
   if (!anyFx) return;
