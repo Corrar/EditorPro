@@ -41,6 +41,11 @@ const textStyleShape = {
   gradient: z.object({ from: z.string(), to: z.string(), angle: z.number() }).optional(),
   backgroundRadius: z.number().optional(),
   opacity: z.number().optional(),
+  shadowColor: z.string().optional(),
+  shadowBlur: z.number().optional(),
+  shadowOffset: z.object({ x: z.number(), y: z.number() }).optional(),
+  glow: z.object({ color: z.string(), blur: z.number() }).nullable().optional(),
+  backgroundPadding: z.number().optional(),
 };
 const textStyle = z.object(textStyleShape);
 const captionStyle = z.object({
@@ -49,6 +54,12 @@ const captionStyle = z.object({
   position: position.optional(),
   animation: z.enum(TEXT_ANIMATIONS).optional(),
   maxWords: z.number().optional(),
+  wordBox: z.object({ color: z.string(), radius: z.number(), padding: z.number() }).nullable().optional(),
+  activeScale: z.number().optional(),
+  inactiveOpacity: z.number().optional(),
+  autoEmoji: z.boolean().optional(),
+  lines: z.number().optional(),
+  jitter: z.number().optional(),
 });
 
 const effect = z.object({ kind: z.enum(EFFECT_KINDS), intensity: z.number().describe('0..1'), speed: z.number().optional() });
@@ -58,6 +69,7 @@ const mask = z.object({ shape: z.enum(MASK_SHAPES), x: z.number(), y: z.number()
 
 /** campos de clipe (para add_clip.clip e update_clip.patch) */
 const clipFields = {
+  groupId: z.string().optional().describe('mesmo valor em todos os clipes de um modelo (lower third, CTA…)'),
   // estilo CapCut
   fit: z.enum(FIT_MODES).optional(),
   crop: z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() }).optional(),
