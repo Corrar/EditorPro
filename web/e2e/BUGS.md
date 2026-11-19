@@ -2,7 +2,7 @@
 
 > Rodada 6: **regressão 32/32 ok** nos 3 perfis e **personas 20/20 passos**. B1–B9 corrigidos.
 > Desfazer edição antiga: link "Ver as N edições desta conversa (desfazer qualquer uma)" → "Voltar para antes desta edição" (3 botões) funciona;
-> o projeto resultante não é idêntico ao estado logo após a 1ª edição (esperado se a 3ª edição é mantida — desfazer seletivo).
+> **B10 (ai, aberto):** o projeto resultante NÃO é idêntico ao estado logo após a 1ª edição. Esperado (principal): voltar TUDO ao estado exato de antes daquela edição, desfazendo as posteriores. O teste da P4 agora falha nesse caso.
 > Pendentes para a próxima rodada (combinado com a principal): catálogo de músicas (library), fluidez p95 no desktop (50–56 ms nas rodadas anteriores; 32/32 nesta), itens 3/5/6 de usabilidade (shell/ia).
 
 > QA só documenta: nenhum destes foi corrigido aqui. Arquivo:linha é o ponto provável.

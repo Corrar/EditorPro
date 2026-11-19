@@ -518,8 +518,13 @@ async function persona4(media) {
       await s.tap(target);
       const p = await readProject(page);
       // voltar para antes da 2ª edição = estado logo após a 1ª (states[1])
+      // esperado (principal, rodada 6): voltar TUDO ao estado exato de antes da edição, desfazendo as posteriores
       const exact = p.sig === states[1].sig;
-      if (!exact && p.sig === states[3].sig) throw new Error('projeto não mudou');
+      if (p.sig === states[3].sig) throw new Error('projeto não mudou');
+      if (!exact) {
+        s.friction({ step: 'Desfazer', kind: 'bug', sev: 2, text: '"Voltar para antes desta edição" (2ª edição) muda o projeto, mas não volta ao estado exato de logo após a 1ª edição (deveria desfazer também as posteriores).', file: 'components/chat/ChatPanel.tsx / lib/ai (restauração de snapshot)', owner: 'ai' });
+        throw new Error('estado restaurado não é o exato de antes da 2ª edição');
+      }
       return `via ${via}; ${m} botões "Voltar para antes"; estado = após a 1ª edição: ${exact ? 'sim' : 'não (mudou, mas não idêntico)'}`;
     });
   } finally { await ctx.close(); }
