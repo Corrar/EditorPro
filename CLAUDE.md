@@ -78,7 +78,7 @@
   no quadro), 80 estilos de legenda, IA com catálogo completo + vídeo modelo + cor do modelo (`COLOR_GRADE_LIVE = true`).
 - Contrato corrigido (2026-11-19): split/trim/ripple preservam reverso/curva/keyframes e tiram fades nas bordas do corte;
   applyLive fecha o lote certo com Parar/desfazer/edição manual/troca de projeto (testes em `ops.cuts.test.ts`, `store.test.ts`).
-- Música (2026-11-19): catálogo de 45 trilhas geradas por código (13 gêneros, −14 LUFS, sem direitos autorais) em Áudio →
+- Música (2026-11-19): catálogo de 81 trilhas geradas por código (18 gêneros, incl. sertanejo, forró, pagode, funk BR, gospel; −14 LUFS, sem direitos autorais) em Áudio →
   "Músicas livres" (`components/music/MusicCatalog`); a IA usa o catálogo quando o pedido tem música e não veio arquivo
   (`lib/ai/catalogMusic.ts`: 1ª edição e chat "coloca/troca a música"). 94 modelos de texto em 12 categorias.
 - Pendências conhecidas: biblioteca (fontes ≥60, SFX ≥100), Deliver do export (presets
