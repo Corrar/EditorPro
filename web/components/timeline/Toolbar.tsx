@@ -1,6 +1,6 @@
 'use client';
 /* Barra de ferramentas da timeline (desktop e compacta) */
-import { memo, useEffect, useRef, type ReactNode, type RefObject } from 'react';
+import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import type { TrackKind } from '@/lib/types';
 import { useEditor, useDuration } from '@/lib/store';
 import { useDims, useTimelineUi } from '@/lib/timeline/ui';
@@ -74,13 +74,51 @@ function Popover({ open, anchor, onClose, children, width = 240, role = 'menu' }
       window.removeEventListener('resize', close);
     };
   }, [open, onClose, anchor]);
+  // posição medida de verdade (altura real do menu), sempre dentro da tela visível;
+  // se não couber nem acima nem abaixo, ocupa a altura disponível com rolagem
+  const [pos, setPos] = useState<{ top: number; left: number; maxH: number } | null>(null);
+  useLayoutEffect(() => {
+    if (!open) { setPos(null); return; }
+    const place = () => {
+      const a = anchor.current;
+      const el = ref.current;
+      if (!a || !el) return;
+      const vv = window.visualViewport;
+      const vw = vv?.width ?? window.innerWidth;
+      const vh = vv?.height ?? window.innerHeight;
+      const M = 8;
+      const r = a.getBoundingClientRect();
+      const w = Math.min(el.offsetWidth, vw - 2 * M);
+      const h = el.scrollHeight;
+      const below = vh - r.bottom - 6 - M;
+      const above = r.top - 6 - M;
+      let top: number;
+      let maxH: number;
+      if (h <= below) { top = r.bottom + 6; maxH = below; }
+      else if (h <= above) { top = r.top - 6 - h; maxH = above; }
+      else if (below >= above) { top = r.bottom + 6; maxH = below; }
+      else { maxH = above; top = Math.max(M, r.top - 6 - Math.min(h, maxH)); }
+      if (maxH < 220) { top = M; maxH = vh - 2 * M; }
+      const left = Math.max(M, Math.min(r.right - w, vw - w - M));
+      setPos((p) => (p && Math.abs(p.top - top) < 0.5 && Math.abs(p.left - left) < 0.5 && Math.abs(p.maxH - maxH) < 0.5 ? p : { top, left, maxH }));
+    };
+    place();
+    const vv = window.visualViewport;
+    vv?.addEventListener('resize', place);
+    return () => vv?.removeEventListener('resize', place);
+  }, [open, anchor, children]);
   if (!open || !anchor.current) return null;
-  const r = anchor.current.getBoundingClientRect();
-  const estH = 320;
-  const top = r.bottom + 6 + estH > window.innerHeight ? Math.max(8, r.top - 6 - estH) : r.bottom + 6;
-  const left = Math.max(8, Math.min(r.right - width, window.innerWidth - width - 8));
   return (
-    <div ref={ref} className="ep-tl-menu" role={role} style={{ top, left, minWidth: width }}>
+    <div
+      ref={ref}
+      className="ep-tl-menu"
+      role={role}
+      style={{
+        top: pos?.top ?? 0, left: pos?.left ?? 0, minWidth: `min(${width}px, calc(100vw - 16px))`,
+        maxWidth: 'calc(100vw - 16px)', maxHeight: pos?.maxH, overflowY: 'auto', overscrollBehavior: 'contain',
+        visibility: pos ? 'visible' : 'hidden',
+      }}
+    >
       {children}
     </div>
   );

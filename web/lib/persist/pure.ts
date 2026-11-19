@@ -24,9 +24,13 @@ export interface ProjectRecord {
 
 export type ProjectSummary = Omit<ProjectRecord, 'project' | 'messages' | 'assets'> & { assetCount: number };
 
+/** chave do blob do proxy de preview (vídeo leve p/ editar no celular) */
+export const proxyBlobId = (assetId: string) => `${assetId}__proxy`;
+
 export function stripAsset(a: MediaAsset): StoredAsset {
-  const { url: _url, ...rest } = a;
-  return rest;
+  const { url: _url, proxyUrl: _proxy, ...rest } = a;
+  // proxy em geração não sobrevive ao recarregar: volta a usar a original
+  return rest.proxyStatus === 'pending' ? { ...rest, proxyStatus: undefined } : rest;
 }
 
 /** assets usados pelo projeto (clipes + referência) — e os demais da biblioteca também ficam */
@@ -83,7 +87,7 @@ export function isBlank(p: Project, assets: Record<string, MediaAsset>, messages
 /** blobs que não são mais referenciados por nenhum projeto */
 export function orphanBlobIds(allBlobIds: string[], records: Pick<ProjectRecord, 'assets'>[]): string[] {
   const keep = new Set<string>();
-  for (const r of records) for (const a of r.assets) keep.add(a.id);
+  for (const r of records) for (const a of r.assets) { keep.add(a.id); keep.add(proxyBlobId(a.id)); }
   return allBlobIds.filter((id) => !keep.has(id));
 }
 

@@ -9,6 +9,7 @@ import { useMemo, useRef, useState } from 'react';
 import { emit } from '@/lib/events';
 import { ingestFiles, useIngestQueue } from '@/lib/media/ingest';
 import { placeAssetOp } from '@/lib/media/place';
+import { cancelPreviewProxy, useProxyProgress } from '@/lib/media/proxy';
 import { ROLE_LABEL, formatBytes } from '@/lib/media/pure';
 import { useEditor } from '@/lib/store';
 import type { MediaAsset, MediaKind, MediaRole } from '@/lib/types';
@@ -47,6 +48,7 @@ function AssetCard({ asset, onAdd }: { asset: MediaAsset; onAdd: (a: MediaAsset)
   const thumbs = asset.thumbnails ?? [];
   const thumb = thumbs.length ? thumbs[scrub ?? Math.floor((thumbs.length - 1) / 3)] : undefined;
   const Icon = KIND_ICON[asset.kind];
+  const proxyPct = useProxyProgress((s) => s[asset.id]);
 
   const remove = () => {
     const st = useEditor.getState();
@@ -54,6 +56,7 @@ function AssetCard({ asset, onAdd }: { asset: MediaAsset; onAdd: (a: MediaAsset)
     if (ops.length) st.dispatch(ops);
     if (st.project.referenceAssetId === asset.id) st.dispatch({ op: 'set_project', patch: { referenceAssetId: undefined } });
     st.select(st.selection.filter((id) => !ops.some((o) => o.clipId === id)));
+    cancelPreviewProxy(asset.id);
     st.removeAsset(asset.id);
     emit('ep:toast', { text: `“${asset.name}” removido da biblioteca`, kind: 'info' });
   };
@@ -82,6 +85,8 @@ function AssetCard({ asset, onAdd }: { asset: MediaAsset; onAdd: (a: MediaAsset)
         {thumb ? <img src={thumb} alt="" draggable={false} /> : asset.kind === 'audio' ? <Waveform peaks={asset.waveform} className="ep-asset-wave" /> : <span className="ep-asset-skel" />}
         <span className="ep-asset-kind"><Icon size={13} /></span>
         {asset.kind !== 'image' && <span className="ep-asset-dur mono">{formatTime(asset.duration)}</span>}
+        {asset.proxyStatus === 'pending' && <span className="ep-asset-proxy busy" title="Gerando uma cópia leve para editar sem travar">Otimizando…{proxyPct !== undefined ? ` ${Math.round(proxyPct * 100)}%` : ''}</span>}
+        {asset.proxyStatus === 'ready' && <span className="ep-asset-proxy ok" title="Cópia leve pronta: a reprodução fica fluida">Pronto para editar</span>}
         {usage > 0 && <span className="ep-asset-used" title={`${usage} clipe(s) na timeline`}>{usage}× na timeline</span>}
         <div className="ep-asset-actions">
           <button type="button" title="Adicionar no fim da timeline" onClick={(e) => { e.stopPropagation(); onAdd(asset); }}><IconPlus size={15} /></button>

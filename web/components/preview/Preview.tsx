@@ -183,11 +183,11 @@ export default function Preview() {
       if (st.playing) return;
       const s = poolRef.current?.sync(st.project, st.assets, st.playhead, false, st.project.fps);
       // vídeo ainda buscando o quadro: mantém o último quadro (o 'seeked' pede outro desenho);
-      // se demorar demais (mídia quebrada), desenha assim mesmo p/ não travar a edição
+      // se demorar demais (mídia quebrada; 2,5 s: seek de 4K/HEVC no celular passa de 1 s), desenha assim mesmo p/ não travar a edição
       const now = performance.now();
       if (s?.pending) {
         if (!waitSinceRef.current) waitSinceRef.current = now;
-        if (now - waitSinceRef.current < 900) { showTime(st.playhead); window.setTimeout(requestStill, 120); return; }
+        if (now - waitSinceRef.current < 2500) { showTime(st.playhead); window.setTimeout(requestStill, 120); return; }
       }
       if (!draw(st.playhead) && now - (waitSinceRef.current || now) < 900) {
         if (!waitSinceRef.current) waitSinceRef.current = now;
