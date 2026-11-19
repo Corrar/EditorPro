@@ -3,6 +3,7 @@ import { ArrayBufferTarget, Muxer } from 'mp4-muxer';
 import type { MediaAsset, Project, Seconds } from '../types';
 import { renderFrame } from '../engine';
 import { visualLayers, sourceTime } from '../engine/timing';
+import { ensureProjectFonts } from '../engine/fonts';
 import { mixProjectAudio, MIX_RATE } from './audioMix';
 import { OfflineMediaPool } from './mediaPool';
 import { exportSize, type ExportQuality } from './options';
@@ -62,7 +63,7 @@ export async function exportFrame(p: Project, assets: Record<string, MediaAsset>
   const { width, height } = exportSize(p, quality);
   const pool = new OfflineMediaPool(assets);
   try {
-    try { await document.fonts?.ready; } catch { /* ok */ }
+    try { await Promise.race([ensureProjectFonts(p), new Promise((r) => setTimeout(r, 8000))]); await document.fonts?.ready; } catch { /* ok */ }
     await pool.preloadImages();
     await pool.prepare(visualLayers(p, t)
       .filter((l) => l.clip.type === 'video' || (l.clip.type === 'image' && l.clip.removeBackground))

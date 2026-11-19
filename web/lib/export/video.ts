@@ -9,6 +9,7 @@ import type { MediaAsset, Project } from '../types';
 import { projectDuration } from '../ops';
 import { renderFrame } from '../engine';
 import { visualLayers, sourceTime } from '../engine/timing';
+import { ensureProjectFonts } from '../engine/fonts';
 import { mixProjectAudio, MIX_RATE } from './audioMix';
 import { OfflineMediaPool } from './mediaPool';
 import { exportFps, exportSize, hasWebCodecs, QUALITY_ORDER, videoBitrate, type ExportOptions } from './options';
@@ -76,6 +77,7 @@ export async function exportVideo(p: Project, assets: Record<string, MediaAsset>
   const duration = projectDuration(p);
   if (!(duration > 0)) throw new Error('O projeto está vazio: adicione clipes antes de exportar.');
   report(0, 'Preparando mídia');
+  await Promise.race([ensureProjectFonts(p), new Promise((r) => setTimeout(r, 8000))]);
   await waitFonts();
   const pool = new OfflineMediaPool(assets);
   try {
