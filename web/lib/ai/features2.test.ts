@@ -147,3 +147,31 @@ describe('usabilidade: sugestões e "o que mudou?"', () => {
     expect(explainChanges(p, p)).toBe('Nada mudou no projeto nessa edição.');
   });
 });
+
+describe('catálogo da FX', () => {
+  it('IA conhece os efeitos/transições/blend/máscaras/animações da FX e os campos novos', async () => {
+    const { CATALOG, engineCatalogForAI } = await import('./catalogs');
+    const fx = await import('../fx/catalog');
+    expect(CATALOG.effects).toEqual([...new Set(fx.ALL_EFFECT_KINDS)]);
+    expect(CATALOG.transitions).toEqual([...new Set(fx.ALL_TRANSITION_KINDS)]);
+    expect(CATALOG.effects.length).toBeGreaterThanOrEqual(91);
+    expect(CATALOG.transitions.length).toBeGreaterThanOrEqual(97);
+    expect(CATALOG.blendModes).toContain('soft-light');
+    expect(CATALOG.clipAnimations).toContain('jelly');
+    expect(engineCatalogForAI()).toMatch(/Modos de mesclagem/);
+    const p = applyOps(createProject(), [
+      { op: 'add_clip', trackId: 'track_video_1', clip: { ...makeVideoClip(src, 0), id: 'c1', duration: 5 } },
+      { op: 'add_clip', trackId: 'track_video_1', clip: { ...makeVideoClip(src, 5), id: 'c2', duration: 5, in: 5 } },
+    ]).project;
+    const r = sanitizeOps([
+      { op: 'update_clip', clipId: 'c2', patch: { transitionIn: { kind: 'page-curl', duration: 0.6, easing: 'easeInOut' }, blendMode: 'soft-light', effects: [{ kind: 'neon-glow', intensity: 0.7, color: '#FF00AA', angle: 45 }, { kind: 'rain', intensity: 2, angle: 999 }], mask: { shape: 'text', x: 0.5, y: 0.5, w: 0.8, h: 0.3, rotation: 0, feather: 0.1, text: 'OFERTA', radius: 3, keyframes: [{ t: 1, w: 1.2 }, { t: 0, w: 0.4 }, { t: 0, w: 9 }] }, animationIn: { kind: 'jelly', duration: 0.5 } } },
+    ], p, { a1: src });
+    expect(r.dropped).toEqual([]);
+    const c = r.project.tracks[0].clips.find((x) => x.id === 'c2') as VideoClip & Record<string, unknown>;
+    expect(c.transitionIn).toEqual({ kind: 'page-curl', duration: 0.6, easing: 'easeInOut' });
+    expect(c.blendMode).toBe('soft-light');
+    expect(c.effects).toEqual([{ kind: 'neon-glow', intensity: 0.7, color: '#FF00AA', angle: 45 }, { kind: 'rain', intensity: 1, angle: 360 }]);
+    expect(c.mask).toMatchObject({ shape: 'text', text: 'OFERTA', radius: 1, keyframes: [{ t: 0, w: 0.4 }, { t: 1, w: 1.2 }] });
+    expect((c.animationIn as { kind: string }).kind).toBe('jelly');
+  });
+});
