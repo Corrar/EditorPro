@@ -11,9 +11,12 @@ import type { Clip, MediaAsset, VideoClip } from '../types';
 import type { MediaElement, MediaSources } from '../engine';
 import { OfflineMediaPool } from './mediaPool';
 import { demuxMp4, decoderConfigFor, keyIndexFor, type DemuxVideo } from './demux';
+import { shouldCheck, sourceIsBlack } from './blackCheck';
 
 /** salto à frente maior que isto reinicia na chave mais próxima em vez de decodificar tudo */
 const JUMP_RESEEK = 3;
+/** máximo de quadros decodificados/em decodificação à frente (Android: poucos buffers de saída no MediaCodec) */
+const MAX_AHEAD = 8;
 
 /** o clipe pode ir pelo decodificador sequencial? (null = sim; senão, o motivo do fallback) */
 export function decodeFallbackReason(clip: Clip, asset: MediaAsset | undefined): string | null {
@@ -98,7 +101,20 @@ class ClipDecoder {
     }
     // antes do 1º quadro: mostra o 1º (como o <video>)
     if (!this.current && this.queue.length) this.current = this.queue.shift()!;
+    this.topUp();
     return this.current;
+  }
+
+  /** pipeline: deixa o decoder trabalhando nos próximos quadros enquanto este é desenhado/codificado
+   *  (fila limitada: quadros decodificados + em decodificação ≤ MAX_AHEAD; VideoFrames sempre fechados) */
+  private topUp() {
+    const dec = this.dec;
+    if (!dec || this.failure || dec.state !== 'configured') return;
+    const samples = this.track.v.samples;
+    while (this.next < samples.length && this.queue.length + dec.decodeQueueSize < MAX_AHEAD) {
+      const s = samples[this.next++];
+      dec.decode(new EncodedVideoChunk({ type: s.sync ? 'key' : 'delta', timestamp: Math.round(s.cts * 1e6), duration: Math.round(s.duration * 1e6), data: s.data }));
+    }
   }
 
   close(_all = true) {
@@ -130,7 +146,7 @@ class FrameSurface {
   }
 }
 
-export interface DecodeStats { decodedClips: number; fallbackClips: number; reasons: Record<string, number> }
+export interface DecodeStats { decodedClips: number; fallbackClips: number; reasons: Record<string, number>; blackChecks: number; blackSwitches: number }
 
 export class DecodedMediaPool implements MediaSources {
   readonly offline = true;
@@ -141,9 +157,16 @@ export class DecodedMediaPool implements MediaSources {
   private frames = new Map<string, MediaElement>();
   private rotations = new Map<string, number>();
   private useFallback = new Set<string>();
-  readonly stats: DecodeStats = { decodedClips: 0, fallbackClips: 0, reasons: {} };
+  readonly stats: DecodeStats = { decodedClips: 0, fallbackClips: 0, reasons: {}, blackChecks: 0, blackSwitches: 0 };
+  /** nº de quadros já entregues por clipe (p/ amostrar o detector de preto) */
+  private nth = new Map<string, number>();
+  /** clipes cujo quadro preto foi confirmado pelos dois caminhos (preto de verdade): param de checar */
+  private trulyBlack = new Map<string, number>();
+  /** aviso p/ o progresso (ex.: 'Usando decodificador alternativo') */
+  onNotice?: (msg: string) => void;
   constructor(private assets: Record<string, MediaAsset>) {
     this.fallback = new OfflineMediaPool(assets);
+    this.fallback.onNotice = (m) => this.onNotice?.(m);
   }
 
   preloadImages() { return this.fallback.preloadImages(); }
@@ -201,6 +224,7 @@ export class DecodedMediaPool implements MediaSources {
           let s = this.surfaces.get(clip.id);
           if (!s) { s = new FrameSurface(); this.surfaces.set(clip.id, s); }
           this.frames.set(clip.id, s.source(f, this.rotations.get(clip.id) ?? 0));
+          if (await this.blackViaDecoder(it)) { toFallback.push(it); return; }
         }
       } catch (e) {
         console.warn('[export] decodificador falhou, usando <video>', e);
@@ -212,6 +236,36 @@ export class DecodedMediaPool implements MediaSources {
       }
     }));
     await this.fallback.prepare(toFallback);
+  }
+
+  /**
+   * Detector de preto (amostrado): se o quadro decodificado saiu todo preto, tenta o mesmo
+   * quadro pelo <video>. Se lá tem imagem, o clipe passa de vez p/ o <video> (true).
+   * Se os dois saem pretos, é preto de verdade (fade, cena escura) e segue no decoder.
+   */
+  private async blackViaDecoder(it: { clip: Clip; time: number }): Promise<boolean> {
+    const id = it.clip.id;
+    const n = this.nth.get(id) ?? 0;
+    this.nth.set(id, n + 1);
+    if ((this.trulyBlack.get(id) ?? 0) >= 3 || !shouldCheck(n)) return false;
+    this.stats.blackChecks++;
+    // QA: globalThis.__epForceBlackDecoder = true simula decoder entregando preto (testa a troca de caminho)
+    const forced = !!(globalThis as { __epForceBlackDecoder?: boolean }).__epForceBlackDecoder;
+    if (!forced && sourceIsBlack(this.frames.get(id)) !== true) return false;
+    await this.fallback.prepare([it]);
+    const alt = sourceIsBlack(this.fallback.getForClip(it.clip));
+    if (alt === false) {
+      console.warn(`[export] quadro preto no decodificador WebCodecs (clipe ${id}, t=${it.time.toFixed(2)}s); trocando para o <video>`);
+      this.decoders.get(id)?.close();
+      this.decoders.delete(id);
+      this.frames.delete(id);
+      this.fall(it.clip, 'quadro preto no decoder');
+      this.stats.blackSwitches++;
+      this.onNotice?.('Usando decodificador alternativo');
+      return true;
+    }
+    this.trulyBlack.set(id, (this.trulyBlack.get(id) ?? 0) + 1);
+    return false;
   }
 
   dispose() {
