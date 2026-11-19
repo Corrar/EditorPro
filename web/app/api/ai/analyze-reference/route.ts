@@ -41,7 +41,8 @@ export async function POST(req: Request) {
       type: 'text',
       text: `MÉTRICAS MEDIDAS NO NAVEGADOR (confiáveis para ritmo/formato): ${JSON.stringify(metrics)}\n\nAnalise o estilo de edição deste vídeo-exemplo.`,
     });
-    const raw = await generateStructured({ system: await loadPrompt('analyze-reference'), content, schema: StyleSchema, effort: 'medium', maxTokens: 8000 });
+    const raw = await generateStructured({
+      signal: req.signal, system: await loadPrompt('analyze-reference'), content, schema: StyleSchema, effort: 'medium', maxTokens: 8000 });
     const style = sanitizeStyleProfile(raw);
     if (!style) throw new AIError('Não consegui extrair o estilo do vídeo-exemplo.', 502, 'bad_json');
     // métricas medidas valem mais que a estimativa visual

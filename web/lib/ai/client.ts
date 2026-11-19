@@ -46,16 +46,26 @@ export class AIClientError extends Error {
 /** corpo das rotas precisa ficar < 4 MB (limite da Vercel) */
 export const MAX_BODY = 3_800_000;
 
+/** um pouco acima do timeout do servidor (240 s): se a função for cortada, o navegador não fica esperando para sempre */
+export const CLIENT_TIMEOUT_MS = 295_000;
+
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), CLIENT_TIMEOUT_MS);
   try {
-    res = await fetch(path, { credentials: 'same-origin', ...init });
-  } catch {
+    res = await fetch(path, { credentials: 'same-origin', ...init, signal: init?.signal ?? ctrl.signal });
+  } catch (e) {
+    clearTimeout(timer);
+    if (ctrl.signal.aborted) throw new AIClientError('A IA demorou demais para responder. Tente de novo ou peça algo menor.', 504, 'timeout');
     throw new AIClientError('Sem conexão com o servidor.', 0, 'network');
   }
   const data = (await res.json().catch(() => ({}))) as T & { error?: string; code?: string };
+  clearTimeout(timer);
   if (!res.ok) {
     if (res.status === 401 && !data.code) throw new AIClientError('Sessão expirada — entre de novo.', 401, 'login');
+    if ((res.status === 504 || res.status === 502) && !data.code) throw new AIClientError('A IA demorou demais para responder. Tente de novo ou peça algo menor.', res.status, 'timeout');
+    if (res.status === 413 && !data.code) throw new AIClientError('Pedido grande demais para enviar à IA.', 413, 'too_big');
     throw new AIClientError(data.error || `Erro ${res.status} na IA.`, res.status, data.code);
   }
   return data;

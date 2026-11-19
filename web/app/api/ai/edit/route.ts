@@ -96,6 +96,7 @@ export async function POST(req: Request) {
     content.push({ type: 'text', text: `${task}\n\nPROJETO ATUAL (JSON):\n${JSON.stringify(summary)}${where ? `\n\nO USUÁRIO APONTOU PARA: ${where}` : ''}\n\nPEDIDO DO USUÁRIO:\n${userText}` });
 
     const raw = await generateStructured({
+      signal: req.signal,
       system: `${await loadPrompt('edit-system')}${COLOR_GRADE_LIVE ? '' : '\n\nOBS.: o motor de `colorGrade` ainda não está ligado — para cor use `colorPreset`, `filters` (temperature, tint, exposure, contrast, saturation…) ou `apply_look`.'}\n\n## Catálogo do editor (ids válidos)\n${engineCatalogForAI()}\n\n## Catálogo da biblioteca (ids válidos)\n${libraryCatalogForAI()}`,
       content,
       schema: EditResponseSchema,
