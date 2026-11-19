@@ -123,7 +123,11 @@ function buildP() {
 
 describe('modelos', () => {
   it('catálogo cobre títulos, 5 lower thirds, CTAs e motion graphics', () => {
-    expect(TEMPLATES.filter((t) => t.category === 'lower-third').length).toBe(5);
+    expect(TEMPLATES.length).toBeGreaterThanOrEqual(80);
+    const cats = ['abertura', 'lower-third', 'cta', 'redes', 'lista', 'citacao', 'oferta', 'destaque', 'tutorial', 'evento', 'noticia', 'final'];
+    for (const c of cats) expect(TEMPLATES.filter((t) => t.category === c).length, c).toBeGreaterThanOrEqual(4);
+    expect(TEMPLATES.every((t) => cats.includes(t.category))).toBe(true);
+    expect(TEMPLATES.filter((t) => t.category === 'lower-third').length).toBeGreaterThanOrEqual(10);
     expect(TEMPLATES.filter((t) => t.category === 'cta').length).toBeGreaterThanOrEqual(4);
     for (const id of ['titulo-impacto', 'titulo-elegante', 'titulo-cinema', 'subtitulo', 'contador', 'citacao', 'preco-oferta', 'lista-123', 'capitulo', 'barra-progresso', 'antes-depois', 'nome-na-tela', 'marca-dagua']) {
       expect(TEMPLATES.some((t) => t.id === id)).toBe(true);
@@ -323,7 +327,7 @@ describe('busca única', () => {
     expect(c.legendas).toBeGreaterThan(0);
     expect(c.looks).toBeGreaterThan(0);
     expect(searchLibrary('whoosh').sons).toBe(1);
-    expect(searchLibrary('lower third').modelos).toBe(5);
+    expect(searchLibrary('lower third').modelos).toBeGreaterThanOrEqual(10);
     expect(Object.values(searchLibrary('zzzqqq')).every((n) => n === 0)).toBe(true);
   });
 });

@@ -166,7 +166,7 @@ export default function TemplateGallery({ kind, onInserted, query }: { kind: Tem
   const insert = () => { if (sel) void insertDef(sel, values); };
 
   const special = prefFilter(all, cat, prefs.favs, prefs.recents);
-  const list = (special ?? all.filter((t) => cat === 'todos' || t.category === cat))
+  const list = (special ?? all.filter((t) => !!query?.trim() || cat === 'todos' || t.category === cat))
     .filter((t) => matchesQuery(query, [t.name, t.description, TEMPLATE_CATEGORY_LABELS[t.category]]));
 
   return (

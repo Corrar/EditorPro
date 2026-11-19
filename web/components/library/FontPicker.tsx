@@ -65,7 +65,7 @@ export default function FontPicker({ value, onChange, sample: sampleProp, query 
       const all = searchFonts(effQ);
       return ids.map((id) => all.find((f) => f.family === id)).filter((f): f is FontDef => !!f);
     }
-    return searchFonts(effQ, cat as Cat);
+    return searchFonts(effQ, effQ.trim() ? 'todas' : (cat as Cat));
   }, [effQ, cat, prefs.favs, prefs.recents]);
 
   const pick = (f: FontDef) => {

@@ -52,7 +52,7 @@ export default function SfxList({ onInserted, query }: { onInserted?: (assetId: 
     }
   };
 
-  const list = (prefFilter(SFX_CATALOG, cat, prefs.favs, prefs.recents) ?? SFX_CATALOG.filter((s) => cat === 'todos' || s.category === cat)).filter((s) => matchesQuery(query, [s.name, s.description, SFX_CATEGORY_LABELS[s.category], 'som efeito']));
+  const list = (prefFilter(SFX_CATALOG, cat, prefs.favs, prefs.recents) ?? SFX_CATALOG.filter((s) => !!query?.trim() || cat === 'todos' || s.category === cat)).filter((s) => matchesQuery(query, [s.name, s.description, SFX_CATEGORY_LABELS[s.category], 'som efeito']));
   return (
     <div className="ep-lib ep-lib-sfx">
       <PillRow value={cat} options={withPrefPills(CATS, prefs.favs, prefs.recents)} onChange={setCat} label="Categorias de efeito sonoro" />

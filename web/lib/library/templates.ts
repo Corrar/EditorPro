@@ -30,10 +30,14 @@ export interface BrandColors {
 export const DEFAULT_BRAND: BrandColors = { primary: '#F2681F', secondary: '#FFD23F', text: '#FFFFFF', dark: '#141414' };
 
 export type TemplateKind = 'texto' | 'motion';
-export type TemplateCategory = 'titulo' | 'texto' | 'lower-third' | 'cta' | 'engajamento' | 'info' | 'marca';
+export type TemplateCategory = 'abertura' | 'lower-third' | 'cta' | 'redes' | 'lista' | 'citacao' | 'oferta' | 'destaque' | 'tutorial' | 'evento' | 'noticia' | 'final'
+  /* categorias antigas (remapeadas em RECAT) */
+  | 'titulo' | 'texto' | 'engajamento' | 'info' | 'marca';
 
 export const TEMPLATE_CATEGORY_LABELS: Record<TemplateCategory, string> = {
-  titulo: 'Títulos', texto: 'Textos', 'lower-third': 'Lower thirds', cta: 'Chamadas (CTA)', engajamento: 'Engajamento', info: 'Informação', marca: 'Marca',
+  abertura: 'Abertura e títulos', 'lower-third': 'Lower thirds', cta: 'Chamadas (CTA)', redes: 'Redes sociais', lista: 'Listas e passos',
+  citacao: 'Citações', oferta: 'Preço e oferta', destaque: 'Destaque', tutorial: 'Tutorial', evento: 'Eventos', noticia: 'Notícias', final: 'Finais',
+  titulo: 'Títulos', texto: 'Textos', engajamento: 'Engajamento', info: 'Informação', marca: 'Marca',
 };
 
 export interface TemplateParam {
@@ -226,19 +230,8 @@ export function makeFrame(ctx: TemplateContext, duration: Seconds): Frame {
 
 /* ---------- catálogo ---------- */
 
-const P = (key: string, label: string, def: string, multiline = false): TemplateParam => ({ key, label, type: 'text', default: def, multiline });
-const N = (key: string, label: string, def: number): TemplateParam => ({ key, label, type: 'number', default: String(def) });
-
-const ts = (s: Partial<TextStyle>): Partial<TextStyle> => ({ strokeWidth: 0, shadow: false, align: 'center', ...s });
-
-/** margem lateral dos lower thirds (fração da largura) */
-const mx = (f: Frame) => (f.portrait ? 0.07 : 0.06);
-/** linha base dos lower thirds */
-const ly = (f: Frame) => (f.portrait ? 0.74 : 0.78);
-/** centro x para um texto alinhado à esquerda começando em `left` */
-const leftX = (f: Frame, left: number, text: string, style: Partial<TextStyle>) => left + f.textW(text, style) / 2;
-/** px base-1920 -> fração da altura */
-const fy = (px: number) => px / 1920;
+import { P, N, ts, mx, ly, leftX, fy } from './tplkit';
+import { TEMPLATES_MORE } from './templatesMore';
 
 export const TEMPLATES: TemplateDef[] = [
   /* ===== títulos e textos ===== */
@@ -800,6 +793,17 @@ export const TEMPLATES: TemplateDef[] = [
     },
   },
 ];
+
+/* remapeia os modelos antigos para as 12 categorias e junta o pacote 4 */
+const RECAT: Record<string, TemplateCategory> = {
+  'titulo-impacto': 'abertura', 'titulo-elegante': 'abertura', 'titulo-cinema': 'abertura', capitulo: 'abertura', 'transicao-capitulo': 'abertura',
+  contador: 'abertura', 'contagem-321': 'abertura', subtitulo: 'destaque', 'frase-marca-texto': 'destaque', 'nome-na-tela': 'lower-third',
+  citacao: 'citacao', 'preco-oferta': 'oferta', 'preco-riscado': 'oferta', 'lista-123': 'lista', checklist: 'lista',
+  'barra-progresso': 'tutorial', 'antes-depois': 'tutorial', 'antes-depois-divisoria': 'tutorial', 'data-local': 'evento',
+  enquete: 'redes', avaliacao: 'redes', 'marca-dagua': 'redes', assinatura: 'final',
+};
+for (const t of TEMPLATES) if (RECAT[t.id]) t.category = RECAT[t.id];
+TEMPLATES.push(...TEMPLATES_MORE);
 
 const BY_ID = new Map(TEMPLATES.map((t) => [t.id, t]));
 

@@ -101,7 +101,7 @@ export default function LookGallery({ onApply, query }: { onApply?: (lookId: str
     }
   };
 
-  const list = (prefFilter(LOOKS, cat, prefs.favs, prefs.recents) ?? LOOKS.filter((l) => cat === 'todos' || l.category === cat)).filter((l) => matchesQuery(query, [l.name, l.description, LOOK_CATEGORY_LABELS[l.category], 'cor filtro']));
+  const list = (prefFilter(LOOKS, cat, prefs.favs, prefs.recents) ?? LOOKS.filter((l) => !!query?.trim() || cat === 'todos' || l.category === cat)).filter((l) => matchesQuery(query, [l.name, l.description, LOOK_CATEGORY_LABELS[l.category], 'cor filtro']));
   const selectedId = mode === 'clip' ? applied?.id ?? (target && 'filters' in target && !target.filters.length ? null : undefined) : undefined;
 
   return (

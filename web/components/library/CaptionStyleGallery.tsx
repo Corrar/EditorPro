@@ -71,7 +71,7 @@ export default function CaptionStyleGallery({ value, onSelect, query }: { value?
   const prefs = usePrefs('caption');
   const current = value ?? style.preset;
   const special = prefFilter(CAPTION_PRESETS, cat, prefs.favs, prefs.recents);
-  const list = (special ?? CAPTION_PRESETS.filter((c) => cat === 'todos' || c.category === cat))
+  const list = (special ?? CAPTION_PRESETS.filter((c) => !!query?.trim() || cat === 'todos' || c.category === cat))
     .filter((c) => matchesQuery(query, [c.name, c.description, c.sample, CAPTION_CATEGORY_LABELS[c.category]]));
 
   const pick = (def: CaptionPresetDef) => {
