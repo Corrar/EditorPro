@@ -7,8 +7,8 @@
 import type { MediaAsset, Project } from '../types';
 import type { ExportOptions } from './options';
 export type { ExportOptions } from './options';
-export type { ExportQuality } from './options';
-export { exportSize, exportFps, videoBitrate, QUALITY_LABELS, QUALITY_ORDER, hasWebCodecs } from './options';
+export type { ExportQuality, ExportSpeed } from './options';
+export { exportSize, exportFps, videoBitrate, QUALITY_LABELS, QUALITY_ORDER, hasWebCodecs, SPEED_LABELS, SPEED_PROFILE, estimateExportSeconds, estimateProjectExport } from './options';
 export { encodeWAV } from './wav';
 export type { AudioExportOptions } from './extras';
 
@@ -27,7 +27,11 @@ export async function canExportM4A(): Promise<boolean> {
 export async function makePreviewProxy(file: Blob, opts?: import('./proxy').ProxyOptions): Promise<Blob | null> {
   return (await import('./proxy')).makePreviewProxy(file, opts);
 }
-export type { ProxyOptions } from './proxy';
+export type { ProxyOptions, VideoInfo } from './proxy';
+/** fps/codec/tamanho/rotação de um MP4/MOV (só o cabeçalho) — p/ a política de proxy ("alta taxa de quadros", HEVC) */
+export async function probeVideoInfo(file: Blob): Promise<import('./proxy').VideoInfo | null> {
+  return (await import('./proxy')).probeVideoInfo(file);
+}
 /** quadro atual como imagem PNG */
 export async function exportFrame(p: Project, assets: Record<string, MediaAsset>, t: number, quality?: import('./options').ExportQuality): Promise<Blob> {
   return (await import('./extras')).exportFrame(p, assets, t, quality);

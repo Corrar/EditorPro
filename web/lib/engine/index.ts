@@ -9,7 +9,7 @@ import { applyAdjustment, drawBackground, drawCaptions, drawLayer, drawTextClip 
 import { isShaderTransition, runShaderTransition, shaderTransitionsAvailable } from './shaderTransitions';
 import { scratch } from './surface';
 
-export type MediaElement = HTMLVideoElement | HTMLImageElement | HTMLAudioElement | ImageBitmap;
+export type MediaElement = HTMLVideoElement | HTMLImageElement | HTMLAudioElement | ImageBitmap | VideoFrame | HTMLCanvasElement | OffscreenCanvas;
 
 /** de onde o engine tira a mídia já carregada de cada asset */
 export interface MediaSources {

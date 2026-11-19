@@ -10,10 +10,11 @@
    Devolve null quando o navegador/arquivo não suporta (o preview usa a original).
    ===================================================================== */
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
+import { demuxMp4, decoderConfigFor, matrixRotation } from './demux';
 
 export interface ProxyOptions {
   /** lado MENOR do proxy em px ("540p"/"720p"); nunca amplia */
-  maxHeight?: 540 | 720;
+  maxHeight?: number;
   onProgress?: (fraction: number) => void;
   signal?: AbortSignal;
 }
@@ -28,13 +29,7 @@ export function proxySize(w: number, h: number, maxShort: number): { w: number; 
   return { w: Math.max(2, Math.round((w * k) / 2) * 2), h: Math.max(2, Math.round((h * k) / 2) * 2) };
 }
 
-/** rotação (0/90/180/270) da matriz do tkhd (16.16) */
-export function matrixRotation(m: ArrayLike<number> | undefined): 0 | 90 | 180 | 270 {
-  if (!m || m.length < 4) return 0;
-  const deg = (Math.round((Math.atan2(m[1], m[0]) * 180) / Math.PI) + 360) % 360;
-  const snapped = (Math.round(deg / 90) * 90) % 360;
-  return snapped as 0 | 90 | 180 | 270;
-}
+export { matrixRotation };
 
 /** codec H.264 com nível suficiente p/ o tamanho */
 export function avcCodecFor(w: number, h: number): string {
@@ -62,64 +57,26 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
 export async function makePreviewProxy(file: Blob, opts: ProxyOptions = {}): Promise<Blob | null> {
   if (!canMakeProxy()) return skip('navegador sem WebCodecs');
   const { signal, onProgress } = opts;
-  const maxShort = opts.maxHeight ?? 540;
-  const MP4Box: Any = await import('mp4box');
-
+  const maxShort = Math.max(144, Math.min(2160, opts.maxHeight ?? 540));
   /* ---------- demux ---------- */
-  const buf = await file.arrayBuffer();
+  const dm = await demuxMp4(file);
   if (signal?.aborted) throw abortErr();
-  const mp4 = MP4Box.createFile();
-  const vSamples: Any[] = [];
-  const aSamples: Any[] = [];
-  let vId = -1;
-  // a extração precisa ser configurada DENTRO do onReady (antes do mdat ser processado)
-  const info: Any = await new Promise((resolve, reject) => {
-    mp4.onError = (e: unknown) => reject(new Error(String(e)));
-    mp4.onReady = (i: Any) => {
-      const v = i.videoTracks?.[0];
-      const a = i.audioTracks?.[0];
-      if (v) { vId = v.id; mp4.setExtractionOptions(v.id, null, { nbSamples: 500 }); }
-      if (a && String(a.codec).startsWith('mp4a')) mp4.setExtractionOptions(a.id, null, { nbSamples: 500 });
-      mp4.onSamples = (id: number, _u: unknown, samples: Any[]) => { (id === vId ? vSamples : aSamples).push(...samples); };
-      mp4.start();
-      resolve(i);
-    };
-    const ab = MP4Box.MP4BoxBuffer ? MP4Box.MP4BoxBuffer.fromArrayBuffer(buf, 0) : Object.assign(buf, { fileStart: 0 });
-    mp4.appendBuffer(ab);
-    mp4.flush();
-  }).catch((e) => { console.info('[proxy]', e); return null; });
-  if (!info) return skip('arquivo não é MP4/MOV legível');
-  const vt = info.videoTracks?.[0];
-  if (!vt) return skip('sem trilha de vídeo');
-  const at = info.audioTracks?.[0];
-  if (at && !String(at.codec).startsWith('mp4a')) return skip(`áudio ${at.codec} (só AAC é copiado)`);
-  if (!vSamples.length) return skip('sem amostras de vídeo');
-
-  /* ---------- config do decoder ---------- */
-  const trak = mp4.getTrackById(vt.id);
-  const entry: Any = trak?.mdia?.minf?.stbl?.stsd?.entries?.[0];
-  const box = entry?.avcC ?? entry?.hvcC ?? entry?.vpcC ?? entry?.av1C;
-  let description: Uint8Array | undefined;
-  if (box) {
-    const ds = new MP4Box.DataStream(undefined, 0, MP4Box.DataStream.BIG_ENDIAN ?? 1);
-    box.write(ds);
-    description = new Uint8Array(ds.buffer, 8); // pula o cabeçalho da caixa
-  }
-  const srcW: number = vt.video?.width ?? entry?.width;
-  const srcH: number = vt.video?.height ?? entry?.height;
-  const decCfg: VideoDecoderConfig = { codec: vt.codec, codedWidth: srcW, codedHeight: srcH, description, hardwareAcceleration: 'prefer-hardware' };
-  if (!(await VideoDecoder.isConfigSupported(decCfg).catch(() => ({ supported: false }))).supported) {
-    delete decCfg.hardwareAcceleration;
-    if (!(await VideoDecoder.isConfigSupported(decCfg).catch(() => ({ supported: false }))).supported) return skip(`decoder ${vt.codec} não suportado`);
-  }
+  if (!dm) return skip('arquivo não é MP4/MOV legível');
+  const vt = dm.video;
+  if (!vt || !vt.samples.length) return skip('sem trilha de vídeo');
+  const at = dm.audio;
+  if (at && !at.codec.startsWith('mp4a')) return skip(`áudio ${at.codec} (só AAC é copiado)`);
+  const vSamples = vt.samples;
+  const aSamples = at?.samples ?? [];
+  const decCfg = await decoderConfigFor(vt);
+  if (!decCfg) return skip(`decoder ${vt.codec} não suportado`);
 
   /* ---------- saída (rotação aplicada: o proxy já sai "em pé") ---------- */
-  const rot = matrixRotation(vt.matrix ?? trak?.tkhd?.matrix);
-  const dispW = rot % 180 ? srcH : srcW;
-  const dispH = rot % 180 ? srcW : srcH;
+  const rot = vt.rotation;
+  const dispW = rot % 180 ? vt.height : vt.width;
+  const dispH = rot % 180 ? vt.width : vt.height;
   const out = proxySize(dispW, dispH, maxShort);
-  const timescale: number = vt.timescale;
-  const durSec = vt.duration && timescale ? vt.duration / timescale : vSamples.at(-1).cts / timescale;
+  const durSec = vt.duration || vSamples[vSamples.length - 1].cts;
   const fps = Math.min(60, Math.max(10, Math.round(vSamples.length / Math.max(0.1, durSec))));
   const encCfg: VideoEncoderConfig = {
     codec: avcCodecFor(out.w, out.h), width: out.w, height: out.h,
@@ -128,13 +85,7 @@ export async function makePreviewProxy(file: Blob, opts: ProxyOptions = {}): Pro
   };
   if (!(await VideoEncoder.isConfigSupported(encCfg).catch(() => ({ supported: false }))).supported) return skip('encoder H.264 não suportado');
 
-  let audioCfg: { codec: string; numberOfChannels: number; sampleRate: number; description?: Uint8Array } | null = null;
-  if (at) {
-    const aTrak = mp4.getTrackById(at.id);
-    const aEntry: Any = aTrak?.mdia?.minf?.stbl?.stsd?.entries?.[0];
-    const asc: Uint8Array | undefined = aEntry?.esds?.esd?.descs?.[0]?.descs?.[0]?.data;
-    audioCfg = { codec: at.codec, numberOfChannels: at.audio?.channel_count ?? 2, sampleRate: at.audio?.sample_rate ?? 44100, description: asc };
-  }
+  const audioCfg = at ? { codec: at.codec, numberOfChannels: at.channels, sampleRate: at.sampleRate, description: at.description } : null;
 
   const target = new ArrayBufferTarget();
   const muxer = new Muxer({
@@ -187,10 +138,7 @@ export async function makePreviewProxy(file: Blob, opts: ProxyOptions = {}): Pro
       if (failure) throw failure;
       const s = vSamples[i];
       decoder.decode(new EncodedVideoChunk({
-        type: s.is_sync ? 'key' : 'delta',
-        timestamp: Math.round((s.cts * 1e6) / timescale),
-        duration: Math.round((s.duration * 1e6) / timescale),
-        data: s.data,
+        type: s.sync ? 'key' : 'delta', timestamp: Math.round(s.cts * 1e6), duration: Math.round(s.duration * 1e6), data: s.data,
       }));
       // contrapressão: não enfileira o arquivo inteiro na memória da GPU
       while (decoder.decodeQueueSize > 6 || encoder.encodeQueueSize > 6) {
@@ -203,9 +151,14 @@ export async function makePreviewProxy(file: Blob, opts: ProxyOptions = {}): Pro
     await encoder.flush();
     if (failure) throw failure;
     if (audioCfg) {
-      const ats: number = at.timescale;
+      let last = -1;
       for (const s of aSamples) {
-        muxer.addAudioChunkRaw(s.data, 'key', Math.round((s.cts * 1e6) / ats), Math.round((s.duration * 1e6) / ats), {
+        // priming do AAC (edit list) deixa as 1ªs amostras antes do 0: descarta / encosta no 0
+        if (s.cts + s.duration <= 0) continue;
+        const ts = Math.max(0, Math.round(s.cts * 1e6));
+        if (ts <= last) continue;
+        last = ts;
+        muxer.addAudioChunkRaw(s.data, 'key', ts, Math.round(s.duration * 1e6), {
           decoderConfig: { codec: audioCfg.codec, numberOfChannels: audioCfg.numberOfChannels, sampleRate: audioCfg.sampleRate, description: audioCfg.description },
         });
       }
@@ -220,6 +173,42 @@ export async function makePreviewProxy(file: Blob, opts: ProxyOptions = {}): Pro
   } finally {
     try { decoder.close(); } catch { /* já fechado */ }
     try { encoder.close(); } catch { /* já fechado */ }
-    mp4.stop?.();
+  }
+}
+
+export interface VideoInfo { fps: number; codec: string; width: number; height: number; rotation: 0 | 90 | 180 | 270; duration: number }
+
+/** lê só o cabeçalho (moov) de um MP4/MOV: fps médio, codec, tamanho e rotação. null se não for MP4 legível */
+export async function probeVideoInfo(file: Blob): Promise<VideoInfo | null> {
+  try {
+    const MP4Box: Any = await import('mp4box');
+    const mp4 = MP4Box.createFile(false);
+    const info: Any = await new Promise((resolve, reject) => {
+      mp4.onError = (e: unknown) => reject(new Error(String(e)));
+      mp4.onReady = (i: Any) => resolve(i);
+      // lê em pedaços até achar o moov (pode estar no fim do arquivo)
+      void (async () => {
+        const CH = 4 << 20;
+        for (let off = 0; off < file.size; off += CH) {
+          const ab = await file.slice(off, off + CH).arrayBuffer();
+          const b = MP4Box.MP4BoxBuffer ? MP4Box.MP4BoxBuffer.fromArrayBuffer(ab, off) : Object.assign(ab, { fileStart: off });
+          mp4.appendBuffer(b);
+          if (mp4.readySent) return;
+        }
+        mp4.flush();
+        resolve(null);
+      })().catch(reject);
+    });
+    const vt = info?.videoTracks?.[0];
+    if (!vt) return null;
+    const dur = vt.duration && vt.timescale ? vt.duration / vt.timescale : 0;
+    const rot = matrixRotation(vt.matrix);
+    const w = vt.video?.width ?? 0, h = vt.video?.height ?? 0;
+    return {
+      fps: dur > 0 ? Math.round((vt.nb_samples / dur) * 100) / 100 : 0,
+      codec: String(vt.codec), width: rot % 180 ? h : w, height: rot % 180 ? w : h, rotation: rot, duration: dur,
+    };
+  } catch {
+    return null;
   }
 }

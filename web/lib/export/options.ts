@@ -2,6 +2,16 @@
 import type { Project } from '../types';
 
 export type ExportQuality = 'draft' | 'hd' | 'fhd' | '4k' | 'full';
+export type ExportSpeed = 'rapido' | 'equilibrado' | 'qualidade';
+
+/** bits por pixel por quadro e intervalo de quadro-chave (s) por modo de velocidade */
+export const SPEED_PROFILE: Record<ExportSpeed, { bpp: number; keyEvery: number; hardware: 'prefer-hardware' | 'no-preference' }> = {
+  rapido: { bpp: 0.08, keyEvery: 3, hardware: 'prefer-hardware' },
+  equilibrado: { bpp: 0.1, keyEvery: 2, hardware: 'prefer-hardware' },
+  qualidade: { bpp: 0.15, keyEvery: 2, hardware: 'no-preference' },
+};
+
+export const SPEED_LABELS: Record<ExportSpeed, string> = { rapido: 'Rápido', equilibrado: 'Equilibrado', qualidade: 'Máxima qualidade' };
 
 export interface ExportOptions {
   format: 'mp4' | 'webm';
@@ -9,6 +19,8 @@ export interface ExportOptions {
   quality: ExportQuality;
   /** quadros por segundo (24/30/60); padrão = fps do projeto */
   fps?: number;
+  /** rapidez × qualidade do encoder (padrão 'equilibrado'): rápido = hardware + bitrate menor + chave a cada 3 s */
+  speed?: ExportSpeed;
   onProgress?: (fraction: number, stage: string) => void;
   signal?: AbortSignal;
 }
@@ -34,9 +46,26 @@ export function exportFps(p: Pick<Project, 'fps'>, fps?: number): number {
   return Math.max(1, Math.min(60, Math.round(f)));
 }
 
-/** bitrate de vídeo alvo (~0.12 bit por pixel por quadro, limitado) */
-export function videoBitrate(w: number, h: number, fps: number): number {
-  return Math.round(Math.min(40_000_000, Math.max(1_500_000, w * h * fps * 0.1)));
+/** bitrate de vídeo alvo (bits por pixel por quadro conforme a velocidade, limitado) */
+export function videoBitrate(w: number, h: number, fps: number, speed: ExportSpeed = 'equilibrado'): number {
+  return Math.round(Math.min(50_000_000, Math.max(1_200_000, w * h * fps * SPEED_PROFILE[speed].bpp)));
+}
+
+/**
+ * Tempo estimado de export (s) p/ mostrar no diálogo. Calibrado no Chromium de desktop
+ * com o decodificador sequencial: custo por quadro ∝ pixels de saída; celular ~2,5× mais lento.
+ */
+export function estimateExportSeconds(duration: number, fps: number, w: number, h: number, o: { speed?: ExportSpeed; mobile?: boolean } = {}): number {
+  const mpx = (w * h) / 1e6;
+  const perFrameMs = 4 + 9 * mpx * (o.speed === 'qualidade' ? 1.25 : o.speed === 'rapido' ? 0.85 : 1);
+  const s = (duration * fps * perFrameMs) / 1000 * (o.mobile ? 2.5 : 1) + 2;
+  return Math.round(s);
+}
+
+/** estimativa direto do projeto (qualidade/fps/velocidade do diálogo) */
+export function estimateProjectExport(p: Pick<Project, 'width' | 'height' | 'fps'>, duration: number, o: { quality: ExportQuality; fps?: number; speed?: ExportSpeed; mobile?: boolean }): number {
+  const { width, height } = exportSize(p, o.quality);
+  return estimateExportSeconds(duration, exportFps(p, o.fps), width, height, o);
 }
 
 export const QUALITY_LABELS: Record<ExportOptions['quality'], string> = {

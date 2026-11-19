@@ -51,6 +51,14 @@ export class LiveMediaPool implements MediaSources {
   private kicks = new WeakMap<AV, number>();
   /** contadores p/ o painel "Mostrar desempenho" */
   readonly stats = { waiting: 0, seeks: 0 };
+  /** elementos de uma fonte antiga, mantidos visíveis até o substituto apresentar */
+  private retiring: AV[] = [];
+  private retire(el: AV) {
+    const i = this.retiring.indexOf(el);
+    if (i < 0) return;
+    this.retiring.splice(i, 1);
+    this.destroy(el);
+  }
   /** elemento exibido no modo nativo */
   private shown: HTMLVideoElement | null = null;
   /** chamado quando um quadro novo fica disponível (seek terminou / dados carregaram) */
@@ -99,7 +107,11 @@ export class LiveMediaPool implements MediaSources {
     const kind: 'video' | 'audio' = clip.type === 'video' && asset.kind !== 'audio' ? 'video' : 'audio';
     let el = this.byClip.get(clip.id);
     if (el && (el.dataset.url !== mediaUrl(asset) || el.tagName.toLowerCase() !== kind)) {
-      this.destroy(el);
+      // fonte trocou (ex.: proxy ficou pronto): o elemento antigo fica na tela, parado no
+      // último quadro, até o novo apresentar — sem piscar nem pular o playhead
+      el.pause();
+      this.retiring.push(el);
+      window.setTimeout(() => this.retire(el!), 4000);
       this.byClip.delete(clip.id);
       el = undefined;
     }
@@ -362,6 +374,8 @@ export class LiveMediaPool implements MediaSources {
     this.byClip.forEach(hide);
     this.idle.forEach((l) => l.forEach(hide));
     this.shown = show.size ? [...show].at(-1)! : null;
+    // já há quadro novo na tela: descarta as fontes antigas
+    if (this.retiring.length) [...this.retiring].forEach((e) => this.retire(e));
     return true;
   }
 
@@ -375,6 +389,7 @@ export class LiveMediaPool implements MediaSources {
   }
 
   dispose() {
+    [...this.retiring].forEach((e) => this.retire(e));
     for (const el of this.byClip.values()) this.destroy(el);
     for (const list of this.idle.values()) list.forEach((e) => this.destroy(e));
     this.byClip.clear();
