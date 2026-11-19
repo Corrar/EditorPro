@@ -1,9 +1,9 @@
-## Bugs encontrados (rodada 5 — `d3e295e`; anteriores: `5c3b0e6`, `48c7e7e`, `71e9ee2`, `70b8304`)
+## Bugs encontrados (rodada 6 — `b145e3e`; anteriores: `d3e295e`, `5c3b0e6`, `48c7e7e`, `71e9ee2`, `70b8304`)
 
-> Rodada 5: regressão 31/32 ok nos 3 perfis; personas 20/20 passos. **Corrigidos:** B1, B2, B3 (menu ⋯ virou bottom-sheet), B4 (aviso na importação), B5, B6, B7, B8.
-> **Ainda presentes:** B9 (importar no desktop) e fluidez p95 no desktop no limite (50,6 ms; oscila 50–56 entre rodadas, maior intervalo 84–134 ms).
-> Fricções restantes em `USABILIDADE.md` (catálogo de músicas, música importada fora da timeline, padrão 1080p vs. "recomendado 720p" no celular, IA demo ignora "música" no brief).
-> Não confirmado: "Desfazer" de edição antiga — a persona P4 só achou 1 botão "Desfazer" (o da última edição) também na conversa completa; precisa checagem manual de onde fica o desfazer das anteriores.
+> Rodada 6: **regressão 32/32 ok** nos 3 perfis e **personas 20/20 passos**. B1–B9 corrigidos.
+> Desfazer edição antiga: link "Ver as N edições desta conversa (desfazer qualquer uma)" → "Voltar para antes desta edição" (3 botões) funciona;
+> o projeto resultante não é idêntico ao estado logo após a 1ª edição (esperado se a 3ª edição é mantida — desfazer seletivo).
+> Pendentes para a próxima rodada (combinado com a principal): catálogo de músicas (library), fluidez p95 no desktop (50–56 ms nas rodadas anteriores; 32/32 nesta), itens 3/5/6 de usabilidade (shell/ia).
 
 > QA só documenta: nenhum destes foi corrigido aqui. Arquivo:linha é o ponto provável.
 
@@ -60,7 +60,7 @@
 - **Obtido:** a gaveta continua na frente; só aparece a pílula "IA aguardando você" (a pergunta "Transcrever (~41 MB)?" está no pop-up fechado).
 - **Arquivo provável:** `components/panels/CaptionsTab.tsx` (emite generate-captions) / `components/shell/AiPopupHost.tsx`. Dono: **shell**.
 
-### B9 — Desktop: "Importar" no editor vazio não põe as mídias na timeline · média (rodada 4)
+### ✅ B9 (corrigido na rodada 6) — Desktop: "Importar" no editor vazio não põe as mídias na timeline · média (rodada 4)
 - **Passos:** desktop → Começar → Abrir editor vazio → Importar → escolher 2 vídeos.
 - **Obtido:** cards "Pronto para editar" na biblioteca; timeline vazia 25 s depois. É preciso passar o mouse em cada card e achar o "+" (title "Adicionar no fim da timeline").
 - **Arquivo provável:** `components/media/MediaBin.tsx` (importFiles) / `lib/media/ingest.ts`. Dono: **shell**. (No celular o seletor "Adicionar mídia" já coloca na timeline.)

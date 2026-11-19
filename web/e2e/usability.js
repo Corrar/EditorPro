@@ -497,27 +497,30 @@ async function persona4(media) {
         return `${((Date.now() - t0) / 1000).toFixed(1)} s`;
       });
     }
-    await s.step('Desfazer a 2ª edição ("Desfazer esta edição")', async () => {
-      const undo = page.locator('.ep-aipop').getByRole('button', { name: /^Desfazer/ });
-      const n = await undo.count();
-      if (n < 2) s.friction({ step: 'Desfazer', kind: 'fluxo', sev: 2, text: `O pop-up mostra só a última resposta (${n} botão "Desfazer"): para desfazer uma edição anterior específica é preciso abrir a conversa completa.`, file: 'components/chat/AiPopup.tsx', owner: 'ai' });
-      let target = n >= 2 ? undo.nth(n - 2) : null;
+    await s.step('Desfazer a 2ª edição (edição antiga)', async () => {
+      // pop-up: link "Ver as N edições desta conversa (desfazer qualquer uma)" → conversa completa com
+      // "Voltar para antes desta edição" em cada resposta antiga
       let via = 'pop-up';
-      if (!target) {
-        // abre a conversa completa para achar o "Desfazer" da 2ª edição
+      if (!(await visible(page.locator('.ep-aipop')))) await s.tap(page.locator('.ep-aifab2, .ep-ailive-main').first());
+      const link = page.getByRole('button', { name: /Ver as \d+ edições/ }).or(page.getByText(/Ver as \d+ edições/)).first();
+      if (await visible(link)) { await s.tap(link); via = 'link "Ver as N edições"'; }
+      else {
+        s.friction({ step: 'Desfazer', kind: 'rótulo', sev: 2, text: 'O link "Ver as N edições desta conversa (desfazer qualquer uma)" não apareceu no pop-up após 3 edições.', file: 'components/chat/AiPopup.tsx', owner: 'ai' });
         const full = page.getByRole('button', { name: /Abrir conversa completa/ }).first();
         if (await visible(full)) { await s.tap(full); via = 'conversa completa'; }
-        const u2 = page.locator('.ep-chat').getByRole('button', { name: /^Desfazer/ });
-        const m = await u2.count();
-        if (m >= 2) target = u2.nth(m - 2);
-        else { s.friction({ step: 'Desfazer', kind: 'beco', sev: 2, text: `Nem na conversa completa há "Desfazer" para edições anteriores (${m} botão): só a última pode ser desfeita.`, file: 'components/chat/ChatPanel.tsx', owner: 'ai' }); target = u2.last(); }
       }
+      const back = page.getByRole('button', { name: /Voltar para antes desta edição/ });
+      const m = await back.count();
+      if (!m) throw new Error('nenhum "Voltar para antes desta edição" visível');
+      // respostas antigas: a 2ª edição é a penúltima (a última tem "Desfazer esta edição")
+      const target = m >= 2 ? back.nth(m - 2) : back.first();
       await target.scrollIntoViewIfNeeded().catch(() => {});
       await s.tap(target);
       const p = await readProject(page);
-      const back = p.sig !== states[3].sig;
-      if (!back) throw new Error('projeto não voltou');
-      return `desfez via ${via}`;
+      // voltar para antes da 2ª edição = estado logo após a 1ª (states[1])
+      const exact = p.sig === states[1].sig;
+      if (!exact && p.sig === states[3].sig) throw new Error('projeto não mudou');
+      return `via ${via}; ${m} botões "Voltar para antes"; estado = após a 1ª edição: ${exact ? 'sim' : 'não (mudou, mas não idêntico)'}`;
     });
   } finally { await ctx.close(); }
   return s.summary();
