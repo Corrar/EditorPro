@@ -236,12 +236,16 @@ function makeGlCanvas(): Canvas {
   return new OffscreenCanvas(16, 16);
 }
 
-let shared: ColorGrader | null = null;
+const shared: Partial<Record<'render' | 'ui', ColorGrader>> = {};
 
-/** grader compartilhado da página (cria na primeira chamada; null no servidor) */
-export function getColorGrader(): ColorGrader | null {
-  if (shared) return shared;
+/**
+ * Grader compartilhado (cria na 1ª chamada; null no servidor). 'render' = preview/export
+ * (gradeLayer); 'ui' = miniaturas e escopos do painel — separado p/ não ficar
+ * redimensionando o canvas do preview a cada miniatura. No máximo 2 contextos.
+ */
+export function getColorGrader(slot: 'render' | 'ui' = 'render'): ColorGrader | null {
+  const hit = shared[slot];
+  if (hit) return hit;
   if (typeof document === 'undefined' && typeof OffscreenCanvas === 'undefined') return null;
-  shared = new ColorGrader();
-  return shared;
+  return (shared[slot] = new ColorGrader());
 }
