@@ -37,9 +37,10 @@ export interface WorkspaceProps {
   chatOpen: boolean;
   onChat: (open: boolean) => void;
   onHome?: () => void;
+  onSearch?: () => void;
 }
 
-export default function Workspace({ tool, sideOpen, onCloseSide, chatOpen, onChat, onHome }: WorkspaceProps) {
+export default function Workspace({ tool, sideOpen, onCloseSide, chatOpen, onChat, onHome, onSearch }: WorkspaceProps) {
   const [tlH, setTlH] = useState(300);
   const [pvH, setPvH] = useState<number | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -99,7 +100,7 @@ export default function Workspace({ tool, sideOpen, onCloseSide, chatOpen, onCha
       className={`ep-app${sideOpen ? '' : ' side-closed'}${chatOpen ? ' chat-open' : ''}${dragging ? ' resizing' : ''}`}
       style={{ ['--tl-h' as string]: `${tlH}px`, ['--pv-h' as string]: `${pvH ?? pvDefault}px` }}
     >
-      <Header onHome={onHome} />
+      <Header onHome={onHome} onSearch={onSearch} />
       <aside className="ep-side" aria-label={label}>
         <SheetHandle onClose={onCloseSide} label={label} />
         <button type="button" className="ep-sideclose" onClick={onCloseSide} aria-label="Fechar painel" title="Fechar painel"><IconClose size={16} /></button>

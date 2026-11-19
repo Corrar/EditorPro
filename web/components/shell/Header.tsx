@@ -8,7 +8,7 @@ import { useEditor } from '@/lib/store';
 import type { AspectRatio } from '@/lib/types';
 import { formatTime } from '@/lib/util';
 import { openExport } from './exportPref';
-import { IconClose, IconExport, IconRedo, IconUndo } from './icons';
+import { IconClose, IconExport, IconRedo, IconSearch, IconUndo } from './icons';
 import ResolutionPill from './ResolutionPill';
 
 const ASPECTS: AspectRatio[] = ['9:16', '16:9', '1:1', '4:5'];
@@ -48,7 +48,7 @@ function SaveBadge() {
   return <span className={`ep-save s-${status}`}><i />{label}</span>;
 }
 
-export default function Header({ onHome }: { onHome?: () => void }) {
+export default function Header({ onHome, onSearch }: { onHome?: () => void; onSearch?: () => void }) {
   const aspect = useEditor((s) => s.project.aspect);
   const duration = useEditor((s) => projectDuration(s.project));
   const clips = useEditor((s) => s.project.tracks.reduce((n, t) => n + t.clips.length, 0));
@@ -88,6 +88,7 @@ export default function Header({ onHome }: { onHome?: () => void }) {
         <select className="ep-select ep-aspect-sel" value={aspect} aria-label="Formato" onChange={(e) => dispatch({ op: 'set_aspect', aspect: e.target.value as AspectRatio })}>
           {ASPECTS.map((a) => <option key={a} value={a}>{a}</option>)}
         </select>
+        {onSearch && <button type="button" className="ep-hsearch" onClick={onSearch} aria-label="Buscar ferramentas e biblioteca" title="Buscar"><IconSearch size={21} /></button>}
         <ResolutionPill />
         <button type="button" className="ep-btn primary ep-exportbtn" onClick={() => (window.matchMedia('(max-width: 899px)').matches ? openExport() : emit('ep:open-export', {}))}>
           <IconExport size={16} /><span>Exportar</span>

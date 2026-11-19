@@ -22,7 +22,7 @@ import ToolSheet, { type SheetKind } from './ToolSheet';
 import { useAudioView } from '@/components/panels/AudioTab';
 import type { ToolId } from './tools';
 
-interface Item { id: string; label: string; icon: IconName; run: () => void; on?: boolean; danger?: boolean; accent?: boolean }
+interface Item { id: string; label: string; icon: IconName; run: () => void; on?: boolean; danger?: boolean; tag?: string }
 
 const toast = (text: string, kind: 'ok' | 'error' | 'info' = 'info') => emit('ep:toast', { text, kind });
 
@@ -84,25 +84,27 @@ export default function MobileToolbar({ onTool, onAi, onMenu, tool, toolOpen }: 
   };
 
   /* ---------- listas ---------- */
+  // ordem e rótulos como no CapCut (v2.3); "IA"/"Novo" são selos pequenos sobre o ícone
   const root: Item[] = [
-    { id: 'ai', label: 'IA', icon: 'ai', run: onAi, accent: true },
     { id: 'edit', label: 'Editar', icon: 'edit', run: firstVideoAtPlayhead },
-    { id: 'media', label: 'Mídia', icon: 'media', run: () => openPanel('media'), on: isOn('media') },
     { id: 'audio', label: 'Áudio', icon: 'audio', run: () => setLevel2('audio') },
     { id: 'text', label: 'Texto', icon: 'text', run: () => setLevel2('text') },
-    { id: 'stickers', label: 'Stickers', icon: 'stickers', run: () => openPanel('stickers'), on: isOn('stickers') },
-    { id: 'overlay', label: 'Sobrepor', icon: 'overlay', run: () => pipInput.current?.click() },
     { id: 'effects', label: 'Efeitos', icon: 'effects', run: () => openPanel('effects'), on: isOn('effects') },
-    { id: 'filters', label: 'Filtros', icon: 'filters', run: () => openPanel('filters'), on: isOn('filters') },
-    { id: 'adjust', label: 'Ajustes', icon: 'adjust', run: () => openPanel('adjust'), on: isOn('adjust') },
+    { id: 'overlay', label: 'Sobrepor', icon: 'overlay', run: () => pipInput.current?.click() },
     { id: 'captions', label: 'Legendas', icon: 'captions', run: () => openPanel('captions'), on: isOn('captions') },
-    { id: 'format', label: 'Formato', icon: 'formats', run: () => openPanel('canvas'), on: isOn('canvas') },
+    { id: 'filters', label: 'Filtros', icon: 'filters', run: () => openPanel('filters'), on: isOn('filters') },
+    { id: 'adjust', label: 'Ajustar', icon: 'adjust', run: () => openPanel('adjust'), on: isOn('adjust') },
+    { id: 'stickers', label: 'Stickers', icon: 'stickers', run: () => openPanel('stickers'), on: isOn('stickers') },
+    { id: 'templates', label: 'Modelos', icon: 'templates', run: () => openPanel('templates'), on: isOn('templates'), tag: 'Novo' },
+    { id: 'gen', label: 'Gerar com IA', icon: 'ai', run: () => openPanel('media'), on: isOn('media'), tag: 'IA' },
+    { id: 'format', label: 'Proporção', icon: 'formats', run: () => openPanel('canvas'), on: isOn('canvas') },
     { id: 'bg', label: 'Fundo', icon: 'background', run: () => openPanel('canvas') },
     { id: 'transitions', label: 'Transições', icon: 'transitions', run: () => openPanel('transitions'), on: isOn('transitions') },
-    { id: 'templates', label: 'Modelos', icon: 'templates', run: () => openPanel('templates'), on: isOn('templates') },
+    { id: 'media', label: 'Mídia', icon: 'media', run: () => openPanel('media') },
     { id: 'review', label: 'Revisão', icon: 'review', run: () => openPanel('review'), on: isOn('review') },
     { id: 'more', label: 'Mais', icon: 'grid', run: onMenu },
   ];
+
   const sub: Record<string, Item[]> = {
     audio: [
       { id: 'music', label: 'Músicas', icon: 'music', run: () => { useAudioView.setState({ view: 'music' }); openPanel('audio'); } },
@@ -216,8 +218,8 @@ export default function MobileToolbar({ onTool, onAi, onMenu, tool, toolOpen }: 
         )}
         <div className={`ep-mtscroll${edges.l ? ' fl' : ''}${edges.r ? ' fr' : ''}`} ref={scroller} onScroll={updateEdges} key={mode}>
           {items.map((it) => (
-            <button key={it.id} type="button" className={`ep-mtitem${it.on ? ' on' : ''}${it.danger ? ' danger' : ''}${it.accent ? ' accent' : ''}`} onClick={it.run}>
-              <span className="ic"><Icon name={it.icon} size={24} /></span>
+            <button key={it.id} type="button" className={`ep-mtitem${it.on ? ' on' : ''}${it.danger ? ' danger' : ''}`} onClick={it.run}>
+              <span className="ic"><Icon name={it.icon} size={24} strokeWidth={1.6} />{it.tag && <span className="ep-tag ep-mttag">{it.tag}</span>}</span>
               <span className="lb">{it.label}</span>
             </button>
           ))}
