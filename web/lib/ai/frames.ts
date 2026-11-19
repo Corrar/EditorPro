@@ -8,7 +8,7 @@
 
 export interface Frame { t: number; data: string; mediaType: 'image/jpeg' }
 /** cor média do vídeo (0..1) */
-export interface ColorStats { r: number; g: number; b: number; sat: number; lum: number }
+export interface ColorStats { r: number; g: number; b: number; sat: number; lum: number; /** desvio-padrão da luminância (contraste) */ lumSd?: number }
 
 export interface DeviceProfile { mobile: boolean; weak: boolean; memoryGB?: number; cores?: number }
 
@@ -162,7 +162,7 @@ export async function sampleVideo(url: string, opts: SampleOptions = {}): Promis
     const diffTimes: number[] = [];
     let prev: Uint8ClampedArray | null = null;
     // médias de cor (p/ detectar o "look" do vídeo-exemplo sem IA)
-    const acc = { r: 0, g: 0, b: 0, sat: 0, n: 0 };
+    const acc = { r: 0, g: 0, b: 0, sat: 0, n: 0, l2: 0 };
     for (let i = 0; i < plan.diffTimes.length; i++) {
       const t = plan.diffTimes[i];
       video.currentTime = t;
@@ -177,6 +177,7 @@ export async function sampleVideo(url: string, opts: SampleOptions = {}): Promis
           px[k * 3] = r; px[k * 3 + 1] = g; px[k * 3 + 2] = b;
           const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
           acc.r += r; acc.g += g; acc.b += b; acc.sat += mx ? (mx - mn) / mx : 0; acc.n++;
+          const lm = (0.299 * r + 0.587 * g + 0.114 * b) / 255; acc.l2 += lm * lm;
         }
         if (prev) {
           let s = 0;
@@ -193,7 +194,10 @@ export async function sampleVideo(url: string, opts: SampleOptions = {}): Promis
       opts.onProgress?.((i + 1) / plan.diffTimes.length);
     }
     const color: ColorStats | undefined = acc.n
-      ? { r: acc.r / acc.n / 255, g: acc.g / acc.n / 255, b: acc.b / acc.n / 255, sat: acc.sat / acc.n, lum: (0.299 * acc.r + 0.587 * acc.g + 0.114 * acc.b) / acc.n / 255 }
+      ? (() => {
+          const lum = (0.299 * acc.r + 0.587 * acc.g + 0.114 * acc.b) / acc.n / 255;
+          return { r: acc.r / acc.n / 255, g: acc.g / acc.n / 255, b: acc.b / acc.n / 255, sat: acc.sat / acc.n, lum, lumSd: Math.sqrt(Math.max(0, acc.l2 / acc.n - lum * lum)) };
+        })()
       : undefined;
     return { frames: fitBudget(frames, opts.budgetBytes ?? 2_800_000), diffs, diffTimes, duration, width: W, height: H, color };
   } finally {

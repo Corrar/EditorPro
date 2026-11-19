@@ -14,14 +14,11 @@ import { useAIBridge } from '@/lib/ai/bridge';
 import { FastButton } from './FastButton';
 import AttachMenu, { filesFromTransfer } from './AttachMenu';
 import { ModelActions, ModelAttachment, ModelChip } from './ModelBits';
+import { ChangesButton } from './RunExtras';
+import { suggestionsFor } from '@/lib/ai/suggest';
 import { useAIChat, type RunState } from '@/lib/ai/chatStore';
 import type { ChatMessage } from '@/lib/types';
 
-export const SUGGESTIONS = [
-  'Legendas estilo TikTok', 'Cortar silêncios', 'Cortar vícios de linguagem', 'Deixar mais dinâmico', 'Melhores momentos em 30 s',
-  'Sincronizar cortes na batida', 'Auto-reframe seguindo o rosto', 'Gancho com zoom e flash', 'Criar capítulos',
-  'Traduzir legendas para inglês', 'Cores cinematográficas',
-];
 
 
 function Steps({ run }: { run: RunState }) {
@@ -87,6 +84,7 @@ function AssistantBubble({ m, run, canUndo, onUndo, onAnswer, onSkip }: { m: Cha
         {run ? <Steps run={run} /> : null}
         {m.text ? <p className="ep-ch-text">{m.text}</p> : null}
         {run?.model && run.done && !run.error ? <ModelActions assetId={run.model.assetId} /> : null}
+        <ChangesButton run={run} />
         {canUndo ? (
           <button className="ep-ch-undo" onClick={onUndo}>
             <Icon name="undo" size={13} /> Desfazer esta edição
@@ -167,6 +165,8 @@ export default function ChatPanel() {
 
   const claude = status?.configured;
   const empty = messages.length === 0;
+  const assets = useEditor((s) => s.assets);
+  const suggestions = useMemo(() => suggestionsFor(project, assets), [project, assets]);
 
   return (
     <div className={`ep-ch${dragging ? ' dragging' : ''}`} {...dropProps}>
@@ -248,7 +248,7 @@ export default function ChatPanel() {
           </button>
         ) : null}
         <div className="ep-ch-chips" role="list">
-          {SUGGESTIONS.map((s) => (
+          {suggestions.map((s) => (
             <button key={s} role="listitem" className="ep-pill2 ep-ch-chip" disabled={busy} onClick={() => submit(s)}>
               {s}
             </button>

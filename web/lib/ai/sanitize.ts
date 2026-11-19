@@ -7,42 +7,25 @@ import type {
   AspectRatio, AudioEffect, AudioEffectKind, BlendMode, CaptionPreset, CaptionSegment, CaptionStyle, CaptionWord, ChromaKey,
   ClipAnimation, ColorPreset, Crop, Easing, Filter, FilterKind, FitMode, Keyframe, Mask, MaskShape, ShapeKind, SpeedPoint,
   SpeedPreset, StyleProfile, TextAnimation, TextStyle, Transform, Transition, TransitionKind, VisualEffect, VisualEffectKind,
+  ColorGrade, ColorWheel, CurvePoint, HslBand, MaskKeyframe,
 } from '../types';
 import { uid } from '../util';
+// listas derivadas dos catálogos dos donos (engine/biblioteca) — ver catalogs.ts
+import { CATALOG } from './catalogs';
 
 export const ASPECTS: AspectRatio[] = ['9:16', '16:9', '1:1', '4:5'];
-export const COLOR_PRESETS: ColorPreset[] = ['none', 'cinematic', 'warm', 'cool', 'vibrant', 'vintage', 'bw', 'moody'];
-export const TRANSITIONS: TransitionKind[] = [
-  'cut', 'fade', 'crossfade', 'slide-left', 'slide-right', 'slide-up', 'zoom-in', 'zoom-out', 'whip', 'glitch', 'flash',
-  'slide-down', 'dip-black', 'dip-white', 'blur', 'spin', 'wipe-left', 'wipe-right', 'wipe-up', 'circle-open', 'pixelate',
-  'shake', 'rgb-split', 'film-burn',
-];
-export const FILTER_KINDS: FilterKind[] = [
-  'brightness', 'contrast', 'saturation', 'temperature', 'blur', 'vignette', 'grain', 'bw', 'sepia',
-  'exposure', 'highlights', 'shadows', 'tint', 'hue', 'sharpen', 'fade',
-];
-export const TEXT_ANIMATIONS: TextAnimation[] = [
-  'none', 'fade', 'pop', 'slide-up', 'typewriter', 'bounce', 'karaoke',
-  'slide-down', 'slide-left', 'slide-right', 'zoom', 'blur', 'wave', 'glitch', 'flicker', 'spin',
-  'word-pop', 'word-fade', 'word-slide', 'word-bounce', 'word-drop', 'word-highlight',
-  'char-wave', 'char-fade', 'char-pop', 'char-typewriter',
-  'scale-in', 'blur-in', 'stomp', 'drop', 'highlight-sweep', 'underline-draw', 'box-reveal', 'shake',
-];
-export const EFFECT_KINDS: VisualEffectKind[] = [
-  'shake', 'glitch', 'rgb-split', 'zoom-pulse', 'vhs', 'film-grain', 'light-leak', 'pixelate', 'mirror', 'kaleidoscope',
-  'blur-motion', 'flash-strobe', 'old-film', 'vignette-pulse', 'sparkle', 'soft-glow', 'neon-edge', 'black-bars',
-];
-export const BLEND_MODES: BlendMode[] = ['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 'add', 'difference'];
-export const MASK_SHAPES: MaskShape[] = ['rect', 'circle', 'heart', 'star', 'line', 'mirror'];
+export const COLOR_PRESETS: ColorPreset[] = CATALOG.colorPresets;
+export const TRANSITIONS: TransitionKind[] = CATALOG.transitions;
+export const FILTER_KINDS: FilterKind[] = CATALOG.filters;
+export const TEXT_ANIMATIONS: TextAnimation[] = CATALOG.textAnimations;
+export const EFFECT_KINDS: VisualEffectKind[] = CATALOG.effects;
+export const BLEND_MODES: BlendMode[] = CATALOG.blendModes;
+export const MASK_SHAPES: MaskShape[] = CATALOG.masks;
 export const FIT_MODES: FitMode[] = ['cover', 'contain', 'fill'];
-export const SPEED_PRESETS: SpeedPreset[] = ['montage', 'hero', 'bullet', 'jump-cut', 'flash-in', 'flash-out'];
-export const AUDIO_EFFECTS: AudioEffectKind[] = [
-  'noise-reduction', 'normalize', 'voice-enhance', 'chipmunk', 'deep', 'robot', 'echo', 'reverb', 'telephone', 'megaphone', 'bass-boost',
-];
-export const CLIP_ANIMATIONS: ClipAnimation[] = [
-  'fade', 'zoom-in', 'zoom-out', 'slide-left', 'slide-right', 'slide-up', 'slide-down', 'spin', 'bounce', 'pop', 'shake', 'swing', 'blur', 'flip',
-];
-export const SHAPE_KINDS: ShapeKind[] = ['rect', 'rounded-rect', 'circle', 'triangle', 'star', 'arrow', 'line', 'heart', 'speech-bubble'];
+export const SPEED_PRESETS: SpeedPreset[] = CATALOG.speedPresets;
+export const AUDIO_EFFECTS: AudioEffectKind[] = CATALOG.audioEffects;
+export const CLIP_ANIMATIONS: ClipAnimation[] = CATALOG.clipAnimations;
+export const SHAPE_KINDS: ShapeKind[] = CATALOG.shapes;
 export const MARKER_KINDS = ['user', 'beat', 'chapter', 'comment'] as const;
 export const CAPTION_PRESETS: CaptionPreset[] = ['classic', 'bold-pop', 'karaoke', 'minimal', 'boxed', 'neon'];
 export const EASINGS: Easing[] = ['linear', 'easeIn', 'easeOut', 'easeInOut'];
@@ -146,7 +129,8 @@ export function sanitizeTransition(v: unknown, clipDuration = Infinity): Transit
   if (!kind) return undefined;
   const maxD = Math.max(0.05, Math.min(1.5, clipDuration / 2));
   const duration = clampNum(v.duration, 0.05, maxD) ?? Math.min(0.4, maxD);
-  return { kind, duration: r3(duration) };
+  const easing = oneOf(v.easing, EASINGS);
+  return { kind, duration: r3(duration), ...(easing ? { easing } : {}) };
 }
 
 /** TextStyle parcial (só campos válidos) */
@@ -402,7 +386,12 @@ export function sanitizeEffects(v: unknown): VisualEffect[] | undefined {
     if (!kind || seen.has(kind)) continue;
     seen.add(kind);
     const speed = clampNum(e.speed, 0, 2);
-    out.push({ kind, intensity: clampNum(e.intensity, 0, 1) ?? 0.6, ...(speed !== undefined ? { speed } : {}) });
+    const c = color(e.color);
+    const angle = clampNum(e.angle, -360, 360);
+    out.push({
+      kind, intensity: clampNum(e.intensity, 0, 1) ?? 0.6,
+      ...(speed !== undefined ? { speed } : {}), ...(c ? { color: c } : {}), ...(angle !== undefined ? { angle: r3(angle) } : {}),
+    });
   }
   return out.slice(0, 8);
 }
@@ -421,6 +410,26 @@ export function sanitizeAudioEffects(v: unknown): AudioEffect[] | undefined {
   return out.slice(0, 6);
 }
 
+/** keyframes da máscara (Power Window animada): até 32, tempos crescentes, valores limitados */
+function maskKeyframes(v: unknown): MaskKeyframe[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const out: MaskKeyframe[] = [];
+  for (const k of v.slice(0, 32)) {
+    if (!isObj(k)) continue;
+    const t = clampNum(k.t, 0, 24 * 3600);
+    if (t === undefined) continue;
+    const kf: MaskKeyframe = { t: r3(t) };
+    for (const [key, lo, hi] of [['x', 0, 1], ['y', 0, 1], ['w', 0.02, 2], ['h', 0.02, 2], ['rotation', -360, 360], ['feather', 0, 1]] as const) {
+      const x = clampNum(k[key], lo, hi); if (x !== undefined) kf[key] = r3(x);
+    }
+    const e = oneOf(k.easing, EASINGS); if (e) kf.easing = e;
+    out.push(kf);
+  }
+  out.sort((a, b) => a.t - b.t);
+  const dedup = out.filter((k, i) => i === 0 || k.t > out[i - 1].t);
+  return dedup.length ? dedup : undefined;
+}
+
 export function sanitizeMask(v: unknown): Mask | undefined {
   if (!isObj(v)) return undefined;
   const shape = oneOf(v.shape, MASK_SHAPES);
@@ -432,6 +441,9 @@ export function sanitizeMask(v: unknown): Mask | undefined {
     rotation: clampNum(v.rotation, -360, 360) ?? 0,
     feather: clampNum(v.feather, 0, 1) ?? 0.1,
     ...(bool(v.invert) ? { invert: true } : {}),
+    ...(clampNum(v.radius, 0, 1) !== undefined ? { radius: clampNum(v.radius, 0, 1)! } : {}),
+    ...(shape === 'text' && str(v.text, 60) ? { text: str(v.text, 60)! } : {}),
+    ...(maskKeyframes(v.keyframes) ? { keyframes: maskKeyframes(v.keyframes)! } : {}),
   };
 }
 
@@ -497,4 +509,50 @@ export function sanitizeAudioExtras(v: Record<string, unknown>): Record<string, 
   if (v.speedPreset === null) out.speedPreset = undefined;
   else { const sp = oneOf(v.speedPreset, SPEED_PRESETS); if (sp) out.speedPreset = sp; }
   return out;
+}
+
+/* ---------- correção de cor (ColorGrade, estilo DaVinci) ---------- */
+const HSL_BANDS: HslBand[] = ['red', 'orange', 'yellow', 'green', 'aqua', 'blue', 'purple', 'magenta'];
+const n11 = (v: unknown) => clampNum(v, -1, 1);
+
+function sanitizeWheel(v: unknown): ColorWheel | undefined {
+  if (!isObj(v)) return undefined;
+  const w = { r: n11(v.r) ?? 0, g: n11(v.g) ?? 0, b: n11(v.b) ?? 0, y: n11(v.y) ?? 0 };
+  return w.r || w.g || w.b || w.y ? { r: r3(w.r), g: r3(w.g), b: r3(w.b), y: r3(w.y) } : undefined;
+}
+
+function sanitizeCurve(v: unknown): CurvePoint[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const pts = v.filter(isObj).map((p) => ({ x: clampNum(p.x, 0, 1), y: clampNum(p.y, 0, 1) }))
+    .filter((p): p is CurvePoint => p.x !== undefined && p.y !== undefined)
+    .sort((a, b) => a.x - b.x).slice(0, 16).map((p) => ({ x: r3(p.x), y: r3(p.y) }));
+  return pts.length >= 2 ? pts : undefined;
+}
+
+/** ColorGrade parcial e válido (null = remover a correção). Só campos conhecidos, valores limitados. */
+export function sanitizeColorGrade(v: unknown): ColorGrade | null | undefined {
+  if (v === null) return null;
+  if (!isObj(v)) return undefined;
+  const out: ColorGrade = {};
+  for (const k of ['lift', 'gamma', 'gain', 'offset'] as const) { const w = sanitizeWheel(v[k]); if (w) out[k] = w; }
+  for (const k of ['exposure', 'contrast', 'saturation', 'vibrance', 'temperature', 'tint', 'highlights', 'shadows'] as const) {
+    const x = n11(v[k]); if (x !== undefined && x !== 0) out[k] = r3(x);
+  }
+  const pivot = clampNum(v.pivot, 0, 1); if (pivot !== undefined) out.pivot = r3(pivot);
+  const mix = clampNum(v.mix, 0, 1); if (mix !== undefined) out.mix = r3(mix);
+  if (isObj(v.curves)) {
+    const c: NonNullable<ColorGrade['curves']> = {};
+    for (const k of ['master', 'r', 'g', 'b'] as const) { const cv = sanitizeCurve((v.curves as Record<string, unknown>)[k]); if (cv) c[k] = cv; }
+    if (Object.keys(c).length) out.curves = c;
+  }
+  if (isObj(v.hsl)) {
+    const h: NonNullable<ColorGrade['hsl']> = {};
+    for (const b of HSL_BANDS) {
+      const a = (v.hsl as Record<string, unknown>)[b];
+      if (isObj(a)) { const adj = { hue: r3(n11(a.hue) ?? 0), sat: r3(n11(a.sat) ?? 0), lum: r3(n11(a.lum) ?? 0) }; if (adj.hue || adj.sat || adj.lum) h[b] = adj; }
+    }
+    if (Object.keys(h).length) out.hsl = h;
+  }
+  if (isObj(v.lut)) { const id = str(v.lut.id, 80); if (id && /^[\w.:-]+$/.test(id) && !id.includes('..')) out.lut = { id, intensity: clampNum(v.lut.intensity, 0, 1) ?? 1 }; }
+  return Object.keys(out).length ? out : undefined;
 }

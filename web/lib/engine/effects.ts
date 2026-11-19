@@ -6,14 +6,19 @@
 import type { VisualEffect, VisualEffectKind } from '../types';
 import type { ResolvedFilters } from './filters';
 import { hash, noise, scratch, type AnyCanvas, type Ctx } from './surface';
+import { FX_EFFECT_LABELS } from '../fx/catalog';
+import { addFxGeometry, isGeometryEffect } from '../fx/geometry';
+import { paint2DEffect, type FxOpts } from '../fx/effects2d';
+import { applyGLEffect } from '../fx/effectsGL';
 
-export const EFFECT_LABELS: Record<VisualEffectKind, string> = {
-  shake: 'Tremor', glitch: 'Glitch', 'rgb-split': 'RGB split', 'zoom-pulse': 'Pulso de zoom', vhs: 'VHS',
-  'film-grain': 'Granulado', 'light-leak': 'Vazamento de luz', pixelate: 'Pixelado', mirror: 'Espelho',
-  kaleidoscope: 'Caleidoscópio', 'blur-motion': 'Desfoque de movimento', 'flash-strobe': 'Estroboscópio',
-  'old-film': 'Filme antigo', 'vignette-pulse': 'Vinheta pulsante', sparkle: 'Brilhos', 'soft-glow': 'Brilho suave',
-  'neon-edge': 'Contorno neon', 'black-bars': 'Barras de cinema',
-};
+/** rótulos PT-BR (derivados do catálogo único em lib/fx/catalog.ts) */
+export const EFFECT_LABELS: Record<VisualEffectKind, string> = FX_EFFECT_LABELS;
+
+/** opções extras (todas opcionais): tempo local do clipe e geometria na camada de ajuste */
+export interface SurfaceFxOpts extends FxOpts {
+  /** aplica também os efeitos de geometria (camada de ajuste não passa por effectGeometry) */
+  geometry?: boolean;
+}
 
 const I = (e: VisualEffect) => Math.max(0, Math.min(1, e.intensity ?? 0.5));
 const SPD = (e: VisualEffect) => Math.max(0.05, e.speed ?? 1);
@@ -31,14 +36,14 @@ export function effectGeometry(effects: VisualEffect[] | undefined, t: number): 
     } else if (e.kind === 'zoom-pulse') {
       const ph = (t * 2 * SPD(e)) % 1;
       g.scale *= 1 + 0.12 * I(e) * Math.exp(-ph * 6);
-    }
+    } else addFxGeometry(g, e, t);
   }
   return g;
 }
 
 /** efeitos que são aplicados na superfície já desenhada */
 export function hasSurfaceEffects(effects: VisualEffect[] | undefined): boolean {
-  return !!effects?.some((e) => e.kind !== 'shake' && e.kind !== 'zoom-pulse' && I(e) > 0);
+  return !!effects?.some((e) => !isGeometryEffect(e.kind) && I(e) > 0);
 }
 
 function copyOf(ctx: Ctx, W: number, H: number, slot = 3): AnyCanvas {
@@ -102,13 +107,15 @@ export function pixelateInPlace(ctx: Ctx, W: number, H: number, block: number) {
   if (block < 2) return;
   const src = copyOf(ctx, W, H, 3);
   const sw = Math.max(1, Math.round(W / block)), sh = Math.max(1, Math.round(H / block));
-  const { c: small, ctx: s } = scratch(ctx.canvas, sw, sh, 8);
+  // tamanho FIXO (W/2×H/2) e desenho num sub-retângulo: o bloco anima na transição e
+  // recriar o canvas a cada quadro custava alocação + GC
+  const { c: small, ctx: s } = scratch(ctx.canvas, Math.ceil(W / 2), Math.ceil(H / 2), 8);
   s.drawImage(src as CanvasImageSource, 0, 0, sw, sh);
   clear(ctx, W, H);
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(small as CanvasImageSource, 0, 0, W, H);
+  ctx.drawImage(small as CanvasImageSource, 0, 0, sw, sh, 0, 0, W, H);
   ctx.restore();
 }
 
@@ -213,8 +220,10 @@ function sparkles(ctx: Ctx, W: number, H: number, v: number, t: number, speed: n
 }
 
 /** aplica os efeitos de superfície, na ordem dada */
-export function applySurfaceEffects(ctx: Ctx, W: number, H: number, effects: VisualEffect[] | undefined, t: number) {
+export function applySurfaceEffects(ctx: Ctx, W: number, H: number, effects: VisualEffect[] | undefined, t: number, opts: SurfaceFxOpts = {}) {
   if (!effects?.length) return;
+  if (!Number.isFinite(t)) t = 0;
+  if (opts.geometry) applyGeometryInPlace(ctx, W, H, effects, t);
   for (const e of effects) {
     const v = I(e);
     if (v <= 0) continue;
@@ -311,6 +320,7 @@ export function applySurfaceEffects(ctx: Ctx, W: number, H: number, effects: Vis
         break;
       case 'sparkle': sparkles(ctx, W, H, v, t, sp); break;
       case 'soft-glow': {
+        if (applyGLEffect(ctx, W, H, e, t)) break; // WebGL (o ctx.filter não funciona no Safari)
         const src = copyOf(ctx, W, H, 3);
         ctx.globalCompositeOperation = 'screen';
         ctx.globalAlpha = 0.65 * v;
@@ -343,10 +353,27 @@ export function applySurfaceEffects(ctx: Ctx, W: number, H: number, effects: Vis
         ctx.fillRect(0, H - bh, W, bh);
         break;
       }
-      default: break;
+      default:
+        if (!paint2DEffect(ctx, W, H, e, t, opts)) applyGLEffect(ctx, W, H, e, t);
+        break;
     }
     ctx.restore();
   }
+}
+
+/** geometria (tremor, zooms, câmera na mão…) aplicada redesenhando a superfície — p/ camada de ajuste */
+export function applyGeometryInPlace(ctx: Ctx, W: number, H: number, effects: VisualEffect[] | undefined, t: number) {
+  const g = effectGeometry(effects, t);
+  if (!g.dx && !g.dy && g.scale === 1 && !g.rotation) return;
+  const src = copyOf(ctx, W, H, 3);
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalCompositeOperation = 'copy';
+  ctx.translate(W / 2 + g.dx * W, H / 2 + g.dy * H);
+  if (g.rotation) ctx.rotate((g.rotation * Math.PI) / 180);
+  ctx.scale(g.scale, g.scale);
+  ctx.drawImage(src as CanvasImageSource, -W / 2, -H / 2);
+  ctx.restore();
 }
 
 /** queimado de filme (transição film-burn) por cima do quadro */

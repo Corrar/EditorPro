@@ -47,6 +47,9 @@ export function isFiller(words: CaptionWord[], i: number): boolean {
     return comma || gapAfter > 0.2 || next === 'assim';
   }
   if (n === 'assim' && i > 0 && normWord(words[i - 1].text) === 'tipo') return true;
+  // "então…" solto (com pausa ou reticências) e "sabe?" de muleta no fim da frase
+  if (n === 'entao') return /…|\.\.\.$/.test(w.text.trim()) || (dur >= 0.35 && gapAfter > 0.25) || (i === 0 || gapBefore > 0.4) && gapAfter > 0.3;
+  if (n === 'sabe') return /\?$/.test(w.text.trim()) && (gapAfter > 0.2 || i === words.length - 1) && !(words[i + 1] && /^(o|a|que|se|como)$/.test(normWord(words[i + 1].text)));
   return false;
 }
 
@@ -118,6 +121,50 @@ export function highlightOps(p: Project, maxSec: number): { ops: EditOp[]; kept:
   const ops: EditOp[] = cuts.reverse().map((c) => ({ op: 'ripple_delete', start: r3(c.start), end: r3(c.end), explain: `Tirando o trecho fraco ${fmt(c.start)}–${fmt(c.end)}` }));
   const removed = cuts.reduce((n, c) => n + c.end - c.start, 0);
   return { ops, kept: r3(total - removed), removed: r3(removed) };
+}
+
+/* ---------- zoom automático na ênfase ---------- */
+
+/**
+ * Punch-in curto (1→1.18→1) no começo das frases mais fortes (ênfase marcada, "!", números,
+ * palavras do brief), até `max` frases. Um update_clip por clipe com todos os punches.
+ */
+export function emphasisZoomOps(p: Project, max = 8, scale = 1.18): { ops: EditOp[]; count: number } {
+  const segs = p.captions.segments;
+  if (!segs.length) return { ops: [], count: 0 };
+  const keywords = new Set(p.brief.split(/\s+/).map(normWord).filter((t) => t.length > 3));
+  const ranked = segs.map((s, i) => ({ s, score: segScore(s, i, segs.length, keywords) + (s.emphasis?.length ? 1.5 : 0) + (/!/.test(s.text) ? 0.5 : 0) }))
+    .sort((a, b) => b.score - a.score);
+  const cut = ranked.length > 3 ? ranked[Math.floor(ranked.length * 0.3)].score : -Infinity;
+  const chosen = ranked.filter((r) => r.score >= cut).slice(0, max).map((r) => r.s).sort((a, b) => a.start - b.start);
+  const byClip = new Map<Id, { clip: VideoClip; kfs: Keyframe[]; n: number }>();
+  let lastT = -10;
+  for (const s of chosen) {
+    if (s.start - lastT < 1.5) continue; // nada de zoom em cima de zoom
+    const clip = mainVideoClips(p).find((c) => s.start >= c.start && s.start < clipEnd(c) - 0.3);
+    if (!clip) continue;
+    const t0 = r3(s.start - clip.start);
+    const hold = Math.min(1.1, Math.max(0.5, s.end - s.start - 0.2));
+    const t3 = Math.min(clip.duration, t0 + 0.15 + hold + 0.25);
+    const e = byClip.get(clip.id) ?? { clip, kfs: [], n: 0 };
+    e.kfs.push(
+      { t: r3(Math.max(0, t0 - 0.01)), transform: { scale: 1 } },
+      { t: r3(t0 + 0.15), transform: { scale }, easing: 'easeOut' },
+      { t: r3(Math.min(t3 - 0.25, t0 + 0.15 + hold)), transform: { scale } },
+      { t: r3(t3), transform: { scale: 1 }, easing: 'easeInOut' },
+    );
+    e.n++;
+    byClip.set(clip.id, e);
+    lastT = s.start;
+  }
+  const ops: EditOp[] = [];
+  let count = 0;
+  for (const { clip, kfs, n } of byClip.values()) {
+    const sorted = kfs.sort((a, b) => a.t - b.t).filter((k, i, a) => i === 0 || k.t > a[i - 1].t + 0.005);
+    ops.push({ op: 'update_clip', clipId: clip.id, patch: { keyframes: sorted }, explain: `Zoom na ênfase: ${n} frase${n > 1 ? 's' : ''} a partir de ${fmt(clip.start)}` });
+    count += n;
+  }
+  return { ops, count };
 }
 
 /* ---------- batidas ---------- */

@@ -15,6 +15,7 @@ import {
   Snowflake, Sparkles, Square, Sticker, Sun, Timer, Trash2, Type, Undo2, Upload, UserRound, Video,
   Volume2, VolumeX, Wand, WandSparkles, X, ZoomIn, ZoomOut, Flame, RectangleVertical,
   PanelLeft, FastForward, PictureInPicture2, Wallpaper, Waves, Activity, AudioWaveform, Type as TypeIcon, Wind, ChevronsUpDown, Pencil, ArrowLeft, Replace, Rewind, ChevronDown,
+  MousePointer2, Slice, ArrowLeftRight, Columns2, MoveHorizontal, ChevronsLeftRight, Link2, Unlink2, Headphones, Keyboard, Group, Ungroup, Paintbrush, Spline, TrendingUp, UnfoldVertical,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -39,6 +40,10 @@ export const ICONS = {
   chroma: Droplet, picker: Pipette, user: UserRound, timer: Timer,
   // (aditivo, shell)
   sidebar: PanelLeft, expand: ChevronsUpDown, rename: Pencil, arrowLeft: ArrowLeft, replace: Replace, reverse: Rewind, extend: FastForward, overlay: PictureInPicture2, background: Wallpaper, fades: Waves, beats: Activity, voicefx: AudioWaveform, font: TypeIcon, sfx: Wind, minimize: ChevronDown,
+  // (aditivo, timeline) ferramentas estilo DaVinci
+  select: MousePointer2, blade: Slice, ripple: ArrowLeftRight, roll: Columns2, slip: MoveHorizontal, slide: ChevronsLeftRight,
+  link: Link2, unlink: Unlink2, solo: Headphones, shortcuts: Keyboard, group: Group, ungroup: Ungroup, pasteStyle: Paintbrush,
+  curve: Spline, ramp: TrendingUp, trackHeight: UnfoldVertical,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;

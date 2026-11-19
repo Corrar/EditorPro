@@ -18,6 +18,9 @@ import { clipAnimFx } from '@/lib/engine/animations';
 import { resolveFilters, needsPixelGrade } from '@/lib/engine/filters';
 import { transitionVisual, type TransitionVisual } from '@/lib/engine/transitions';
 import { isShaderTransition } from '@/lib/engine/shaderTransitions';
+import { gradeNeedsCanvas, gradeCssEquivalent } from '@/lib/color';
+import { effectsNativeMode } from '@/lib/fx/native';
+import { effectGeometry } from '@/lib/engine/effects';
 
 /** uma camada nativa: um <video> visível com geometria/opacidade/filtro em CSS */
 export interface NativeLayer {
@@ -95,7 +98,8 @@ export function nativePlan(p: Project, t: Seconds): NativePlan {
     // (como no drawLayer: o clipe que sai não aplica o próprio fade)
     const fade = it.transition?.role === 'out' ? 1 : fadeOpacity(clip, t);
     const opacity = Math.max(0, Math.min(1, tf.opacity * fade * (tv ? tv.opacity : 1)));
-    layers.push({ clip, opacity, filter: f.css, tv, z: it.transition?.role === 'out' ? 0 : 1 });
+    const filter = [f.css, gradeCssEquivalent(clip.colorGrade)].filter((x) => x && x !== 'none').join(' ') || 'none';
+    layers.push({ clip, opacity, filter, tv, z: it.transition?.role === 'out' ? 0 : 1 });
   }
   return { native: true, track: main, layers };
 }
@@ -104,7 +108,8 @@ export function nativePlan(p: Project, t: Seconds): NativePlan {
 export function clipNeedsCanvas(clip: Clip, t: Seconds): string | null {
   if (clip.type !== 'video') return 'não é vídeo';
   if (clip.reverse) return 'reverso';
-  if (clip.effects?.length) return 'efeito';
+  // efeitos: 'css' (geometria vira CSS no <video>) fica nativo; 'overlay' e 'canvas' compõem no canvas
+  if (clip.effects?.length && effectsNativeMode(clip.effects) !== 'css') return 'efeito';
   if (clip.mask) return 'máscara';
   if (clip.chromaKey) return 'chroma';
   if (clip.removeBackground) return 'remover fundo';
@@ -113,6 +118,8 @@ export function clipNeedsCanvas(clip: Clip, t: Seconds): string | null {
   if (cr && (cr.w < 0.999 || cr.h < 0.999 || cr.x > 0.001 || cr.y > 0.001)) return 'recorte';
   const f = resolveFilters(clip.filters, clip.colorPreset, 1);
   if (needsPixelGrade(f) || f.temperature || f.tint || f.fade || f.vignette || f.grain) return 'look';
+  // correção de cor: CSS quando há equivalente (exposição/contraste/saturação), senão WebGL no canvas
+  if (gradeNeedsCanvas(clip.colorGrade)) return 'cor';
   if (/blur\(/.test(f.css)) return 'desfoque';
   const a = clipAnimFx(clip, Math.max(0, t - clip.start), clip.duration);
   if (a.opacity < 0.999 || a.dx || a.dy || Math.abs(a.scale - 1) > 0.001 || a.rotation || a.blur || a.scaleX !== 1) return 'animação';
@@ -138,12 +145,13 @@ export function nativeGeometry(clip: VideoClip, t: Seconds, W: number, H: number
     const k = fit === 'contain' ? Math.min(W / sw, H / sh) : Math.max(W / sw, H / sh);
     dw = sw * k; dh = sh * k;
   }
-  const s = Math.max(0.0001, tf.scale) * (tv ? tv.scale : 1);
+  const eg = effectGeometry(clip.effects, t);
+  const s = Math.max(0.0001, tf.scale) * (tv ? tv.scale : 1) * eg.scale;
   dw *= s; dh *= s;
   const tdx = tv ? tv.dx : 0, tdy = tv ? tv.dy : 0;
-  const cx = W / 2 + (tf.x + tdx) * W;
-  const cy = H / 2 + (tf.y + tdy) * H;
-  const rot = tf.rotation + (tv ? tv.rotation : 0);
+  const cx = W / 2 + (tf.x + tdx + eg.dx) * W;
+  const cy = H / 2 + (tf.y + tdy + eg.dy) * H;
+  const rot = tf.rotation + (tv ? tv.rotation : 0) + eg.rotation;
   const g: NativeGeometry = { x: cx - dw / 2, y: cy - dh / 2, w: dw, h: dh, rot, fx: clip.flipH ? -1 : 1, fy: clip.flipV ? -1 : 1 };
   // slide: o canvas recorta a camada no quadro deslocado; aqui, clip-path na caixa (sem rotação)
   if ((tdx || tdy) && !rot) {

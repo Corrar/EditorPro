@@ -21,6 +21,8 @@ import Home, { type WizardInput } from './Home';
 import MobileNav from './MobileNav';
 import MobileToolbar from './MobileToolbar';
 import AiCursor from './AiCursor';
+import { initCatalogs } from '@/components/panels/catalog';
+import { initColor } from '@/components/panels/ColorTool';
 import MediaPicker from '@/components/media/MediaPicker';
 import { openMediaPicker } from '@/components/media/pickerStore';
 import AiPopupHost, { type AiPopupMode } from './AiPopupHost';
@@ -46,6 +48,7 @@ export default function EditorShell() {
   const [sideOpen, setSideOpen] = useState(true);
   const [chatOpen, setChatOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  useEffect(() => { initCatalogs(); initColor(); }, []); // catálogos da sessão FX (fallback: listas atuais)
   const [menuSearch, setMenuSearch] = useState(false);
   const [aiAutoMin, setAiAutoMin] = useState(false);
   const [aiMode, setAiModeRaw] = useState<AiPopupMode>('closed');

@@ -21,12 +21,13 @@ import { uid } from '@/lib/util';
 import ToolSheet, { type SheetKind } from './ToolSheet';
 import { openMediaPicker } from '@/components/media/pickerStore';
 import { useAudioView } from '@/components/panels/AudioTab';
+import { useColorAvailable } from '@/components/panels/ColorTool';
 import type { ToolId } from './tools';
 
 interface Item { id: string; label: string; icon: IconName; run: () => void; on?: boolean; danger?: boolean; tag?: string }
 
 /** id do item da barra → data-ep-tool (cursor da IA) */
-const ITEM_TOOL: Record<string, string> = { edit: 'edit', audio: 'audio', text: 'text', effects: 'effects', captions: 'captions', filters: 'filters', adjust: 'adjust', stickers: 'stickers', templates: 'templates', format: 'formats', transitions: 'transitions', media: 'media', review: 'review' };
+const ITEM_TOOL: Record<string, string> = { color: 'color', edit: 'edit', audio: 'audio', text: 'text', effects: 'effects', captions: 'captions', filters: 'filters', adjust: 'adjust', stickers: 'stickers', templates: 'templates', format: 'formats', transitions: 'transitions', media: 'media', review: 'review' };
 
 const toast = (text: string, kind: 'ok' | 'error' | 'info' = 'info') => emit('ep:toast', { text, kind });
 
@@ -36,6 +37,7 @@ export default function MobileToolbar({ onTool, onAi, onMenu, tool, toolOpen }: 
   const selId = useEditor((s) => s.selection[0]);
   const clip = useEditor((s) => (s.selection[0] ? findClip(s.project, s.selection[0])?.clip ?? null : null));
   const select = useEditor((s) => s.select);
+  const colorOk = useColorAvailable();
   const [level2, setLevel2] = useState<string | null>(null);
   const [sheet, setSheet] = useState<SheetKind | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
@@ -98,6 +100,7 @@ export default function MobileToolbar({ onTool, onAi, onMenu, tool, toolOpen }: 
     { id: 'captions', label: 'Legendas', icon: 'captions', run: () => openPanel('captions'), on: isOn('captions') },
     { id: 'filters', label: 'Filtros', icon: 'filters', run: () => openPanel('filters'), on: isOn('filters') },
     { id: 'adjust', label: 'Ajustar', icon: 'adjust', run: () => openPanel('adjust'), on: isOn('adjust') },
+    ...(colorOk ? [{ id: 'color', label: 'Cor', icon: 'filters' as IconName, run: () => openPanel('color'), on: isOn('color') }] : []),
     { id: 'stickers', label: 'Stickers', icon: 'stickers', run: () => openPanel('stickers'), on: isOn('stickers') },
     { id: 'templates', label: 'Modelos', icon: 'templates', run: () => openPanel('templates'), on: isOn('templates'), tag: 'Novo' },
     { id: 'gen', label: 'Gerar com IA', icon: 'ai', run: () => openPanel('media'), on: isOn('media'), tag: 'IA' },
@@ -132,6 +135,13 @@ export default function MobileToolbar({ onTool, onAi, onMenu, tool, toolOpen }: 
   };
 
   const S = (k: SheetKind) => () => setSheet(k);
+  const toggleDenoise = () => {
+    if (!clip || (clip.type !== 'audio' && clip.type !== 'video')) return;
+    const fx = clip.audioEffects ?? [];
+    const on = fx.some((e) => e.kind === 'noise-reduction');
+    useEditor.getState().dispatch({ op: 'update_clip', clipId: clip.id, patch: { audioEffects: on ? fx.filter((e) => e.kind !== 'noise-reduction') : [...fx, { kind: 'noise-reduction', amount: 0.7 }] } });
+    toast(on ? 'Redução de ruído desligada' : 'Ruído de fundo reduzido', 'ok');
+  };
   const common = { dup: { id: 'dup', label: 'Duplicar', icon: 'copy' as IconName, run: () => duplicateClips() }, del: { id: 'del', label: 'Excluir', icon: 'delete' as IconName, run: () => removeClips(), danger: true } };
   const ctx: Record<Clip['type'], Item[]> = {
     video: [
@@ -142,12 +152,15 @@ export default function MobileToolbar({ onTool, onAi, onMenu, tool, toolOpen }: 
       { id: 'fx', label: 'Efeitos', icon: 'effects', run: S('effects') },
       { id: 'flt', label: 'Filtros', icon: 'filters', run: S('filters') },
       { id: 'adj', label: 'Ajustes', icon: 'adjust', run: S('adjust') },
-      { id: 'pos', label: 'Posição', icon: 'fullscreen', run: S('motion') },
+      ...(colorOk ? [{ id: 'color', label: 'Cor', icon: 'filters' as IconName, run: () => openPanel('color') }] : []),
+      { id: 'pos', label: 'Transformar', icon: 'fullscreen', run: S('motion') },
+      { id: 'opacity', label: 'Opacidade', icon: 'show', run: S('opacity') },
+      { id: 'transition', label: 'Transição', icon: 'transitions', run: () => openPanel('transitions') },
       { id: 'mask', label: 'Máscara', icon: 'shapes', run: S('mask') },
       { id: 'chroma', label: 'Chroma', icon: 'chroma', run: S('chroma') },
       { id: 'crop', label: 'Recortar', icon: 'crop', run: S('crop') },
       { id: 'bg', label: 'Remover fundo', icon: 'user', run: S('bg') },
-      { id: 'blend', label: 'Mesclar', icon: 'layers', run: S('blend') },
+      { id: 'blend', label: 'Mistura', icon: 'layers', run: S('blend') },
       { id: 'replace', label: 'Substituir', icon: 'replace', run: S('edit') },
       { id: 'rev', label: 'Reverso', icon: 'reverse', run: () => { const c = clip as Extract<Clip, { type: 'video' }>; useEditor.getState().dispatch({ op: 'update_clip', clipId: c.id, patch: { reverse: !c.reverse } }); toast(c.reverse ? 'Reverso desligado' : 'Reproduzindo ao contrário', 'ok'); }, on: clip?.type === 'video' && !!clip.reverse },
       { id: 'freeze', label: 'Congelar', icon: 'freeze', run: () => void freezeFrame() },
@@ -160,11 +173,15 @@ export default function MobileToolbar({ onTool, onAi, onMenu, tool, toolOpen }: 
       { id: 'fx', label: 'Efeitos', icon: 'effects', run: S('effects') },
       { id: 'flt', label: 'Filtros', icon: 'filters', run: S('filters') },
       { id: 'adj', label: 'Ajustes', icon: 'adjust', run: S('adjust') },
-      { id: 'pos', label: 'Posição', icon: 'fullscreen', run: S('motion') },
+      ...(colorOk ? [{ id: 'color', label: 'Cor', icon: 'filters' as IconName, run: () => openPanel('color') }] : []),
+      { id: 'pos', label: 'Transformar', icon: 'fullscreen', run: S('motion') },
+      { id: 'opacity', label: 'Opacidade', icon: 'show', run: S('opacity') },
+      { id: 'transition', label: 'Transição', icon: 'transitions', run: () => openPanel('transitions') },
       { id: 'mask', label: 'Máscara', icon: 'shapes', run: S('mask') },
       { id: 'chroma', label: 'Chroma', icon: 'chroma', run: S('chroma') },
       { id: 'crop', label: 'Recortar', icon: 'crop', run: S('crop') },
       { id: 'bg', label: 'Remover fundo', icon: 'user', run: S('bg') },
+      { id: 'blend', label: 'Mistura', icon: 'layers', run: S('blend') },
       { id: 'replace', label: 'Substituir', icon: 'replace', run: S('edit') },
       common.dup, common.del,
     ],
@@ -180,6 +197,7 @@ export default function MobileToolbar({ onTool, onAi, onMenu, tool, toolOpen }: 
       { id: 'vol', label: 'Volume', icon: 'volume', run: S('volume') },
       { id: 'fades', label: 'Fades', icon: 'fades', run: S('volume') },
       { id: 'vfx', label: 'Efeitos de voz', icon: 'voicefx', run: S('volume') },
+      { id: 'denoise', label: 'Reduzir ruído', icon: 'fades', run: toggleDenoise, on: !!(clip && 'audioEffects' in clip && clip.audioEffects?.some((e) => e.kind === 'noise-reduction')) },
       { id: 'speed', label: 'Velocidade', icon: 'speed', run: S('speed') },
       { id: 'beats', label: 'Batidas', icon: 'beats', run: S('volume') },
       { id: 'split', label: 'Dividir', icon: 'cut', run: () => splitAtPlayhead() },
@@ -188,20 +206,23 @@ export default function MobileToolbar({ onTool, onAi, onMenu, tool, toolOpen }: 
     sticker: [
       { id: 'style', label: 'Sticker', icon: 'stickers', run: S('style') },
       { id: 'anim', label: 'Animação', icon: 'loop', run: S('anim') },
-      { id: 'pos', label: 'Posição', icon: 'fullscreen', run: S('motion') },
-      { id: 'blend', label: 'Opacidade', icon: 'layers', run: S('blend') },
+      { id: 'pos', label: 'Transformar', icon: 'fullscreen', run: S('motion') },
+      { id: 'opacity', label: 'Opacidade', icon: 'show', run: S('opacity') },
+      { id: 'blend', label: 'Mistura', icon: 'layers', run: S('blend') },
       { id: 'fx', label: 'Efeitos', icon: 'effects', run: S('effects') },
       common.dup, common.del,
     ],
     shape: [
       { id: 'style', label: 'Estilo', icon: 'shapes', run: S('style') },
       { id: 'anim', label: 'Animação', icon: 'loop', run: S('anim') },
-      { id: 'pos', label: 'Posição', icon: 'fullscreen', run: S('motion') },
-      { id: 'blend', label: 'Opacidade', icon: 'layers', run: S('blend') },
+      { id: 'pos', label: 'Transformar', icon: 'fullscreen', run: S('motion') },
+      { id: 'opacity', label: 'Opacidade', icon: 'show', run: S('opacity') },
+      { id: 'blend', label: 'Mistura', icon: 'layers', run: S('blend') },
       common.dup, common.del,
     ],
     adjustment: [
       { id: 'adj', label: 'Ajustes', icon: 'adjust', run: S('adjust') },
+      ...(colorOk ? [{ id: 'color', label: 'Cor', icon: 'filters' as IconName, run: () => openPanel('color') }] : []),
       { id: 'flt', label: 'Filtros', icon: 'filters', run: S('filters') },
       { id: 'fx', label: 'Efeitos', icon: 'effects', run: S('effects') },
       common.dup, common.del,

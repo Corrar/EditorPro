@@ -1,4 +1,5 @@
 /* mapeamento de tempo e visibilidade de clipes, incluindo transições (puro) */
+import { easeTransitionProgress } from '../fx/native';
 import type { Clip, ImageClip, Project, Seconds, ShapeClip, StickerClip, Track, Transition, VideoClip } from '../types';
 import { mapSourceTime, rateAt } from './speed';
 
@@ -26,7 +27,7 @@ export function effectiveTransition(c: Clip): Transition | null {
   if (!c.transitionIn) return null;
   const tr = c.transitionIn;
   if (!tr || tr.kind === 'cut' || !(tr.duration > 0)) return null;
-  return { kind: tr.kind, duration: Math.min(tr.duration, c.duration) };
+  return { kind: tr.kind, duration: Math.min(tr.duration, c.duration), ...(tr.easing ? { easing: tr.easing } : {}) };
 }
 
 /** multiplicador de opacidade por fadeIn/fadeOut (só vídeo tem esses campos no contrato) */
@@ -62,7 +63,7 @@ export function trackLayers(track: Track, t: Seconds): LayerItem[] {
     const tr = effectiveTransition(c);
     const local = t - c.start;
     if (tr && local < tr.duration) {
-      const progress = local / tr.duration;
+      const progress = easeTransitionProgress(tr.easing, local / tr.duration);
       const prev = i > 0 ? clips[i - 1] : null;
       if (prev && Math.abs(prev.start + prev.duration - c.start) <= GAP_TOLERANCE) {
         // remove a entrada "normal" do anterior (se ainda ativo por arredondamento) e põe como saída

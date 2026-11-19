@@ -52,3 +52,22 @@ export const IAudioSplit = make('audio');
 export const IMagnetTrack = make('layers');
 export const IAsk = make('ai');
 export const IInsert = make('layers');
+
+// ferramentas estilo DaVinci
+export const ISelect = make('select');
+export const IBlade = make('blade');
+export const IRippleTool = make('ripple');
+export const IRoll = make('roll');
+export const ISlip = make('slip');
+export const ISlide = make('slide');
+export const ILink = make('link');
+export const IUnlink = make('unlink');
+export const ISolo = make('solo');
+export const IKeyboard = make('shortcuts');
+export const IGroup = make('group');
+export const IUngroup = make('ungroup');
+export const IPasteStyle = make('pasteStyle');
+export const ICurve = make('curve');
+export const IRamp = make('ramp');
+export const IHeight = make('trackHeight');
+export const IClose = make('close');

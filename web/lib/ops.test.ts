@@ -138,7 +138,10 @@ describe('ops — recursos estilo CapCut', () => {
     const right = findClip(p, 'sh2')!.clip as typeof shape;
     expect(left.animationOut).toBeUndefined();
     expect(right.animationOut?.kind).toBe('fade');
-    expect(right.keyframes!.map((k) => k.t)).toEqual([1]);
+    // keyframes deslocados + valores interpolados nas bordas (sem salto no corte)
+    expect(right.keyframes!.map((k) => k.t)).toEqual([0, 1, 2]);
+    expect(right.keyframes![0].transform.scale).toBeCloseTo(0.2 + 0.4 * (2 / 3), 6);
+    expect(left.keyframes!.map((k) => k.t)).toEqual([0, 2]);
   });
 
   it('move_track reordena camadas', () => {
@@ -165,5 +168,19 @@ describe('ops — cortes ancorados em palavras', () => {
     expect(words.map((w) => w.id)).toEqual(['w0', 'w3']);
     expect(words[1].start).toBeCloseTo(4, 5);
     expect(r.captions.segments[0].text).toBe('olá pessoal');
+  });
+});
+
+describe('ops — campos aditivos da timeline (linkId, solo, height)', () => {
+  it('update_clip grava e remove linkId; update_track grava solo e height', () => {
+    const { p } = withClip();
+    const a = applyOp(p, { op: 'update_clip', clipId: 'c1', patch: { linkId: 'lk1' } });
+    expect(findClip(a, 'c1')!.clip.linkId).toBe('lk1');
+    const b = applyOp(a, { op: 'update_clip', clipId: 'c1', patch: { linkId: undefined } });
+    expect(findClip(b, 'c1')!.clip.linkId).toBeUndefined();
+    const c = applyOp(p, { op: 'update_track', trackId: 'track_video_1', patch: { solo: true, height: 1.5 } });
+    const tr = c.tracks.find((t) => t.id === 'track_video_1')!;
+    expect(tr.solo).toBe(true);
+    expect(tr.height).toBe(1.5);
   });
 });

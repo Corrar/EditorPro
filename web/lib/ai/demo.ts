@@ -215,6 +215,15 @@ const PRESET_WORDS: [RegExp, ColorPreset, string][] = [
 ];
 
 const TRANSITION_WORDS: [RegExp, TransitionKind, string][] = [
+  [/vortice|redemoinho|espiral|swirl/, 'swirl-vortex', 'redemoinho'],
+  [/onda|ripple|agua/, 'ripple-waves', 'ondas'],
+  [/lente|gravitac|buraco negro/, 'gravitational-lens', 'lente gravitacional'],
+  [/vazamento de luz|light leak/, 'light-leak', 'vazamento de luz'],
+  [/zoom cinemat|cinematic zoom/, 'cinematic-zoom', 'zoom cinematográfico'],
+  [/whip ?pan|chicote cinemat/, 'whip-pan', 'whip pan'],
+  [/termic|calor|thermal/, 'thermal-distortion', 'distorção térmica'],
+  [/morph|deform/, 'cross-warp-morph', 'morph'],
+  [/glitch digital|digital glitch/, 'digital-glitch', 'glitch digital'],
   [/\bgir[oa]r?\b|spin|rodar|rotac/, 'spin', 'de giro'],
   [/cortina|wipe|varr/, 'wipe-left', 'cortina'],
   [/circul|iris|bolinha/, 'circle-open', 'círculo'],
@@ -701,6 +710,26 @@ const EMOJI_WORDS: [RegExp, string][] = [
 ];
 
 /** o comando precisa de análise de áudio antes? */
+/**
+ * Limiar do corte de silêncio a partir do pedido:
+ * "pausas maiores que 1 s" / "acima de 0,8 segundo" -> minSilence; "agressivo/todas/até as curtas" -> 0.3 s;
+ * "só as longas/leve/suave" -> 1.0 s; "sem respiro/colado" -> pad menor.
+ */
+export function silenceOptsFromText(text: string): SilenceOptions | undefined {
+  const t = norm(text);
+  const out: SilenceOptions = {};
+  const m = t.match(/(?:maior(?:es)?|acima|mais|mais longas?|passar(?:em)?|longas?) (?:de |que |do que )?(\d+(?:[.,]\d+)?)\s*(s\b|seg|segundos?|ms|milissegundos?)/)
+    ?? t.match(/(\d+(?:[.,]\d+)?)\s*(s\b|seg|segundos?|ms) (?:ou mais|pra cima|para cima)/);
+  if (m) {
+    const v = parseFloat(m[1].replace(',', '.')) / (/^ms|^mili/.test(m[2]) ? 1000 : 1);
+    if (v > 0) out.minSilence = Math.max(0.15, Math.min(5, v));
+  } else if (/agressiv|toda(s)? (as )?pausa|ate as (pequenas|curtas)|bem colad|maximo|tudo que (for|e) pausa/.test(t)) out.minSilence = 0.3;
+  else if (/so (as )?(pausas? )?(longas|grandes)|leve|suave|so o (que|tempo) morto|pausas? (longas|grandes)/.test(t)) out.minSilence = 1;
+  if (/sem respiro|colad|bem justo|apertad/.test(t)) out.pad = 0.05;
+  else if (/natural|com respiro|respira/.test(t)) out.pad = 0.2;
+  return Object.keys(out).length ? out : undefined;
+}
+
 export function demoNeeds(text: string): { silences: boolean } {
   const t = norm(text);
   return { silences: /silenc|pausa|respiro|enrola|tempo morto|parte(s)? parada|dinamic|ritmo/.test(t) || /legenda/.test(t) && /(gera|coloca|adiciona|cria|faz)/.test(t) };
