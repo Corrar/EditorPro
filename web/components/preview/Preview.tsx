@@ -120,6 +120,13 @@ export default function Preview() {
     window.addEventListener('keydown', k);
     return () => window.removeEventListener('keydown', k);
   }, [moreOpen]);
+  // com o menu ⋯ aberto, a pílula flutuante da IA (position:fixed, z alto) não pode ficar por cima dele
+  useEffect(() => {
+    const root = document.documentElement;
+    if (moreOpen) root.dataset.pvMenu = '1';
+    else delete root.dataset.pvMenu;
+    return () => { delete root.dataset.pvMenu; };
+  }, [moreOpen]);
   const canUndo = useEditor((s) => s.past.length > 0);
   const canRedo = useEditor((s) => s.future.length > 0);
   const chatPoint = useEditor((s) => s.chatContext?.point);
