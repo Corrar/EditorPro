@@ -1,9 +1,9 @@
-## Bugs encontrados (rodada 4 — `5c3b0e6`; rodadas anteriores: `48c7e7e`, `71e9ee2`, `70b8304`)
+## Bugs encontrados (rodada 5 — `d3e295e`; anteriores: `5c3b0e6`, `48c7e7e`, `71e9ee2`, `70b8304`)
 
-> Rodada 4: **corrigidos** B1 (preto no fim), B6 (transição no celular) e B7 (keyframe de escala — atalho agora é **Shift+K**; K virou shuttle J/K/L).
-> Novos casos 9 (FX `snow` + `cube-left`) e 10 (COR `gain.r = −0,4`) passam nos 3 perfis.
-> **Ainda presentes:** B2, B3 (piorou na rodada 3), B4, B5, B8 e as fricções de usabilidade em `USABILIDADE.md`.
-> Novo: **B9** — desktop, editor vazio: "Importar" não põe nada na timeline (só biblioteca; "+" aparece só no hover).
+> Rodada 5: regressão 31/32 ok nos 3 perfis; personas 20/20 passos. **Corrigidos:** B1, B2, B3 (menu ⋯ virou bottom-sheet), B4 (aviso na importação), B5, B6, B7, B8.
+> **Ainda presentes:** B9 (importar no desktop) e fluidez p95 no desktop no limite (50,6 ms; oscila 50–56 entre rodadas, maior intervalo 84–134 ms).
+> Fricções restantes em `USABILIDADE.md` (catálogo de músicas, música importada fora da timeline, padrão 1080p vs. "recomendado 720p" no celular, IA demo ignora "música" no brief).
+> Não confirmado: "Desfazer" de edição antiga — a persona P4 só achou 1 botão "Desfazer" (o da última edição) também na conversa completa; precisa checagem manual de onde fica o desfazer das anteriores.
 
 > QA só documenta: nenhum destes foi corrigido aqui. Arquivo:linha é o ponto provável.
 
@@ -19,21 +19,21 @@
 - Provável parte das "telas pretas" relatadas pelo Bruno no Android (vídeo curto → chega ao fim toda hora).
 - Rodada 2: confirmado também por captura real da área do preview (luminância 0 com `playhead = 5.00`, modo `canvas`). Dono: **engine**.
 
-### B2 — Balão do cursor da IA sai pela borda esquerda no celular · média
+### ✅ B2 (corrigido na rodada 5) — Balão do cursor da IA sai pela borda esquerda no celular · média
 - **Passos:** celular (Pixel 7 / iPhone SE) → wizard → "Editar com IA" → observar o balão de explicação do cursor.
 - **Obtido:** balão com `left = -16 px` (Pixel 7, 412 px) e `-21 px` (iPhone SE, 320 px) em ~19 de 28 amostras; texto cortado.
 - **Causa provável:** `components/shell/AiCursor.tsx:144` — `flip` só testa se cabe à direita; ao virar (`right:6px`,
   `styles/shell.css:641`) não testa se cabe à esquerda. Com o cursor no meio de tela estreita, nenhum dos dois lados cabe
   (balão até `min(240px, 62vw)`). Precisa limitar/clampar a posição horizontal do balão. Dono: **shell**.
 
-### B3 — Menu "⋯" do preview sai da tela · alta (piorou na rodada 3)
+### ✅ B3 (corrigido na rodada 5) — Menu "⋯" do preview sai da tela · alta (piorou na rodada 3)
 - Rodada 3/4: o menu cresceu (Velocidade, Zoom, Repetir, Antes/depois, Grade, Zonas, Mostrar desempenho) e abre para cima sem limite: Pixel 7 top −43 px; iPhone SE top −134 px e direita +7 px; a pílula "IA: N edições feitas" fica por cima. Sem `max-height`/rolagem. Captura `pixel7-menu-preview_mais.png`.
 - **Passos:** iPhone SE (320 px) → editor → faixa sob o vídeo → "⋯ Mais opções".
 - **Obtido:** `.ep-pv-menu` vai de x=54 a x=327 (viewport 320) — "ou toque longo" cortado. Captura `iphonese-menu-preview_mais.png`.
 - **Causa provável:** `styles/preview.css:214` — `left:0` ancorado no botão (que está a ~54 px da borda) + `min-width:260px`;
   o `max-width: calc(100vw - 24px)` não desconta o deslocamento do botão. Dono: **engine** (preview).
 
-### B4 — Vídeo que o navegador não decodifica (HEVC) entra calado e fica preto · média
+### ✅ B4 (corrigido na rodada 5) — Vídeo que o navegador não decodifica (HEVC) entra calado e fica preto · média
 - **Passos:** wizard com um MP4 HEVC (`hvc1`) num navegador sem HEVC (Chromium do container; Chrome em aparelho sem decodificador HEVC).
 - **Obtido:** "Pronto!", clipe na timeline, miniatura e preview pretos; `videoWidth = 0`. Nenhum aviso ao usuário.
 - **Causa provável:** `lib/media/ingest.ts:163` aceita `videoWidth = 0` (grava `width: undefined`) sem avisar nem tentar alternativa.
@@ -41,7 +41,7 @@
   então hoje nenhum proxy é gerado para HEVC/4K.) Rodada 2: o proxy 720p já existe e funciona para o 4K (vídeo decodificado 720×1280),
   mas o HEVC continua 0×0 e 100% preto (o proxy também precisa decodificar). Dono: **shell** (ingestão) / **export** (proxy).
 
-### B5 — IA demo não entende o imperativo "corte/tire/remova" · alta (rodada 2, usabilidade P4)
+### ✅ B5 (corrigido na rodada 5) — IA demo não entende o imperativo "corte/tire/remova" · alta (rodada 2, usabilidade P4)
 - **Passos:** pop-up da IA → "corte os primeiros 2 segundos".
 - **Obtido:** resposta com a lista de comandos e nada muda — embora a própria IA sugira "corta os primeiros 2 s".
 - **Causa:** `lib/ai/demo.ts:784-785` aceita só `corta|cortar|tira|tirar|remove|remover|apaga|apagar`. Dono: **ai**.
@@ -55,7 +55,7 @@
 - **Obtido:** continua 1 keyframe; o slider muda o transform base (sobreposto pelos keyframes): zoom animado só pelo "Zoom punch-in aqui".
 - **Causa provável:** `components/panels/ClipSections.tsx:406` (`setTf` → `patch({ transform })`). Dono: **shell** (painéis).
 
-### B8 — "Gerar legendas com IA" (gaveta Legendas) pergunta num pop-up que não abre · alta (rodada 2, usabilidade P3)
+### ✅ B8 (corrigido na rodada 5) — "Gerar legendas com IA" (gaveta Legendas) pergunta num pop-up que não abre · alta (rodada 2, usabilidade P3)
 - **Passos:** celular → Legendas → "Gerar legendas com IA".
 - **Obtido:** a gaveta continua na frente; só aparece a pílula "IA aguardando você" (a pergunta "Transcrever (~41 MB)?" está no pop-up fechado).
 - **Arquivo provável:** `components/panels/CaptionsTab.tsx` (emite generate-captions) / `components/shell/AiPopupHost.tsx`. Dono: **shell**.

@@ -1,6 +1,6 @@
 # Relatório E2E — EditorPro
 
-- Commit: `a74fa55` · 2026-11-19T10:45:45.392Z
+- Commit: `a66f491` · 2026-11-19T11:14:39.965Z
 - Alvo: http://localhost:3100 (`next start`, modo demo da IA)
 - Navegador: Chromium 157.0.8103.78 (headless, sem GPU)
 - Perfis: Desktop 1440×900 · Pixel 7 (escuro) · iPhone SE (claro)
@@ -13,13 +13,13 @@
 | 1. Fluxo principal | ✅ ok | ✅ ok | ✅ ok |
 | 2. Reprodução sem tela preta | ✅ ok | ✅ ok | ✅ ok |
 | 2b. Reprodução no editor (pós-IA) | ✅ ok | ✅ ok | ✅ ok |
-| 3. Fluidez (play 5 s) | ✅ ok | ℹ️ info | ℹ️ info |
+| 3. Fluidez (play 5 s) | ❌ falha | ℹ️ info | ℹ️ info |
 | 4. Export | ✅ ok | ✅ ok | ✅ ok |
-| 5. Layout (menus + scroll horizontal) | ✅ ok | ❌ falha | ❌ falha |
-| 6. Cursor da IA | ✅ ok | ❌ falha | ❌ falha |
+| 5. Layout (menus + scroll horizontal) | ✅ ok | ✅ ok | ✅ ok |
+| 6. Cursor da IA | ✅ ok | ✅ ok | ✅ ok |
 | 7. Pop-up da IA | ✅ ok | ✅ ok | ✅ ok |
 | 8. Mídia 4K H.264 | ✅ ok | · | · |
-| 8. Mídia HEVC 1080×1920 | ❌ falha | · | · |
+| 8. Mídia HEVC 1080×1920 | ✅ ok | · | · |
 | 9. FX: efeito 'snow' + transição 'cube-left' | ✅ ok | ✅ ok | ✅ ok |
 | 10. COR: colorGrade gain R −0,4 | ✅ ok | ✅ ok | ✅ ok |
 
@@ -29,93 +29,93 @@
 
 | Perfil | Resultado | Métricas | Capturas | Observações |
 |---|---|---|---|---|
-| Desktop 1440×900 | ✅ ok | até Pronto (s): 10.8<br>pulou legendas: false<br>pageerrors: 0<br>console.error: 0 | [desktop-wizard.png](shots/desktop-wizard.png)<br>[desktop-pronto.png](shots/desktop-pronto.png) |  |
-| Pixel 7 (escuro) | ✅ ok | até Pronto (s): 7.1<br>pulou legendas: true<br>pageerrors: 0<br>console.error: 0 | [pixel7-wizard.png](shots/pixel7-wizard.png)<br>[pixel7-pronto.png](shots/pixel7-pronto.png) |  |
-| iPhone SE (claro) | ✅ ok | até Pronto (s): 6.8<br>pulou legendas: true<br>pageerrors: 0<br>console.error: 0 | [iphonese-wizard.png](shots/iphonese-wizard.png)<br>[iphonese-pronto.png](shots/iphonese-pronto.png) |  |
+| Desktop 1440×900 | ✅ ok | até Pronto (s): 11.1<br>pulou legendas: false<br>pageerrors: 0<br>console.error: 0 | [desktop-wizard.png](shots/desktop-wizard.png)<br>[desktop-pronto.png](shots/desktop-pronto.png) |  |
+| Pixel 7 (escuro) | ✅ ok | até Pronto (s): 6.8<br>pulou legendas: true<br>pageerrors: 0<br>console.error: 0 | [pixel7-wizard.png](shots/pixel7-wizard.png)<br>[pixel7-pronto.png](shots/pixel7-pronto.png) |  |
+| iPhone SE (claro) | ✅ ok | até Pronto (s): 6.3<br>pulou legendas: true<br>pageerrors: 0<br>console.error: 0 | [iphonese-wizard.png](shots/iphonese-wizard.png)<br>[iphonese-pronto.png](shots/iphonese-pronto.png) |  |
 
 ### 2. Reprodução sem tela preta
 
 | Perfil | Resultado | Métricas | Capturas | Observações |
 |---|---|---|---|---|
-| Desktop 1440×900 | ✅ ok | pretos play: 0/260<br>pretos cutsPlaying: 0/195<br>pretos cutsPaused: 0/219<br>pretos applyLive: 0/281<br>pretos endOfPlayback: 0/172<br>pretos seekEnd: 0/72<br>held total: 7<br>held play: 0<br>held cutsPlaying: 0<br>held cutsPaused: 0<br>held applyLive: 2<br>held endOfPlayback: 5<br>held seekEnd: 0 | [desktop-harness-play.png](shots/desktop-harness-play.png)<br>[desktop-harness-cuts.png](shots/desktop-harness-cuts.png)<br>[desktop-harness-fim.png](shots/desktop-harness-fim.png) |  |
-| Pixel 7 (escuro) | ✅ ok | pretos play: 0/256<br>pretos cutsPlaying: 0/193<br>pretos cutsPaused: 0/217<br>pretos applyLive: 0/291<br>pretos endOfPlayback: 0/180<br>pretos seekEnd: 0/72<br>held total: 8<br>held play: 0<br>held cutsPlaying: 0<br>held cutsPaused: 0<br>held applyLive: 2<br>held endOfPlayback: 6<br>held seekEnd: 0 | [pixel7-harness-play.png](shots/pixel7-harness-play.png)<br>[pixel7-harness-cuts.png](shots/pixel7-harness-cuts.png)<br>[pixel7-harness-fim.png](shots/pixel7-harness-fim.png) |  |
-| iPhone SE (claro) | ✅ ok | pretos play: 0/260<br>pretos cutsPlaying: 0/202<br>pretos cutsPaused: 0/218<br>pretos applyLive: 0/301<br>pretos endOfPlayback: 0/178<br>pretos seekEnd: 0/72<br>held total: 12<br>held play: 0<br>held cutsPlaying: 5<br>held cutsPaused: 0<br>held applyLive: 2<br>held endOfPlayback: 5<br>held seekEnd: 0 | [iphonese-harness-play.png](shots/iphonese-harness-play.png)<br>[iphonese-harness-cuts.png](shots/iphonese-harness-cuts.png)<br>[iphonese-harness-fim.png](shots/iphonese-harness-fim.png) |  |
+| Desktop 1440×900 | ✅ ok | pretos play: 0/245<br>pretos cutsPlaying: 0/167<br>pretos cutsPaused: 0/219<br>pretos applyLive: 0/270<br>pretos endOfPlayback: 0/171<br>pretos seekEnd: 0/73<br>held total: 8<br>held play: 0<br>held cutsPlaying: 1<br>held cutsPaused: 0<br>held applyLive: 2<br>held endOfPlayback: 5<br>held seekEnd: 0 | [desktop-harness-play.png](shots/desktop-harness-play.png)<br>[desktop-harness-cuts.png](shots/desktop-harness-cuts.png)<br>[desktop-harness-fim.png](shots/desktop-harness-fim.png) |  |
+| Pixel 7 (escuro) | ✅ ok | pretos play: 0/258<br>pretos cutsPlaying: 0/195<br>pretos cutsPaused: 0/218<br>pretos applyLive: 0/300<br>pretos endOfPlayback: 0/173<br>pretos seekEnd: 0/73<br>held total: 7<br>held play: 0<br>held cutsPlaying: 0<br>held cutsPaused: 0<br>held applyLive: 2<br>held endOfPlayback: 5<br>held seekEnd: 0 | [pixel7-harness-play.png](shots/pixel7-harness-play.png)<br>[pixel7-harness-cuts.png](shots/pixel7-harness-cuts.png)<br>[pixel7-harness-fim.png](shots/pixel7-harness-fim.png) |  |
+| iPhone SE (claro) | ✅ ok | pretos play: 0/263<br>pretos cutsPlaying: 0/206<br>pretos cutsPaused: 0/218<br>pretos applyLive: 0/300<br>pretos endOfPlayback: 0/179<br>pretos seekEnd: 0/72<br>held total: 7<br>held play: 0<br>held cutsPlaying: 0<br>held cutsPaused: 0<br>held applyLive: 2<br>held endOfPlayback: 5<br>held seekEnd: 0 | [iphonese-harness-play.png](shots/iphonese-harness-play.png)<br>[iphonese-harness-cuts.png](shots/iphonese-harness-cuts.png)<br>[iphonese-harness-fim.png](shots/iphonese-harness-fim.png) |  |
 
 ### 2b. Reprodução no editor (pós-IA)
 
 | Perfil | Resultado | Métricas | Capturas | Observações |
 |---|---|---|---|---|
 | Desktop 1440×900 | ✅ ok | amostras: 242<br>pretos: 0<br>held: 0<br>p95 draw (ms): 33.5 | [desktop-editor-play.png](shots/desktop-editor-play.png) |  |
-| Pixel 7 (escuro) | ✅ ok | amostras: 242<br>pretos: 0<br>held: 0<br>p95 draw (ms): 33.5 | [pixel7-editor-play.png](shots/pixel7-editor-play.png) |  |
-| iPhone SE (claro) | ✅ ok | amostras: 242<br>pretos: 0<br>held: 0<br>p95 draw (ms): 33.5 | [iphonese-editor-play.png](shots/iphonese-editor-play.png) |  |
+| Pixel 7 (escuro) | ✅ ok | amostras: 242<br>pretos: 0<br>held: 0<br>p95 draw (ms): 33.6 | [pixel7-editor-play.png](shots/pixel7-editor-play.png) |  |
+| iPhone SE (claro) | ✅ ok | amostras: 243<br>pretos: 0<br>held: 0<br>p95 draw (ms): 33.5 | [iphonese-editor-play.png](shots/iphonese-editor-play.png) |  |
 
 ### 3. Fluidez (play 5 s)
 
 | Perfil | Resultado | Métricas | Capturas | Observações |
 |---|---|---|---|---|
-| Desktop 1440×900 | ✅ ok | p95 (ms): 50<br>p50 (ms): 33.4<br>maior intervalo (ms): 134<br>draws: 146<br>held: 0 |  | meta p95 ≤ 50 ms |
-| Pixel 7 (escuro) | ℹ️ info | p95 (ms): 56.2<br>p50 (ms): 33.4<br>maior intervalo (ms): 67<br>draws: 150<br>held: 0 |  | meta só p/ desktop (CPU emulada não reflete o aparelho) |
-| iPhone SE (claro) | ℹ️ info | p95 (ms): 50.1<br>p50 (ms): 33.3<br>maior intervalo (ms): 125<br>draws: 145<br>held: 0 |  | meta só p/ desktop (CPU emulada não reflete o aparelho) |
+| Desktop 1440×900 | ❌ falha | p95 (ms): 50.6<br>p50 (ms): 33.4<br>maior intervalo (ms): 118<br>draws: 142<br>held: 0 |  | meta p95 ≤ 50 ms |
+| Pixel 7 (escuro) | ℹ️ info | p95 (ms): 50.9<br>p50 (ms): 33.3<br>maior intervalo (ms): 67<br>draws: 147<br>held: 0 |  | meta só p/ desktop (CPU emulada não reflete o aparelho) |
+| iPhone SE (claro) | ℹ️ info | p95 (ms): 49.9<br>p50 (ms): 33.3<br>maior intervalo (ms): 132<br>draws: 148<br>held: 0 |  | meta só p/ desktop (CPU emulada não reflete o aparelho) |
 
 ### 4. Export
 
 | Perfil | Resultado | Métricas | Capturas | Observações |
 |---|---|---|---|---|
-| Desktop 1440×900 | ✅ ok | qualidade: fhd<br>tempo (s): 8.5<br>duração: 5.02/5.00 s<br>vídeo: h264 1080×1920<br>áudio: opus -21.1 dB<br>preto (s): 0<br>quadros escuros (Y<20): 0<br>Y mín: 111.4<br>webcodecs: true | [desktop-export-mid.png](shots/desktop-export-mid.png)<br>[desktop-export.mp4](shots/desktop-export.mp4) | obs.: áudio Opus dentro de MP4 (Chromium sem AAC) — ver compatibilidade |
-| Pixel 7 (escuro) | ✅ ok | qualidade: hd<br>tempo (s): 4.6<br>duração: 5.02/5.00 s<br>vídeo: h264 720×1280<br>áudio: opus -21.1 dB<br>preto (s): 0<br>quadros escuros (Y<20): 0<br>Y mín: 111.3<br>webcodecs: true | [pixel7-export-mid.png](shots/pixel7-export-mid.png)<br>[pixel7-export.mp4](shots/pixel7-export.mp4) | obs.: áudio Opus dentro de MP4 (Chromium sem AAC) — ver compatibilidade |
-| iPhone SE (claro) | ✅ ok | qualidade: hd<br>tempo (s): 4.8<br>duração: 5.02/5.00 s<br>vídeo: h264 720×1280<br>áudio: opus -21.1 dB<br>preto (s): 0<br>quadros escuros (Y<20): 0<br>Y mín: 111.2<br>webcodecs: true | [iphonese-export-mid.png](shots/iphonese-export-mid.png)<br>[iphonese-export.mp4](shots/iphonese-export.mp4) | obs.: áudio Opus dentro de MP4 (Chromium sem AAC) — ver compatibilidade |
+| Desktop 1440×900 | ✅ ok | qualidade: fhd<br>tempo (s): 7.8<br>duração: 5.02/5.00 s<br>vídeo: h264 1080×1920<br>áudio: opus -21.1 dB<br>preto (s): 0<br>quadros escuros (Y<20): 0<br>Y mín: 111.4<br>webcodecs: true | [desktop-export-mid.png](shots/desktop-export-mid.png)<br>[desktop-export.mp4](shots/desktop-export.mp4) | obs.: áudio Opus dentro de MP4 (Chromium sem AAC) — ver compatibilidade |
+| Pixel 7 (escuro) | ✅ ok | qualidade: hd<br>tempo (s): 5.4<br>duração: 5.02/5.00 s<br>vídeo: h264 720×1280<br>áudio: opus -21.1 dB<br>preto (s): 0<br>quadros escuros (Y<20): 0<br>Y mín: 111.5<br>webcodecs: true | [pixel7-export-mid.png](shots/pixel7-export-mid.png)<br>[pixel7-export.mp4](shots/pixel7-export.mp4) | obs.: áudio Opus dentro de MP4 (Chromium sem AAC) — ver compatibilidade |
+| iPhone SE (claro) | ✅ ok | qualidade: hd<br>tempo (s): 4.9<br>duração: 5.02/5.00 s<br>vídeo: h264 720×1280<br>áudio: opus -21.1 dB<br>preto (s): 0<br>quadros escuros (Y<20): 0<br>Y mín: 111.3<br>webcodecs: true | [iphonese-export-mid.png](shots/iphonese-export-mid.png)<br>[iphonese-export.mp4](shots/iphonese-export.mp4) | obs.: áudio Opus dentro de MP4 (Chromium sem AAC) — ver compatibilidade |
 
 ### 5. Layout (menus + scroll horizontal)
 
 | Perfil | Resultado | Métricas | Capturas | Observações |
 |---|---|---|---|---|
 | Desktop 1440×900 | ✅ ok | menus: 6<br>ok: 3<br>falhas: 0<br>sem pop-up: 0<br>scroll horizontal: não |  | pilula-resolucao:n/a, dialogo-exportar:ok, timeline-mais:ok, timeline-trilha:n/a, timeline-velocidade:ok, ia-fab2:n/a |
-| Pixel 7 (escuro) | ❌ falha | menus: 22<br>ok: 18<br>falhas: 1<br>sem pop-up: 0<br>scroll horizontal: não | [pixel7-menu-preview_mais.png](shots/pixel7-menu-preview_mais.png) | pilula-resolucao:ok, dialogo-exportar:ok, timeline-mais:ok, preview-mais:falha(ep-pv-menu {"l":54,"t":-43,"r":327,"b":441} vw412×839), ia-fab2:ok, barra-Editar:nível 2, barra-Áudio:nível 2, barra-Texto:nível 2, barra-Efeitos:ok, barra-Legendas:ok, barra-Filtros:ok, barra-Ajustar:ok, barra-Cor:ok, barra-Stickers:ok, barra-Modelos:ok, barra-Gerar com IA:ok, barra-Proporção:ok, barra-Fundo:ok, barra-Transições:ok, barra-Mídia:ok, barra-Revisão:ok, barra-Mais:ok |
-| iPhone SE (claro) | ❌ falha | menus: 22<br>ok: 18<br>falhas: 1<br>sem pop-up: 0<br>scroll horizontal: não | [iphonese-menu-preview_mais.png](shots/iphonese-menu-preview_mais.png) | pilula-resolucao:ok, dialogo-exportar:ok, timeline-mais:ok, preview-mais:falha(ep-pv-menu {"l":54,"t":-134,"r":327,"b":264} vw320×568), ia-fab2:ok, barra-Editar:nível 2, barra-Áudio:nível 2, barra-Texto:nível 2, barra-Efeitos:ok, barra-Legendas:ok, barra-Filtros:ok, barra-Ajustar:ok, barra-Cor:ok, barra-Stickers:ok, barra-Modelos:ok, barra-Gerar com IA:ok, barra-Proporção:ok, barra-Fundo:ok, barra-Transições:ok, barra-Mídia:ok, barra-Revisão:ok, barra-Mais:ok |
+| Pixel 7 (escuro) | ✅ ok | menus: 22<br>ok: 19<br>falhas: 0<br>sem pop-up: 0<br>scroll horizontal: não |  | pilula-resolucao:ok, dialogo-exportar:ok, timeline-mais:ok, preview-mais:ok, ia-fab2:ok, barra-Editar:nível 2, barra-Áudio:nível 2, barra-Texto:nível 2, barra-Efeitos:ok, barra-Legendas:ok, barra-Filtros:ok, barra-Ajustar:ok, barra-Cor:ok, barra-Stickers:ok, barra-Modelos:ok, barra-Gerar com IA:ok, barra-Proporção:ok, barra-Fundo:ok, barra-Transições:ok, barra-Mídia:ok, barra-Revisão:ok, barra-Mais:ok |
+| iPhone SE (claro) | ✅ ok | menus: 22<br>ok: 19<br>falhas: 0<br>sem pop-up: 0<br>scroll horizontal: não |  | pilula-resolucao:ok, dialogo-exportar:ok, timeline-mais:ok, preview-mais:ok, ia-fab2:ok, barra-Editar:nível 2, barra-Áudio:nível 2, barra-Texto:nível 2, barra-Efeitos:ok, barra-Legendas:ok, barra-Filtros:ok, barra-Ajustar:ok, barra-Cor:ok, barra-Stickers:ok, barra-Modelos:ok, barra-Gerar com IA:ok, barra-Proporção:ok, barra-Fundo:ok, barra-Transições:ok, barra-Mídia:ok, barra-Revisão:ok, barra-Mais:ok |
 
 ### 6. Cursor da IA
 
 | Perfil | Resultado | Métricas | Capturas | Observações |
 |---|---|---|---|---|
-| Desktop 1440×900 | ✅ ok | amostras: 101<br>visível: 30<br>fora da tela: 0<br>balão fora: 0 |  |  |
-| Pixel 7 (escuro) | ❌ falha | amostras: 68<br>visível: 31<br>fora da tela: 0<br>balão fora: 22 |  | balão: {"l":-16,"r":216,"t":386,"b":434,"vw":412,"vh":839} |
-| iPhone SE (claro) | ❌ falha | amostras: 64<br>visível: 27<br>fora da tela: 0<br>balão fora: 18 |  | balão: {"l":-22,"r":171,"t":258,"b":307,"vw":320,"vh":568} |
+| Desktop 1440×900 | ✅ ok | amostras: 104<br>visível: 31<br>fora da tela: 0<br>balão fora: 0 |  |  |
+| Pixel 7 (escuro) | ✅ ok | amostras: 64<br>visível: 28<br>fora da tela: 0<br>balão fora: 0 |  |  |
+| iPhone SE (claro) | ✅ ok | amostras: 60<br>visível: 28<br>fora da tela: 0<br>balão fora: 0 |  |  |
 
 ### 7. Pop-up da IA
 
 | Perfil | Resultado | Métricas | Capturas | Observações |
 |---|---|---|---|---|
-| Desktop 1440×900 | ✅ ok | variante: chat lateral (desktop)<br>opened: true<br>typed: true<br>sent: true<br>replyMs: 1213<br>cursor: {"polls":12,"seen":12,"out":0,"outs":[],"running":0}<br>edited: true<br>newPronto: false | [desktop-chat-resposta.png](shots/desktop-chat-resposta.png) |  |
-| Pixel 7 (escuro) | ✅ ok | opened: true<br>textarea: true<br>typed: true<br>sent: true<br>replyMs: 1528<br>cursor: {"polls":15,"seen":15,"out":0,"outs":[],"running":0}<br>edited: true<br>minimized: true<br>fabOrBadgeBack: true | [pixel7-popup-aberto.png](shots/pixel7-popup-aberto.png)<br>[pixel7-popup-min.png](shots/pixel7-popup-min.png) |  |
-| iPhone SE (claro) | ✅ ok | opened: true<br>textarea: true<br>typed: true<br>sent: true<br>replyMs: 1529<br>cursor: {"polls":15,"seen":15,"out":0,"outs":[],"running":0}<br>edited: true<br>minimized: true<br>fabOrBadgeBack: true | [iphonese-popup-aberto.png](shots/iphonese-popup-aberto.png)<br>[iphonese-popup-min.png](shots/iphonese-popup-min.png) |  |
+| Desktop 1440×900 | ✅ ok | variante: chat lateral (desktop)<br>opened: true<br>typed: true<br>sent: true<br>replyMs: 1829<br>cursor: {"polls":18,"seen":18,"out":0,"outs":[],"running":0}<br>edited: true<br>newPronto: false | [desktop-chat-resposta.png](shots/desktop-chat-resposta.png) |  |
+| Pixel 7 (escuro) | ✅ ok | opened: true<br>textarea: true<br>typed: true<br>sent: true<br>replyMs: 1536<br>cursor: {"polls":16,"seen":16,"out":0,"outs":[],"running":0}<br>edited: true<br>minimized: true<br>fabOrBadgeBack: true | [pixel7-popup-aberto.png](shots/pixel7-popup-aberto.png)<br>[pixel7-popup-min.png](shots/pixel7-popup-min.png) |  |
+| iPhone SE (claro) | ✅ ok | opened: true<br>textarea: true<br>typed: true<br>sent: true<br>replyMs: 1527<br>cursor: {"polls":15,"seen":15,"out":0,"outs":[],"running":0}<br>edited: true<br>minimized: true<br>fabOrBadgeBack: true | [iphonese-popup-aberto.png](shots/iphonese-popup-aberto.png)<br>[iphonese-popup-min.png](shots/iphonese-popup-min.png) |  |
 
 ### 8. Mídia 4K H.264
 
 | Perfil | Resultado | Métricas | Capturas | Observações |
 |---|---|---|---|---|
-| Desktop 1440×900 | ✅ ok | até Pronto (s): 11.4<br>pretos: 0/212<br>held: 0<br>menor luminância: 125.7<br>pageerrors: 0<br>vídeo decodificado: 720×1280 | [desktop-k4-editor-play.png](shots/desktop-k4-editor-play.png)<br>[desktop-k4-final.png](shots/desktop-k4-final.png) |  |
+| Desktop 1440×900 | ✅ ok | até Pronto (s): 11.5<br>pretos: 0/212<br>held: 0<br>menor luminância: 125.7<br>pageerrors: 0<br>vídeo decodificado: 720×1280<br>aviso ao usuário: nenhum | [desktop-k4-editor-play.png](shots/desktop-k4-editor-play.png)<br>[desktop-k4-final.png](shots/desktop-k4-final.png) |  |
 
 ### 8. Mídia HEVC 1080×1920
 
 | Perfil | Resultado | Métricas | Capturas | Observações |
 |---|---|---|---|---|
-| Desktop 1440×900 | ❌ falha | até Pronto (s): 8.1<br>pretos: 212/212<br>held: 105<br>menor luminância: 0<br>pageerrors: 0<br>vídeo decodificado: 0×0 | [desktop-hevc-editor-play.png](shots/desktop-hevc-editor-play.png)<br>[desktop-hevc-final.png](shots/desktop-hevc-final.png) | playheads pretos: +0ms,+16ms,+33ms,+50ms,+66ms |
+| Desktop 1440×900 | ✅ ok | até Pronto (s): 7.8<br>pretos: 213/213<br>held: 105<br>menor luminância: 0<br>pageerrors: 0<br>vídeo decodificado: 0×0<br>aviso ao usuário: Este aparelho não consegue ler "hevc_1080x1920.mp4" (formato como HEVC/HDR). Grave em H.26 | [desktop-hevc-editor-play.png](shots/desktop-hevc-editor-play.png)<br>[desktop-hevc-final.png](shots/desktop-hevc-final.png) | playheads pretos: +0ms,+16ms,+33ms,+50ms,+66ms |
 
 ### 9. FX: efeito 'snow' + transição 'cube-left'
 
 | Perfil | Resultado | Métricas | Capturas | Observações |
 |---|---|---|---|---|
-| Desktop 1440×900 | ✅ ok | pixels mudados pelo efeito (%): 2<br>pretos pausado na transição: 0/3<br>pretos tocando: 0/85<br>modo do preview: canvas<br>export: preto 0 s, escuros 0<br>pageerrors: 0 | [desktop-fx-snow.png](shots/desktop-fx-snow.png)<br>[desktop-fx-cube.png](shots/desktop-fx-cube.png) |  |
+| Desktop 1440×900 | ✅ ok | pixels mudados pelo efeito (%): 2<br>pretos pausado na transição: 0/3<br>pretos tocando: 0/90<br>modo do preview: canvas<br>export: preto 0 s, escuros 0<br>pageerrors: 0 | [desktop-fx-snow.png](shots/desktop-fx-snow.png)<br>[desktop-fx-cube.png](shots/desktop-fx-cube.png) |  |
 | Pixel 7 (escuro) | ✅ ok | pixels mudados pelo efeito (%): 1.7<br>pretos pausado na transição: 0/3<br>pretos tocando: 0/90<br>modo do preview: canvas<br>export: preto 0 s, escuros 0<br>pageerrors: 0 | [pixel7-fx-snow.png](shots/pixel7-fx-snow.png)<br>[pixel7-fx-cube.png](shots/pixel7-fx-cube.png) |  |
-| iPhone SE (claro) | ✅ ok | pixels mudados pelo efeito (%): 4<br>pretos pausado na transição: 0/3<br>pretos tocando: 0/93<br>modo do preview: canvas<br>export: preto 0 s, escuros 0<br>pageerrors: 0 | [iphonese-fx-snow.png](shots/iphonese-fx-snow.png)<br>[iphonese-fx-cube.png](shots/iphonese-fx-cube.png) |  |
+| iPhone SE (claro) | ✅ ok | pixels mudados pelo efeito (%): 4<br>pretos pausado na transição: 0/3<br>pretos tocando: 0/85<br>modo do preview: canvas<br>export: preto 0 s, escuros 0<br>pageerrors: 0 | [iphonese-fx-snow.png](shots/iphonese-fx-snow.png)<br>[iphonese-fx-cube.png](shots/iphonese-fx-cube.png) |  |
 
 ### 10. COR: colorGrade gain R −0,4
 
 | Perfil | Resultado | Métricas | Capturas | Observações |
 |---|---|---|---|---|
-| Desktop 1440×900 | ✅ ok | queda R preview: 48.7<br>queda G preview: -0.2<br>queda R export: 47.1<br>queda G export: -0.1<br>preview R/G/B: 77.4/129.5/125.1<br>export R/G/B: 80.7/130.9/126.6 | [desktop-cor-gainR.png](shots/desktop-cor-gainR.png) |  |
+| Desktop 1440×900 | ✅ ok | queda R preview: 48.7<br>queda G preview: -0.2<br>queda R export: 47<br>queda G export: -0.1<br>preview R/G/B: 77.4/129.5/125.1<br>export R/G/B: 80.8/130.9/126.5 | [desktop-cor-gainR.png](shots/desktop-cor-gainR.png) |  |
 | Pixel 7 (escuro) | ✅ ok | queda R preview: 48.8<br>queda G preview: 0.1<br>queda R export: 47<br>queda G export: -0.1<br>preview R/G/B: 78.6/130/124.9<br>export R/G/B: 80.8/130.9/126.5 | [pixel7-cor-gainR.png](shots/pixel7-cor-gainR.png) |  |
-| iPhone SE (claro) | ✅ ok | queda R preview: 47.8<br>queda G preview: 0<br>queda R export: 47<br>queda G export: -0.1<br>preview R/G/B: 77.9/130.3/123.9<br>export R/G/B: 80.8/130.9/126.5 | [iphonese-cor-gainR.png](shots/iphonese-cor-gainR.png) |  |
+| iPhone SE (claro) | ✅ ok | queda R preview: 47.8<br>queda G preview: 0<br>queda R export: 47<br>queda G export: -0.1<br>preview R/G/B: 77.9/130.3/123.9<br>export R/G/B: 80.8/130.9/126.6 | [iphonese-cor-gainR.png](shots/iphonese-cor-gainR.png) |  |
 
 ## Como rodar
 
@@ -126,11 +126,12 @@ cd web && npm run build && npm run e2e
 
 Critérios: quadro preto = luminância média < 6 e máxima < 24 (0–255) no canvas `[data-ep-preview]` amostrado a cada rAF; `held` = quadros segurados (`__epPreviewStats.held`); fluidez = intervalos entre *draws* do preview (resolução de 1 rAF); export = `blackdetect` (pix_th 0.10, pic_th 0.98, ≥ 0,03 s), `volumedetect` e duração ±0,25 s.
 
-## Bugs encontrados (rodada 3 — `48c7e7e`, inclui `0df4eca`; rodada 2 em `71e9ee2`; rodada 1 em `70b8304`)
+## Bugs encontrados (rodada 4 — `5c3b0e6`; rodadas anteriores: `48c7e7e`, `71e9ee2`, `70b8304`)
 
-> Rodada 3: **B1 corrigido** (0 quadros pretos no fim/seek no fim) e 4K passou. **B3 piorou**: o menu ⋯ do preview cresceu e agora sai pelo TOPO no Pixel 7 (top −43 px) e no iPhone SE (top −134 px, direita +7 px); a pílula "IA: N edições feitas" fica por cima do menu. B2, B4 seguem. B5–B8 não foram reverificados (usabilidade fica para a próxima rodada).
-
-> Rodada 2: preview híbrido (`<video>` nativo + canvas transparente). A medição de tela preta compõe os `<video>` visíveis + canvas e confere com captura real da área `.ep-pv-frame`. B1–B4 continuam. Export ficou ~4× mais rápido (31 s → 8 s a 1080p).
+> Rodada 4: **corrigidos** B1 (preto no fim), B6 (transição no celular) e B7 (keyframe de escala — atalho agora é **Shift+K**; K virou shuttle J/K/L).
+> Novos casos 9 (FX `snow` + `cube-left`) e 10 (COR `gain.r = −0,4`) passam nos 3 perfis.
+> **Ainda presentes:** B2, B3 (piorou na rodada 3), B4, B5, B8 e as fricções de usabilidade em `USABILIDADE.md`.
+> Novo: **B9** — desktop, editor vazio: "Importar" não põe nada na timeline (só biblioteca; "+" aparece só no hover).
 
 > QA só documenta: nenhum destes foi corrigido aqui. Arquivo:linha é o ponto provável.
 
@@ -153,7 +154,8 @@ Critérios: quadro preto = luminância média < 6 e máxima < 24 (0–255) no ca
   `styles/shell.css:641`) não testa se cabe à esquerda. Com o cursor no meio de tela estreita, nenhum dos dois lados cabe
   (balão até `min(240px, 62vw)`). Precisa limitar/clampar a posição horizontal do balão. Dono: **shell**.
 
-### B3 — Menu "⋯" do preview cortado à direita no iPhone SE · média
+### B3 — Menu "⋯" do preview sai da tela · alta (piorou na rodada 3)
+- Rodada 3/4: o menu cresceu (Velocidade, Zoom, Repetir, Antes/depois, Grade, Zonas, Mostrar desempenho) e abre para cima sem limite: Pixel 7 top −43 px; iPhone SE top −134 px e direita +7 px; a pílula "IA: N edições feitas" fica por cima. Sem `max-height`/rolagem. Captura `pixel7-menu-preview_mais.png`.
 - **Passos:** iPhone SE (320 px) → editor → faixa sob o vídeo → "⋯ Mais opções".
 - **Obtido:** `.ep-pv-menu` vai de x=54 a x=327 (viewport 320) — "ou toque longo" cortado. Captura `iphonese-menu-preview_mais.png`.
 - **Causa provável:** `styles/preview.css:214` — `left:0` ancorado no botão (que está a ~54 px da borda) + `min-width:260px`;
@@ -172,11 +174,11 @@ Critérios: quadro preto = luminância média < 6 e máxima < 24 (0–255) no ca
 - **Obtido:** resposta com a lista de comandos e nada muda — embora a própria IA sugira "corta os primeiros 2 s".
 - **Causa:** `lib/ai/demo.ts:784-785` aceita só `corta|cortar|tira|tirar|remove|remover|apaga|apagar`. Dono: **ai**.
 
-### B6 — Sem caminho para aplicar transição no celular · alta (rodada 2, usabilidade P1)
+### ✅ B6 (corrigido na rodada 4) — Sem caminho para aplicar transição no celular · alta (rodada 2, usabilidade P1)
 - **Passos:** celular → barra "Transições" → gaveta diz "Selecione um clipe"; selecionar o clipe troca a barra para a do clipe (Dividir, Velocidade, Volume, Animações…), que não tem "Transições".
 - **Causa provável:** `components/shell/MobileToolbar.tsx:135-170` (itens do clipe sem `transitions`); timeline sem botão entre clipes. Dono: **shell** (+ **timeline**).
 
-### B7 — Mudar "Escala" com keyframes não cria/atualiza keyframe · alta (rodada 2, usabilidade P2)
+### ✅ B7 (corrigido na rodada 4) — Mudar "Escala" com keyframes não cria/atualiza keyframe · alta (rodada 2, usabilidade P2)
 - **Passos:** desktop → selecionar clipe → K em 2 s → cursor em 3 s → Editar › Posição › Escala.
 - **Obtido:** continua 1 keyframe; o slider muda o transform base (sobreposto pelos keyframes): zoom animado só pelo "Zoom punch-in aqui".
 - **Causa provável:** `components/panels/ClipSections.tsx:406` (`setTf` → `patch({ transform })`). Dono: **shell** (painéis).
@@ -185,6 +187,11 @@ Critérios: quadro preto = luminância média < 6 e máxima < 24 (0–255) no ca
 - **Passos:** celular → Legendas → "Gerar legendas com IA".
 - **Obtido:** a gaveta continua na frente; só aparece a pílula "IA aguardando você" (a pergunta "Transcrever (~41 MB)?" está no pop-up fechado).
 - **Arquivo provável:** `components/panels/CaptionsTab.tsx` (emite generate-captions) / `components/shell/AiPopupHost.tsx`. Dono: **shell**.
+
+### B9 — Desktop: "Importar" no editor vazio não põe as mídias na timeline · média (rodada 4)
+- **Passos:** desktop → Começar → Abrir editor vazio → Importar → escolher 2 vídeos.
+- **Obtido:** cards "Pronto para editar" na biblioteca; timeline vazia 25 s depois. É preciso passar o mouse em cada card e achar o "+" (title "Adicionar no fim da timeline").
+- **Arquivo provável:** `components/media/MediaBin.tsx` (importFiles) / `lib/media/ingest.ts`. Dono: **shell**. (No celular o seletor "Adicionar mídia" já coloca na timeline.)
 
 ### Observações (não são falhas)
 - Export no Chromium sai com **áudio Opus dentro de MP4** (sem encoder AAC). Toca no Chrome/Android; pode não tocar em players

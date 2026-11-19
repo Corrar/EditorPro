@@ -75,6 +75,14 @@ async function wizardFlow(page, file, tag) {
   await page.locator('.ep-dz input[type=file]').first().setInputFiles(file);
   await page.waitForSelector('.ep-fchips', { timeout: 10000 });
   const shotWiz = await L.shot(page, `${tag}-wizard`);
+  // guarda os toasts que aparecerem (somem sozinhos antes da captura final)
+  await page.evaluate(() => {
+    window.__qaToasts = [];
+    const seen = new Set();
+    new MutationObserver(() => {
+      for (const e of document.querySelectorAll('.ep-toast, [class*="toast"] [role=status], [role=alert]')) { const t = (e.textContent || '').trim(); if (t && !seen.has(t)) { seen.add(t); window.__qaToasts.push(t.slice(0, 200)); } }
+    }).observe(document.body, { childList: true, subtree: true, characterData: true });
+  });
   await installCursorProbe(page);
   await page.click('button.ep-go');
   let skipped = false;
@@ -358,7 +366,13 @@ async function layoutCase(page, tag, profile) {
   }));
   if (P.mobile) {
     out.push(await probeMenu(page, 'timeline-mais', page.locator('.ep-tl-cmore').first(), tag));
-    out.push(await probeMenu(page, 'preview-mais', page.locator('.ep-pv-mbar [aria-label="Mais opções"]').first(), tag, async () => { await page.locator('.ep-pv-mbar [aria-label="Mais opções"]').first().click().catch(() => {}); }));
+    out.push(await probeMenu(page, 'preview-mais', page.locator('.ep-pv-mbar [aria-label="Mais opções"]').first(), tag, async () => {
+      // desde c603a9e o menu é bottom-sheet com ✕; antes era popover que fechava no próprio ⋯
+      const x = page.locator('.ep-pv-menu [aria-label=Fechar], .ep-pv-sheet [aria-label=Fechar], [role=dialog][aria-label*="preview" i] [aria-label=Fechar]').first();
+      if (await x.isVisible().catch(() => false)) await x.click().catch(() => {});
+      else await page.locator('.ep-pv-mbar [aria-label="Mais opções"]').first().click().catch(() => {});
+      await page.keyboard.press('Escape').catch(() => {});
+    }));
     out.push(await probeMenu(page, 'ia-fab2', page.locator('.ep-aifab2').first(), tag, async () => { await page.locator('.ep-aipop [aria-label=Minimizar]').first().click().catch(() => {}); }));
     // ferramentas da barra inferior (nível 1); "Sobrepor" abre seletor de arquivo: pula
     const labels = await page.$$eval('.ep-mtools .ep-mtitem .lb', (els) => els.map((e) => e.textContent.trim()));
@@ -600,8 +614,12 @@ async function runProfile(profile, media) {
         if (f.done) { await editorIdle(page).catch(() => {}); ep = await editorPlayback(page, `${tag}-${k}`, 3500).catch(() => null); }
         const errs = L.relevantErrors(errors).filter((e) => e.type === 'pageerror');
         const dec = await page.evaluate(() => [...document.querySelectorAll('.ep-pv-host video')].map((v) => `${v.videoWidth}×${v.videoHeight}`).join(',')).catch(() => '?');
-        const ok = f.done && ep && ep.sum.black === 0 && !errs.length;
-        rec(profile, `8. Mídia ${label}`, ok ? 'ok' : 'falha', { 'até Pronto (s)': +(f.ms / 1000).toFixed(1), pretos: ep ? `${ep.sum.black}/${ep.sum.samples}` : '-', held: ep ? ep.sum.held : '-', 'menor luminância': ep ? ep.sum.minMean : '-', pageerrors: errs.length, 'vídeo decodificado': dec || 'nenhum' },
+        const toasts = await page.evaluate(() => window.__qaToasts || []).catch(() => []);
+        const warned = toasts.find((t) => /decodific|HEVC|não consegue|formato/i.test(t));
+        // vídeo que o navegador não decodifica (0×0): preto é inevitável aqui; o critério vira "avisou o usuário"
+        const undecodable = /^0×0/.test(dec || '');
+        const ok = undecodable ? !!warned && !errs.length : f.done && ep && ep.sum.black === 0 && !errs.length;
+        rec(profile, `8. Mídia ${label}`, ok ? 'ok' : 'falha', { 'até Pronto (s)': +(f.ms / 1000).toFixed(1), pretos: ep ? `${ep.sum.black}/${ep.sum.samples}` : '-', held: ep ? ep.sum.held : '-', 'menor luminância': ep ? ep.sum.minMean : '-', pageerrors: errs.length, 'vídeo decodificado': dec || 'nenhum', 'aviso ao usuário': warned ? warned.slice(0, 90) : 'nenhum' },
           [ep && ep.shot, await L.shot(page, `${tag}-${k}-final`)], !f.done ? 'não chegou a "Pronto!"' : ep && ep.sum.black ? `playheads pretos: ${ep.sum.blackPlayheads}` : '');
       } catch (e) {
         rec(profile, `8. Mídia ${label}`, 'falha', {}, [await L.shot(page, `${tag}-${k}-erro`)], `exceção: ${e.message.split('\n')[0]}`);
