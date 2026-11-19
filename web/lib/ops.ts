@@ -6,7 +6,7 @@
    ===================================================================== */
 
 import type {
-  AspectRatio, CaptionSegment, CaptionStyle, Clip, Id, Keyframe, Marker, Project, Seconds, SpeedPoint, Track, TrackKind, Transform,
+  AspectRatio, CaptionSegment, CaptionSource, CaptionStyle, Clip, Id, Keyframe, Marker, Project, Seconds, SpeedPoint, Track, TrackKind, Transform,
 } from './types';
 import { ASPECT_SIZES } from './types';
 import { uid } from './util';
@@ -33,7 +33,8 @@ export type EditOp = (
   | { op: 'trim_clip'; clipId: Id; start?: Seconds; end?: Seconds }
   /** remove o intervalo [start,end) de TODAS as trilhas destravadas e puxa o resto (cortar silêncio/erro) */
   | { op: 'ripple_delete'; start: Seconds; end: Seconds }
-  | { op: 'set_captions'; segments: CaptionSegment[]; language?: string }
+  /** source/model (aditivos): de onde veio o texto. Sem source: segmentos vazios limpam a origem; senão mantém a atual */
+  | { op: 'set_captions'; segments: CaptionSegment[]; language?: string; source?: CaptionSource; model?: string }
   | { op: 'update_caption'; segmentId: Id; patch: Partial<Omit<CaptionSegment, 'id'>> }
   | { op: 'set_caption_style'; style: Partial<CaptionStyle> }
   | { op: 'toggle_captions'; enabled: boolean }
@@ -406,16 +407,17 @@ function applyOpInner(p: Project, op: EditOp): Project {
       };
     }
 
-    case 'set_captions':
-      return {
-        ...p,
-        captions: {
-          ...p.captions,
-          enabled: true,
-          language: op.language ?? p.captions.language,
-          segments: [...op.segments].sort((a, b) => a.start - b.start),
-        },
+    case 'set_captions': {
+      const captions = {
+        ...p.captions,
+        enabled: true,
+        language: op.language ?? p.captions.language,
+        segments: [...op.segments].sort((a, b) => a.start - b.start),
       };
+      if (op.source) { captions.source = op.source; if (op.model) captions.model = op.model; else delete captions.model; }
+      else if (!op.segments.length) { delete captions.source; delete captions.model; }
+      return { ...p, captions };
+    }
 
     case 'update_caption':
       return {

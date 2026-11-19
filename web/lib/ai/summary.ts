@@ -4,6 +4,7 @@
    gerar ops válidas, mas sem thumbnails/waveforms/URLs.
    ===================================================================== */
 import type { ChatMessage, Clip, Id, MediaAsset, Project } from '../types';
+import { captionsAreSpeech } from './legacyCaptions';
 import { clipEnd, projectDuration } from '../ops';
 
 const t2 = (n: number) => Math.round(n * 100) / 100;
@@ -95,6 +96,9 @@ export function summarizeProject(
       clips: t.clips.map(clipLine),
     })),
     captions: {
+      /** true = o texto É a fala transcrita; false = texto que não veio da fala (manual, tradução ou legenda antiga de exemplo) */
+      transcribed: captionsAreSpeech(p),
+      ...(p.captions.source ? { source: p.captions.source } : {}),
       enabled: p.captions.enabled,
       language: p.captions.language,
       style: capStyle,

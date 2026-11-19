@@ -239,6 +239,7 @@ export function sanitizeCaptionStyle(v: unknown, base?: CaptionStyle): Partial<C
   const ae = bool(v.autoEmoji); if (ae !== undefined) out.autoEmoji = ae;
   const lines = clampNum(v.lines, 1, 2); if (lines !== undefined) out.lines = Math.round(lines) as 1 | 2;
   const jit = clampNum(v.jitter, 0, 15); if (jit !== undefined) out.jitter = jit;
+  const rh = oneOf(v.rhythm, ['word', 'punch', 'line', 'phrase', 'count'] as const); if (rh) out.rhythm = rh;
   return Object.keys(out).length ? out : undefined;
 }
 

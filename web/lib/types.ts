@@ -538,13 +538,33 @@ export interface CaptionStyle extends TextStyle {
   emphasis?: { auto: boolean; color?: string; scale?: number };
   /** (aditivo, biblioteca) mantém a legenda fora da interface do app (TikTok/Reels/Shorts/YouTube) */
   safeZone?: 'none' | 'tiktok' | 'reels' | 'shorts' | 'youtube';
+  /**
+   * (aditivo 2026-11-19, legendas) como a fala vira blocos na tela: 'word' (1 palavra), 'punch' (até 3, padrão
+   * TikTok), 'line' (até 4), 'phrase' (até 7) quebram nas pausas/pontuação e seguram o bloco no ritmo da fala;
+   * 'count' = comportamento antigo (só conta palavras). Ausente = derivado de maxWords.
+   */
+  rhythm?: CaptionRhythm;
 }
+
+/** (aditivo, legendas) preset de agrupamento das legendas pelo ritmo da fala */
+export type CaptionRhythm = 'word' | 'punch' | 'line' | 'phrase' | 'count';
+
+/** (aditivo, legendas) de onde veio o texto das legendas */
+export type CaptionSource = 'transcription' | 'manual' | 'translation';
 
 export interface Captions {
   enabled: boolean;
   language: string; // 'pt-BR'
   segments: CaptionSegment[];
   style: CaptionStyle;
+  /**
+   * (aditivo 2026-11-19, legendas) origem do texto: 'transcription' = fala transcrita (Whisper/servidor),
+   * 'manual' = escrita/editada à mão, 'translation' = tradução da transcrição. Ausente = projeto antigo
+   * (pode conter legenda de exemplo que NÃO veio da fala — ver lib/ai/legacyCaptions.ts).
+   */
+  source?: CaptionSource;
+  /** (aditivo, legendas) quem transcreveu ("Whisper base", "Groq whisper-large-v3-turbo") */
+  model?: string;
 }
 
 /* ---------- perfil de estilo (vindo do vídeo-exemplo) ---------- */
