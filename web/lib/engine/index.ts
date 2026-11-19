@@ -24,7 +24,12 @@ export interface MediaSources {
  * Desenha o projeto no tempo t. O canvas pode ter qualquer tamanho com o
  * aspecto do projeto: tudo é desenhado em coordenadas relativas ao canvas.
  */
-export function renderFrame(ctx: CanvasRenderingContext2D, project: Project, t: Seconds, media: MediaSources): void {
+export interface RenderOpts {
+  /** preview híbrido: a base (fundo + trilha principal) é o <video> nativo — desenha só o que vai por cima, com fundo transparente */
+  overlayOnly?: { skipTrackId: string };
+}
+
+export function renderFrame(ctx: CanvasRenderingContext2D, project: Project, t: Seconds, media: MediaSources, opts: RenderOpts = {}): void {
   const W = ctx.canvas.width;
   const H = ctx.canvas.height;
   ctx.save();
@@ -39,15 +44,17 @@ export function renderFrame(ctx: CanvasRenderingContext2D, project: Project, t: 
     return 'assetId' in clip && clip.assetId ? media.get(clip.assetId) : undefined;
   };
 
+  const skip = opts.overlayOnly?.skipTrackId;
+  if (skip) ctx.clearRect(0, 0, W, H);
   // fundo: cor / desfoque da mídia de baixo / imagem
   const firstVideo = project.tracks.find((tr) => tr.kind === 'video' && !tr.hidden);
   const bottomLayer = firstVideo ? trackLayers(firstVideo, t).filter((l) => l.clip.type === 'video' || l.clip.type === 'image').pop() : undefined;
-  drawBackground(ctx, project, t, W, H,
+  if (!skip) drawBackground(ctx, project, t, W, H,
     bottomLayer ? { layer: bottomLayer, el: elFor(bottomLayer.clip) } : null,
     project.canvas?.type === 'image' && project.canvas.assetId ? media.get(project.canvas.assetId) : undefined);
 
   for (const track of project.tracks) {
-    if (track.hidden) continue;
+    if (track.hidden || track.id === skip) continue;
     if (track.kind === 'video' || track.kind === 'overlay') {
       const layers = trackLayers(track, t);
       const inL = layers.find((l) => l.transition?.role === 'in' && isShaderTransition(l.transition.kind));

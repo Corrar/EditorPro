@@ -14,6 +14,7 @@ import type { MediaElement, MediaSources } from '@/lib/engine';
 import { sourceTime, clipSpeed, trackLayers } from '@/lib/engine/timing';
 import { clipGainAt } from '@/lib/engine/audio';
 import { buildAudioChain, chainKey, needsAudioChain, type FxChain } from '@/lib/engine/audioFx';
+import { nativeGeometry, geometryTransform, geometryClip, layerFilter, type NativePlan } from './hybrid';
 import { driftDecision, frameReady, prerollPlan, warmPosition, type LeadState } from './syncPolicy';
 
 /** roteamento de um elemento pelo grafo WebAudio (efeitos de voz / tom) */
@@ -48,6 +49,10 @@ export class LiveMediaPool implements MediaSources {
   private routes = new WeakMap<AV, Route>();
   /** último play()/seek de cada elemento (ms) — carência antes de corrigir desvio com seek */
   private kicks = new WeakMap<AV, number>();
+  /** contadores p/ o painel "Mostrar desempenho" */
+  readonly stats = { waiting: 0, seeks: 0 };
+  /** elemento exibido no modo nativo */
+  private shown: HTMLVideoElement | null = null;
   /** chamado quando um quadro novo fica disponível (seek terminou / dados carregaram) */
   onFrame: () => void = () => {};
 
@@ -83,6 +88,8 @@ export class LiveMediaPool implements MediaSources {
     el.src = mediaUrl(asset);
     const ping = () => this.onFrame();
     el.addEventListener('seeked', ping);
+    el.addEventListener('waiting', () => { this.stats.waiting++; });
+    el.addEventListener('seeking', () => { this.stats.seeks++; });
     el.addEventListener('loadeddata', ping);
     this.host?.appendChild(el);
     return el;
@@ -319,6 +326,48 @@ export class LiveMediaPool implements MediaSources {
       bless(el);
       this.idle.set(id, [...(this.idle.get(id) ?? []), el]);
     }
+  }
+
+  /**
+   * Modo nativo: mostra o <video> do clipe principal (geometria/opacidade/filtro em CSS)
+   * e esconde os demais. Devolve false se o elemento ainda não tem quadro (o chamador
+   * mantém o que está na tela). Com plano não nativo, esconde todos (canvas desenha tudo).
+   */
+  present(plan: NativePlan, t: Seconds, W: number, H: number): boolean {
+    const show = new Set<HTMLVideoElement>();
+    if (plan.native) {
+      const els: HTMLVideoElement[] = [];
+      for (const l of plan.layers) {
+        const el = this.byClip.get(l.clip.id);
+        if (!(el instanceof HTMLVideoElement) || el.readyState < 2 || !el.videoWidth) return false;
+        els.push(el);
+      }
+      plan.layers.forEach((l, i) => {
+        const el = els[i];
+        const g = nativeGeometry(l.clip, t, W, H, el.videoWidth, el.videoHeight, l.tv);
+        const st = el.style;
+        const w = `${g.w.toFixed(2)}px`, h = `${g.h.toFixed(2)}px`, tr = geometryTransform(g);
+        const op = l.opacity.toFixed(3), fl = layerFilter(l, W, H), cp = geometryClip(g), z = String(l.z);
+        if (st.width !== w) st.width = w;
+        if (st.height !== h) st.height = h;
+        if (st.transform !== tr) st.transform = tr;
+        if (st.opacity !== op) st.opacity = op;
+        if (st.filter !== fl) st.filter = fl;
+        if (st.clipPath !== cp) st.clipPath = cp;
+        if (st.zIndex !== z) st.zIndex = z;
+        show.add(el);
+      });
+    }
+    const hide = (e: AV) => { if (!show.has(e as HTMLVideoElement) && e instanceof HTMLVideoElement && e.style.opacity !== '0') e.style.opacity = '0'; };
+    this.byClip.forEach(hide);
+    this.idle.forEach((l) => l.forEach(hide));
+    this.shown = show.size ? [...show].at(-1)! : null;
+    return true;
+  }
+
+  /** elemento exibido no modo nativo (diagnóstico) */
+  get shownElement() {
+    return this.shown;
   }
 
   pauseAll() {
