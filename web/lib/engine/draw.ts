@@ -24,6 +24,19 @@ import { getSegMask, requestSegMask } from './segment';
 import { hash, scratch, type AnyCanvas, type Ctx } from './surface';
 import { gradeLayer } from '../color';
 import { animateClip } from './animate';
+
+/* donos de scratch por clip.id, LRU pequeno (canvases liberados ao sair) */
+const OWNERS = new Map<string, object>();
+const MAX_OWNERS = 24;
+export function scratchOwner(id: string): object {
+  let o = OWNERS.get(id);
+  if (o) { OWNERS.delete(id); OWNERS.set(id, o); return o; }
+  o = { id };
+  OWNERS.set(id, o);
+  while (OWNERS.size > MAX_OWNERS) OWNERS.delete(OWNERS.keys().next().value as string);
+  return o;
+}
+export const scratchOwnerCount = () => OWNERS.size;
 import type { MediaElement } from './index';
 
 export type { Ctx } from './surface';
@@ -84,7 +97,9 @@ export interface LayerOpts {
 /** desenha um item visual (vídeo/imagem/sticker/forma) no quadro */
 export function drawLayer(ctx: Ctx, layer: LayerItem, t: Seconds, el: MediaElement | undefined, W: number, H: number, opts: LayerOpts = {}): void {
   // keyframes universais (props animadas: efeitos, filtros, cor, máscara, chroma, forma…)
-  const owner = layer.clip; // dono estável dos caches (scratch), mesmo com o clipe animado mudando a cada quadro
+  // dono estável dos canvases auxiliares: por clip.id (não pelo objeto imutável do clipe — cada versão
+  // no histórico de desfazer prendia seus canvases de vários MB; r2 #6)
+  const owner = scratchOwner(layer.clip.id);
   const clip = animateClip(layer.clip, t - layer.clip.start);
   const local = Math.min(Math.max(0, t - clip.start), clip.duration);
   const tf = interpolateTransform(clip.transform ?? DEFAULT_TRANSFORM, clip.keyframes, local);
@@ -95,8 +110,11 @@ export function drawLayer(ctx: Ctx, layer: LayerItem, t: Seconds, el: MediaEleme
   let sw = 0, sh = 0;
   let natural = true; // fonte "natural" (vídeo/imagem) usa encaixe; sticker/forma usa tamanho relativo
   if (clip.type === 'shape') {
-    const sizePx = short * Math.max(0.01, tf.scale) * 1.2;
-    const c = shapeCanvas(clip, sizePx);
+    // resolução pela ALTURA DESENHADA (mesma conta da geometria abaixo) — antes short×escala×1,2 ignorava o
+    // aspecto: formas largas eram rasterizadas grandes demais e as altas, pequenas (r2 fx #5)
+    const asp = clipShapeAspect(clip);
+    const drawnH = (asp >= 1 ? (short * 0.95) / asp : short * 0.95) * Math.max(0.01, tf.scale);
+    const c = shapeCanvas(clip, drawnH * 1.1);
     src = c as CanvasImageSource; sw = c.width; sh = c.height; natural = false;
   } else if (clip.type === 'sticker' && clip.emoji && !el) {
     const c = emojiCanvas(clip.emoji, short * Math.max(0.01, tf.scale) * 1.4);

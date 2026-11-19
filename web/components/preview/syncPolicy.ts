@@ -124,11 +124,15 @@ export class QualityGovernor {
     return QUALITY_STEPS[this.level];
   }
 
+  /** volta ao estado inicial (nível 1,0): o Preview força a qualidade cheia ao pausar — o governador
+   *  precisa acompanhar, senão compara o custo a 1,0 com o limite do degrau antigo (r2 #8) */
   reset() {
     this.ema = 0;
     this.n = 0;
     this.overSince = -1;
     this.underSince = -1;
+    this.level = 0;
+    this.lastChange = -Infinity;
   }
 
   /** registra o custo de um quadro (ms); devolve o novo fator se mudou, senão null */
@@ -251,4 +255,24 @@ export function staleIdle<T extends { url: string }>(list: T[], currentUrl: stri
 export function stillTime(t: Seconds, duration: Seconds, fps: number | undefined): Seconds {
   if (duration > 0 && t >= duration - 1e-6) return Math.max(0, duration - 1 / (fps || 30));
   return t;
+}
+
+/**
+ * Pausado perto de um corte: clipes de vídeo VIZINHOS (o que acabou de terminar ou vai começar
+ * em até `win` s) que não estão ativos. Ficam com elemento próprio já no quadro do corte — aplicar
+ * uma transição ali mostra o resultado na hora (antes: criar <video> + seek ≈ 200 ms no celular).
+ */
+export function neighborPlan(p: Project, t: Seconds, win = 1): PlanItem[] {
+  const out: PlanItem[] = [];
+  for (const track of p.tracks) {
+    if (track.hidden || (track.kind !== 'video' && track.kind !== 'overlay')) continue;
+    for (const c of track.clips) {
+      if (c.type !== 'video') continue;
+      const end = c.start + c.duration;
+      const active = t >= c.start && t < end;
+      if (active) continue;
+      if ((t >= end && t - end <= win) || (c.start > t && c.start - t <= win)) out.push({ clip: c, track });
+    }
+  }
+  return out;
 }

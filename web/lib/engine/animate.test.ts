@@ -99,3 +99,15 @@ describe('animateClip: custo', () => {
     expect(hasVolumeKeyframes(video() as Clip)).toBe(false);
   });
 });
+
+import { scratchOwner, scratchOwnerCount } from './draw';
+describe('donos de scratch por clip.id (r2 #6: histórico não prende canvases)', () => {
+  it('mesmo id → mesmo dono (versões do clipe no desfazer reaproveitam)', () => {
+    expect(scratchOwner('clipX')).toBe(scratchOwner('clipX'));
+  });
+  it('LRU limitado', () => {
+    for (let i = 0; i < 100; i++) scratchOwner('c' + i);
+    expect(scratchOwnerCount()).toBeLessThanOrEqual(24);
+  });
+});
+

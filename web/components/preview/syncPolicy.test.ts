@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  driftDecision, staleIdle, warmPosition, WARM_START, PlaybackClock, QualityGovernor, prerollPlan, frameReady, frameInterval,
+  driftDecision, neighborPlan, staleIdle, warmPosition, WARM_START, PlaybackClock, QualityGovernor, prerollPlan, frameReady, frameInterval,
   SEEK_DRIFT, KICK_GRACE_MS, MAX_HOLD_MS, PREROLL,
 } from './syncPolicy';
 import { stillTime } from './syncPolicy';
@@ -223,5 +223,28 @@ describe('QualityGovernor: 3º degrau só com custo muito alto', () => {
     const changes: number[] = [];
     for (let i = 0; i < 1200; i++) { const q = g.push(80, i * 33); if (q !== null) changes.push(q); }
     expect(changes).toEqual([0.75, 0.5]);
+  });
+});
+
+describe('neighborPlan (vizinhos do corte com o vídeo parado)', () => {
+  it('pega o clipe que acabou e o que vai começar, não o ativo', () => {
+    const p = rippleProject();
+    expect(neighborPlan(p, 5.3).map((x) => x.clip.id)).toEqual(['c0']);
+    expect(neighborPlan(p, 4.6).map((x) => x.clip.id)).toEqual(['c1']);
+    expect(neighborPlan(p, 7.5)).toEqual([]);
+  });
+});
+
+describe('QualityGovernor.reset (r2 #8)', () => {
+  it('depois de cair e pausar (reset), volta a 1 e cai de novo com custo alto', () => {
+    const g = new QualityGovernor();
+    let i = 0;
+    for (; i < 200; i++) g.push(45, i * 33);
+    expect(g.factor).toBe(0.75);
+    g.reset();
+    expect(g.factor).toBe(1);
+    const changes: number[] = [];
+    for (let k = 0; k < 600; k++, i++) { const q = g.push(40, i * 33); if (q !== null) changes.push(q); }
+    expect(changes).toEqual([0.75]);
   });
 });

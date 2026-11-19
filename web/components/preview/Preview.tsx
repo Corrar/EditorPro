@@ -14,7 +14,8 @@ import { formatTime } from '@/lib/util';
 import { LiveMediaPool } from './livePool';
 import { PlaybackClock, QualityGovernor, frameInterval, stillTime } from './syncPolicy';
 import { nativePlan } from './hybrid';
-import { shaderKindsIn, warmIdle, warmShader, isWarm } from './warm';
+import { shaderKindsIn, warmShader, isWarm } from './warm';
+import { prewarmIdle, prewarmCustom, customShadersIn } from '@/lib/engine/prewarm';
 import { onLutsChanged, onCompareChanged } from '@/lib/color';
 import { hitTest, dragPatch, type Box } from './manipulate';
 import type { Clip, Project, TextClip } from '@/lib/types';
@@ -184,10 +185,15 @@ export default function Preview() {
     const st = useEditor.getState();
     // modo híbrido: <video> nativo como base + canvas transparente por cima (ou composição total)
     const cmp = viewRef.current.compare;
-    const plan = cmp ? ({ native: false, reason: 'antes/depois' } as const)
+    let plan: ReturnType<typeof nativePlan> = cmp ? ({ native: false, reason: 'antes/depois' } as const)
       : nativeAllowed() ? nativePlan(st.project, t) : ({ native: false, reason: 'desligado' } as const);
     const { w: fw, h: fh } = fitRef.current;
-    if (!pool.present(plan, t, fw, fh)) return false;
+    const pr = pool.present(plan, t, fw, fh);
+    if (pr === 'canvas') {
+      // nativo sem mídia utilizável (fonte quebrada / sem url): composição completa no canvas, sem o vídeo
+      plan = { native: false, reason: 'mídia indisponível' };
+      pool.present(plan, t, fw, fh);
+    } else if (!pr) return false; // elemento válido ainda buscando: MANTÉM o quadro atual (nunca troca por canvas sem vídeo → preto)
     // troca de qualidade pendente: redimensiona e desenha no MESMO quadro
     if (wantQRef.current !== qualityRef.current) { qualityRef.current = wantQRef.current; applySize(); }
     const ctx = cv.getContext('2d');
@@ -246,7 +252,9 @@ export default function Preview() {
         if (!waitSinceRef.current) waitSinceRef.current = now;
         if (now - waitSinceRef.current < 2500) { showTime(st.playhead); window.setTimeout(requestStill, 120); return; }
       }
-      if (!draw(tv) && now - (waitSinceRef.current || now) < 2500) {
+      const late = !!waitSinceRef.current && now - waitSinceRef.current >= 2500;
+      // passou do limite: desenha assim mesmo (força o canvas) — antes desistia sem desenhar (r2 #3)
+      if (!draw(tv) && !late) {
         if (!waitSinceRef.current) waitSinceRef.current = now;
         window.setTimeout(requestStill, 120);
         return;
@@ -367,6 +375,7 @@ export default function Preview() {
     govRef.current.reset();
     let raf = 0;
     let lastDraw = -Infinity;
+    let holdSince = 0;
     let lead: ReturnType<LiveMediaPool['sync']>['lead'] = null;
     const tick = () => {
       const st = useEditor.getState();
@@ -394,10 +403,16 @@ export default function Preview() {
       lastDraw = now;
       // a próxima transição em shader (até 1,5 s): compila agora, não no meio dela
       for (const k of shaderKindsIn(st.project, t, t + 1.5)) if (!isWarm(k)) { warmShader(k); break; }
+      // shaders 'custom' (GLSL da IA) dos próximos 1,5 s também
+      for (const x of customShadersIn(st.project, t, t + 1.5)) if (!prewarmCustom(x.code, x.stage)) break;
       const s = pool.sync(st.project, st.assets, t, true, st.project.fps, viewRef.current.playRate);
       lead = s.lead;
       // falta o quadro do vídeo (corte/seek ainda decodificando): mantém o último quadro bom
-      if (s.pending || !draw(t)) { STATS.held++; showTime(t); }
+      // rede de segurança na reprodução: um vídeo que não entrega quadro não congela o canvas inteiro
+      // (textos/legendas/PiP) por mais de 1,5 s (r2 #1/#2)
+      const lateP = holdSince > 0 && now - holdSince > 1500;
+      if ((s.pending && !lateP) || !draw(t)) { if (!holdSince) holdSince = now; STATS.held++; showTime(t); }
+      else holdSince = 0;
       lastSetRef.current = t;
       st.setPlayhead(t);
     };
@@ -408,12 +423,15 @@ export default function Preview() {
   /* ---------- eventos / tela cheia ---------- */
   useEffect(() => on('ep:open-export', (d) => { setPlaying(false); setExportInit(d ?? {}); setExportOpen(true); }), [setPlaying]);
   useEffect(() => { requestStill(); }, [compare, split, requestStill]);
-  /* compila no ócio os shaders das transições do projeto (a 1ª compilação trava a página) */
+  /* compila no ócio os shaders (a 1ª compilação trava a página): os do projeto e, depois, o catálogo
+     inteiro de transições/efeitos — aplicar um item novo já encontra o shader pronto */
   const projForWarm = useEditor((s) => s.project);
   useEffect(() => {
     if (playing) return;
-    const id = window.setTimeout(() => { cancelWarm = warmIdle(shaderKindsIn(projForWarm)); }, 600);
     let cancelWarm = () => {};
+    const id = window.setTimeout(() => {
+      cancelWarm = prewarmIdle(projForWarm, { catalog: true, isBusy: () => useEditor.getState().playing });
+    }, 600);
     return () => { clearTimeout(id); cancelWarm(); };
   }, [projForWarm, playing]);
   /* fecha o popover "Visualização" ao tocar fora */
@@ -450,14 +468,12 @@ export default function Preview() {
     poolRef.current?.unlock(st.project, st.assets);
   }, []);
   useEffect(() => {
-    const h = () => {
-      unlock();
-      window.removeEventListener('pointerdown', h, true);
-      window.removeEventListener('keydown', h, true);
-    };
-    window.addEventListener('pointerdown', h, true);
-    window.addEventListener('keydown', h, true);
-    return () => { window.removeEventListener('pointerdown', h, true); window.removeEventListener('keydown', h, true); };
+    // a cada gesto (não só o 1º): no iOS cada elemento novo precisa de um play dentro de um gesto (r2 #4)
+    const h = () => unlock();
+    // no toque, pointerdown NÃO libera mídia (Chrome/iOS só contam pointerup/touchend/click como gesto)
+    const evs = ['pointerdown', 'pointerup', 'click', 'keydown'] as const;
+    evs.forEach((e) => window.addEventListener(e, h, true));
+    return () => evs.forEach((e) => window.removeEventListener(e, h, true));
   }, [unlock]);
 
   /* sai da tela cheia CSS com Esc (só enquanto ativa) e trava a rolagem da página */

@@ -161,3 +161,21 @@ describe('biblioteca: presets de legenda e proporção de forma', () => {
     expect(clipShapeAspect({ ...base, shape: 'line', aspect: 40 } as never)).toBe(40);
   });
 });
+
+import { captionHighlight } from './captions';
+describe('cor de destaque das legendas: a escolha do usuário ganha do preset', () => {
+  const branco = { color: '#FFFFFF', highlightColor: '#FFFFFF' };
+  it('preset sem destaque próprio (branco/branco): destaque segue a cor escolhida', () => {
+    expect(captionHighlight({ color: '#FF2020', highlightColor: '#FFFFFF' }, branco)).toBe('#FF2020');
+  });
+  it('usuário escolheu o destaque: ele vale', () => {
+    expect(captionHighlight({ color: '#FF2020', highlightColor: '#30E070' }, branco)).toBe('#30E070');
+  });
+  it('preset com destaque próprio (impacto amarelo): palavra ativa segue amarela', () => {
+    expect(captionHighlight({ color: '#FF2020', highlightColor: '#FFE14D' }, { color: '#FFFFFF', highlightColor: '#FFE14D' })).toBe('#FFE14D');
+  });
+  it('sem preset da biblioteca / sem destaque: padrão', () => {
+    expect(captionHighlight({ color: '#FFFFFF', highlightColor: '#FFD23F' }, null)).toBe('#FFD23F');
+    expect(captionHighlight({ color: '#FFFFFF' }, null)).toBe('#FFD23F');
+  });
+});

@@ -145,6 +145,8 @@ export default function DevPreviewPage() {
     window.__ep = {
       useEditor, exportVideo, exportAudio, exportFrame, toFCPXML, toSRT, toVTT, hasWebCodecs, makePreviewProxy, probeVideoInfo, buildDemo, buildCapcutDemo, emit, assetsList: () => Object.values(useEditor.getState().assets),
       color: () => import('@/lib/color'),
+      library: () => import('@/lib/library'),
+      glcore: () => import('@/lib/fx/glcore'),
       blobToBase64: async (b: Blob) => {
         const buf = new Uint8Array(await b.arrayBuffer());
         let s = '';

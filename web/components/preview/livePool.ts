@@ -16,7 +16,7 @@ import { clipGainAt } from '@/lib/engine/audio';
 import { hasVolumeKeyframes } from '@/lib/engine/animate';
 import { buildAudioChain, chainKey, needsAudioChain, type FxChain } from '@/lib/engine/audioFx';
 import { nativeGeometry, geometryTransform, geometryClip, layerFilter, type NativePlan } from './hybrid';
-import { driftDecision, staleIdle, frameReady, prerollPlan, warmPosition, type FrameProof, type LeadState } from './syncPolicy';
+import { driftDecision, neighborPlan, staleIdle, frameReady, prerollPlan, warmPosition, type FrameProof, type LeadState } from './syncPolicy';
 
 /** roteamento de um elemento pelo grafo WebAudio (efeitos de voz / tom) */
 interface Route { source: MediaElementAudioSourceNode; gain: GainNode; chain: FxChain | null; key: string }
@@ -41,6 +41,36 @@ export function mediaUrl(asset: MediaAsset): string {
   return (asset as MediaAsset & { proxyUrl?: string }).proxyUrl || asset.url || '';
 }
 
+/**
+ * iOS/iPadOS: `volume` de <video>/<audio> é só leitura (sempre 1) — volume, fades e ducking só
+ * funcionam pelo GainNode. Detecção por recurso: escreve 0.5 e lê de volta (r2 #5).
+ */
+let volumeRO: boolean | null = null;
+export function volumeIsReadOnly(): boolean {
+  if (volumeRO !== null) return volumeRO;
+  try { const a = document.createElement('audio'); a.volume = 0.5; volumeRO = Math.abs(a.volume - 0.5) > 0.01; }
+  catch { volumeRO = false; }
+  return volumeRO;
+}
+/**
+ * WebKit (Safari e todo navegador no iOS) libera som por ELEMENTO, só para play() dentro de um gesto;
+ * Chrome/Firefox liberam a página inteira depois do 1º gesto.
+ */
+export function perElementGesture(ua = typeof navigator !== 'undefined' ? navigator.userAgent : ''): boolean {
+  if (/iP(hone|ad|od)/.test(ua) || /CriOS|FxiOS|EdgiOS/.test(ua)) return true;
+  return /AppleWebKit/.test(ua) && /Safari/.test(ua) && !/Chrome|Chromium|Edg|Android|OPR/.test(ua);
+}
+/** o elemento pode tocar COM som agora? (mudo enquanto não destravado/abençoado — senão o play falha e trava) */
+export function canSound(o: { unlocked: boolean; blessed: boolean; perElement: boolean; refused: boolean }): boolean {
+  return o.unlocked && !o.refused && (o.blessed || !o.perElement);
+}
+/** o som do elemento precisa passar pelo GainNode? */
+export function wantsRoute(o: { hasCtx: boolean; routed: boolean; chain: boolean; volumeKf: boolean; gain: number; volumeReadOnly: boolean }): boolean {
+  if (o.routed) return true;
+  if (!o.hasCtx) return false;
+  return o.chain || o.volumeKf || (o.volumeReadOnly && Math.abs(o.gain - 1) > 0.001);
+}
+
 export class LiveMediaPool implements MediaSources {
   private images = new Map<string, HTMLImageElement>();
   private byClip = new Map<string, AV>();
@@ -53,6 +83,23 @@ export class LiveMediaPool implements MediaSources {
   private routes = new WeakMap<AV, Route>();
   /** último play()/seek de cada elemento (ms) — carência antes de corrigir desvio com seek */
   private kicks = new WeakMap<AV, number>();
+  /** reverso: o quadro buscado já foi desenhado? / elemento já mostrou algum quadro */
+  private revDrawn = new WeakMap<AV, boolean>();
+  private everShown = new WeakSet<AV>();
+  /** iOS: elementos que tocaram (play) dentro de um gesto / que tiveram o play com som recusado */
+  private blessed = new WeakSet<AV>();
+  private refused = new WeakSet<AV>();
+  private readonly perElement = perElementGesture();
+  private resumeTry = -Infinity;
+  private lastAssets: Record<string, MediaAsset> = {};
+  private soundOk(el: AV) {
+    return canSound({ unlocked: this.unlocked, blessed: this.blessed.has(el), perElement: this.perElement, refused: this.refused.has(el) });
+  }
+  /** fonte que nunca vai ter quadro (erro, sem fonte, formato não suportado) */
+  isBroken(el: AV): boolean {
+    // (networkState NO_SOURCE não serve: é passageiro no início da seleção de fonte de todo elemento novo)
+    return !!el.error || this.unplayable.has(el.dataset.url ?? '');
+  }
   /** contadores p/ o painel "Mostrar desempenho" */
   readonly stats = { waiting: 0, seeks: 0, errors: 0 };
   /** fontes que este aparelho não decodifica (ex.: HEVC/HDR em Android sem suporte) */
@@ -81,6 +128,16 @@ export class LiveMediaPool implements MediaSources {
   }
   /** elemento exibido no modo nativo */
   private shown: HTMLVideoElement | null = null;
+  /**
+   * Descarta um elemento — menos o que está NA TELA no modo nativo: esse vira 'retiring' e só sai
+   * depois que o substituto apresentar um quadro (antes, um salto do playhead com o vídeo parado
+   * — IA editando ao vivo — devolvia o elemento exibido ao pool e ele era destruído na hora → preto).
+   */
+  private drop(el: AV) {
+    if (el !== this.shown) { this.destroy(el); return; }
+    el.pause();
+    if (!this.retiring.includes(el)) { this.retiring.push(el); window.setTimeout(() => this.retire(el), 4000); }
+  }
   /** chamado quando um quadro novo fica disponível (seek terminou / dados carregaram) */
   onFrame: () => void = () => {};
 
@@ -179,11 +236,19 @@ export class LiveMediaPool implements MediaSources {
     const assetId = el.dataset.asset!;
     const list = this.idle.get(assetId) ?? [];
     list.push(el);
-    while (list.length > MAX_IDLE_PER_ASSET) this.destroy(list.shift()!);
+    while (list.length > MAX_IDLE_PER_ASSET) this.drop(list.shift()!);
     this.idle.set(assetId, list);
   }
 
   private destroy(el: AV) {
+    // desmonta a rota WebAudio (pitch/efeitos em loop seguiriam rodando e prendendo o elemento — r2 #7)
+    const r = this.routes.get(el);
+    if (r) {
+      try { r.source.disconnect(); } catch { /* ok */ }
+      if (r.chain) { try { r.chain.output.disconnect(); } catch { /* ok */ } try { r.chain.stop(); } catch { /* ok */ } }
+      try { r.gain.disconnect(); } catch { /* ok */ }
+      this.routes.delete(el);
+    }
     el.pause();
     el.removeAttribute('src');
     try { el.load(); } catch { /* ok */ }
@@ -211,13 +276,24 @@ export class LiveMediaPool implements MediaSources {
 
   private play(el: AV, now: number) {
     this.kicks.set(el, now);
-    el.play().catch(() => { /* autoplay bloqueado: segue mudo */ });
+    el.play().catch((e: unknown) => {
+      // play com som recusado (elemento criado fora de um gesto no iOS): toca MUDO para não travar
+      // a imagem e espera o próximo toque para abençoar (r2 #4)
+      if ((e as { name?: string })?.name === 'NotAllowedError' && !el.muted) {
+        this.refused.add(el);
+        el.muted = true;
+        el.play().catch(() => {});
+      }
+    });
   }
 
   /** sincroniza todos os elementos com o tempo t */
   sync(p: Project, assets: Record<string, MediaAsset>, t: Seconds, playing: boolean, fps = 30, playRate = 1): SyncState {
     this.lastPlaying = playing;
+    this.lastAssets = assets;
     const now = performance.now();
+    // contexto suspenso (iOS: chamada, outro app, tela bloqueada) com elementos no GainNode = silêncio: tenta retomar
+    if (playing && this.actx && this.actx.state !== 'running' && now - this.resumeTry > 1000) { this.resumeTry = now; this.resumeAudio(); }
     const active: { clip: Clip; track: Track; role?: 'in' | 'out' }[] = [];
     let leadTrack: Track | null = null;
     for (const track of p.tracks) {
@@ -248,7 +324,7 @@ export class LiveMediaPool implements MediaSources {
       const cur = a?.url ? mediaUrl(a) : null;
       const stale = staleIdle(list.map((el) => ({ el, url: el.dataset.url ?? '' })), cur);
       if (!stale.length) continue;
-      stale.forEach(({ el }) => this.destroy(el));
+      stale.forEach(({ el }) => this.drop(el));
       const rest = list.filter((el) => !stale.some((x) => x.el === el));
       if (rest.length) this.idle.set(assetId, rest); else this.idle.delete(assetId);
     }
@@ -259,6 +335,8 @@ export class LiveMediaPool implements MediaSources {
     const usable = (c: Clip) => (c.type === 'video' || c.type === 'audio') && !!assets[c.assetId]?.url && assets[c.assetId]?.kind !== 'image';
     for (const { clip } of active) if (usable(clip)) wanted.add(clip.id);
     if (playing) for (const { clip } of prerollPlan(p, t)) if (usable(clip)) wanted.add(clip.id);
+    const neighbors = playing ? [] : neighborPlan(p, t);
+    for (const { clip } of neighbors) if (usable(clip)) wanted.add(clip.id);
     for (const [id, el] of [...this.byClip]) if (!wanted.has(id)) this.release(id, el, false);
 
     const keep = new Set<string>();
@@ -276,13 +354,20 @@ export class LiveMediaPool implements MediaSources {
       const gain = reverse ? 0 : clipGainAt(p, track, clip, t);
       const routed = this.route(el, clip, gain);
       if (!routed) el.volume = Math.min(1, Math.max(0, gain));
-      el.muted = !this.unlocked || gain <= 0.0001;
+      el.muted = !this.soundOk(el) || gain <= 0.0001;
       const speed = clipSpeed(clip, t);
       // velocidade do elemento = velocidade do clipe × velocidade de reprodução do preview
       const rate = Math.min(16, Math.max(0.0625, speed * playRate));
+      let skipReady = false;
       if (playing && reverse) {
+        // reverso: alterna DESENHAR o quadro buscado e PEDIR o próximo seek (nunca no mesmo passo) —
+        // antes, o seek recém-pedido zerava a prova de quadro e o canvas inteiro congelava (r2 #1)
         if (!el.paused) el.pause();
-        if (!el.seeking && Math.abs(el.currentTime - target) > 0.5 / fps) this.seek(el, target, now);
+        skipReady = true;
+        const far = Math.abs(el.currentTime - target) > 0.5 / fps;
+        if (el.seeking) { if (!this.everShown.has(el)) pending = true; }
+        else if (!this.revDrawn.get(el) && el.readyState >= 2) { this.revDrawn.set(el, true); this.everShown.add(el); }
+        else if (far) { this.seek(el, target, now); this.revDrawn.set(el, false); if (!this.everShown.has(el)) pending = true; }
       } else if (playing) {
         const dur = Number.isFinite(el.duration) ? el.duration : Infinity;
         if (target < dur - 0.05) {
@@ -295,7 +380,7 @@ export class LiveMediaPool implements MediaSources {
             // tempo de timeline mostrado pelo vídeo (1ª ordem; vale p/ curva de velocidade)
             const videoT = t + (el.currentTime - target) / Math.max(0.0625, speed);
             const stalled = el.paused || el.seeking || el.readyState < 3;
-            lead = { videoT, stalled };
+            if (!this.isBroken(el)) lead = { videoT, stalled };
           }
         } else if (!el.paused) el.pause();
       } else {
@@ -305,7 +390,9 @@ export class LiveMediaPool implements MediaSources {
       }
       // conferido DEPOIS do play/seek: um seek recém-pedido derruba o readyState na hora;
       // conferir antes deixava desenhar com o vídeo sem quadro (tela preta após cada corte)
-      if (clip.type === 'video' && el instanceof HTMLVideoElement && !this.ready(el, target)) pending = true;
+      // fonte quebrada (sem decodificador/blob) não segura o desenho de tudo (r2 #2)
+      if (!skipReady && clip.type === 'video' && el instanceof HTMLVideoElement && !this.isBroken(el) && !this.ready(el, target)) pending = true;
+      else if (clip.type === 'video' && el instanceof HTMLVideoElement && el.readyState >= 2) this.everShown.add(el);
     }
     // pré-carga: o próximo clipe ganha elemento próprio, pausado no ponto de entrada
     if (playing) {
@@ -332,6 +419,19 @@ export class LiveMediaPool implements MediaSources {
         }
       }
     }
+    // pausado perto de um corte: vizinhos já no quadro do corte (transição aplicada aparece na hora)
+    for (const { clip } of neighbors) {
+      if (clip.type !== 'video' || keep.has(clip.id)) continue;
+      const asset = assets[clip.assetId];
+      if (!asset?.url || asset.kind === 'image') continue;
+      keep.add(clip.id);
+      const el = this.acquire(clip, asset);
+      el.muted = true;
+      if (!el.paused) el.pause();
+      const dur = Number.isFinite(el.duration) ? el.duration : Infinity;
+      const at = Math.max(0, Math.min(sourceTime(clip, t), dur - 0.05));
+      if (Math.abs(el.currentTime - at) > 0.5 / fps && !el.seeking) this.seek(el, at, now);
+    }
     for (const [id, el] of [...this.byClip]) if (!keep.has(id)) this.release(id, el);
     // livres que não foram reaproveitados neste passo: pausa (sem pausar/retomar o reaproveitado)
     for (const list of this.idle.values()) for (const el of list) if (!el.paused) el.pause();
@@ -348,7 +448,8 @@ export class LiveMediaPool implements MediaSources {
     const pitch = clip.type === 'video' || clip.type === 'audio' ? clip.pitch : undefined;
     let r = this.routes.get(el);
     // automação de volume (props.volume) também vai pelo GainNode: rampas suaves, sem cliques
-    if (!r && (!this.actx || !(needsAudioChain(fx, pitch) || hasVolumeKeyframes(clip)))) return false;
+    // iOS: volume do elemento é só leitura → qualquer ganho ≠ 1 (volume, fades, ducking) vai pelo GainNode (r2 #5)
+    if (!wantsRoute({ hasCtx: !!this.actx, routed: !!r, chain: needsAudioChain(fx, pitch), volumeKf: hasVolumeKeyframes(clip), gain, volumeReadOnly: volumeIsReadOnly() })) return false;
     if (!r) {
       try {
         const source = this.actx!.createMediaElementSource(el);
@@ -386,18 +487,26 @@ export class LiveMediaPool implements MediaSources {
    * gesto), que fica no pool livre p/ ser reaproveitado pelos clipes.
    */
   unlock(p: Project, assets: Record<string, MediaAsset>) {
-    if (this.unlocked) return;
-    this.unlocked = true;
-    try {
-      const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (AC) { this.actx = new AC(); void this.actx.resume().catch(() => {}); }
-    } catch { /* sem WebAudio */ }
+    // chamado a CADA gesto: no iOS, elementos criados depois do 1º toque (clipe novo, mídia nova,
+    // proxy) também precisam de um play dentro de um gesto para ter som (r2 #4)
+    if (!this.unlocked) {
+      this.unlocked = true;
+      try {
+        const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (AC) { this.actx = new AC(); void this.actx.resume().catch(() => {}); }
+      } catch { /* sem WebAudio */ }
+    } else this.resumeAudio();
     const bless = (el: AV) => {
+      if (this.blessed.has(el) && !this.refused.has(el)) return;
+      const wasPlaying = !el.paused;
       el.muted = false;
       el.defaultMuted = false;
       const pr = el.play();
       // pausa de volta, a menos que o sync já o esteja usando na reprodução
-      if (pr) pr.then(() => { if (!this.lastPlaying || ![...this.byClip.values()].includes(el)) el.pause(); }).catch(() => {});
+      if (pr) pr.then(() => {
+        this.blessed.add(el); this.refused.delete(el);
+        if (!wasPlaying && (!this.lastPlaying || ![...this.byClip.values()].includes(el))) el.pause();
+      }).catch(() => { el.muted = true; });
     };
     for (const el of this.byClip.values()) bless(el);
     for (const list of this.idle.values()) list.forEach(bless);
@@ -421,13 +530,23 @@ export class LiveMediaPool implements MediaSources {
    * e esconde os demais. Devolve false se o elemento ainda não tem quadro (o chamador
    * mantém o que está na tela). Com plano não nativo, esconde todos (canvas desenha tudo).
    */
-  present(plan: NativePlan, t: Seconds, W: number, H: number): boolean {
+  present(plan: NativePlan, t: Seconds, W: number, H: number): boolean | 'canvas' {
     const show = new Set<HTMLVideoElement>();
     if (plan.native) {
       const els: HTMLVideoElement[] = [];
       for (const l of plan.layers) {
         const el = this.byClip.get(l.clip.id);
-        if (!(el instanceof HTMLVideoElement) || !el.videoWidth || !this.ready(el, sourceTime(l.clip, t))) return false;
+        // sem elemento (mídia sem url / removida) ou fonte quebrada: o modo nativo não tem o que mostrar —
+        // o chamador cai para o canvas (desenha fundo, textos e legendas) em vez de esperar para sempre (r2 #2/#3)
+        if (!(el instanceof HTMLVideoElement)) {
+          // elemento ainda não pego (ids novos logo depois de um corte/ripple): ESPERA — só cai para o
+          // canvas quando a mídia realmente não tem fonte (sem url) ou não existe mais
+          const a = l.clip.type === 'video' ? this.lastAssets[l.clip.assetId] : undefined;
+          if (a?.url && a.kind !== 'image') return false;
+          return 'canvas';
+        }
+        if (this.isBroken(el)) return 'canvas';
+        if (!el.videoWidth || !this.ready(el, sourceTime(l.clip, t))) return false;
         els.push(el);
       }
       plan.layers.forEach((l, i) => {
