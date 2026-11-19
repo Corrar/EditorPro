@@ -308,6 +308,8 @@ export interface ShapeClip extends BaseClip, VisualExtras {
   stroke?: string;
   strokeWidth?: number;
   cornerRadius?: number;
+  /** (aditivo, biblioteca) proporção largura/altura da forma; sem isso o engine usa a natural (barras de lower third, pílulas de CTA) */
+  aspect?: number;
   transform: Transform;
   keyframes?: Keyframe[];
 }

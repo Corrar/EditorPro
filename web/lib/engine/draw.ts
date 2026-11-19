@@ -18,11 +18,11 @@ import { layoutWords, splitText, textAnimState, fontPx, type AnimState } from '.
 import { captionLook, chunkAt, chunkCaptions, wordStates, type CaptionChunk } from './captions';
 import { clipAnimFx } from './animations';
 import { charOffsets, unitFx, unitKindOf, UNIT_NEUTRAL, type UnitFx, type UnitKind } from './textUnits';
-import { emojiForWord, requestFont } from './fonts';
+import { basePresetFor, emojiForWord, requestFont } from './fonts';
 import { applyGrade, applySurfaceEffects, effectGeometry, filmBurn, glitchInPlace, hasSurfaceEffects, pixelateInPlace, rgbSplitInPlace } from './effects';
 import { applyMask } from './masks';
 import { processPixels } from './gl';
-import { emojiCanvas, shapeCanvas, shapeAspect } from './shapes';
+import { emojiCanvas, shapeCanvas, clipShapeAspect } from './shapes';
 import { getSegMask, requestSegMask } from './segment';
 import { hash, scratch, type AnyCanvas, type Ctx } from './surface';
 import type { MediaElement } from './index';
@@ -167,7 +167,7 @@ export function drawLayer(ctx: Ctx, layer: LayerItem, t: Seconds, el: MediaEleme
     }
   } else {
     const base = short * 0.95;
-    const asp = clip.type === 'shape' ? shapeAspect(clip.shape) : sw / sh;
+    const asp = clip.type === 'shape' ? clipShapeAspect(clip) : sw / sh;
     dh = asp >= 1 ? base / asp : base;
     dw = dh * asp;
   }
@@ -652,7 +652,7 @@ export function drawCaptions(ctx: Ctx, p: Project, t: Seconds, W: number, H: num
   if (!chunk) return;
   const style = cap.style;
   requestFont(style.fontFamily, style.fontWeight || 800, !!style.italic);
-  const look = captionLook(style.preset);
+  const look = captionLook(basePresetFor(style.preset));
   const states = wordStates(chunk, t, look);
   const words = chunk.words.map((w) => (style.uppercase ? w.text.toLocaleUpperCase('pt-BR') : w.text));
   const hl = style.highlightColor || '#FFD23F';

@@ -20,3 +20,13 @@ compliance with the License. Unless required by applicable law or agreed to in w
 under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
 express or implied. See the License for the specific language governing permissions and limitations under the
 License.
+
+## Fontes do Google Fonts (biblioteca profissional)
+
+- Onde: `web/lib/library/fonts.ts` (catálogo) — os arquivos de fonte **não** são empacotados; o navegador baixa
+  sob demanda de `fonts.googleapis.com` / `fonts.gstatic.com` quando a fonte é usada.
+- Licenças: SIL Open Font License 1.1 (https://openfontlicense.org) para todas as famílias do catálogo, exceto
+  Permanent Marker, Luckiest Guy e Chewy, sob Apache License 2.0. A licença de cada família está no campo
+  `license` do catálogo. Uso em vídeos exportados é permitido por ambas as licenças.
+- Efeitos sonoros, looks, estilos de legenda e modelos da biblioteca são originais do EditorPro (sons
+  sintetizados por código, sem amostras de áudio de terceiros).
