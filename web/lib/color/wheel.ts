@@ -40,3 +40,35 @@ export function puckColor(x: number, y: number): string {
   const to = (v: number) => Math.round(clamp(0.5 + v * 0.9, 0, 1) * 255);
   return `rgb(${to(w.r)},${to(w.g)},${to(w.b)})`;
 }
+
+const NEUTRAL: ColorWheel = { r: 0, g: 0, b: 0, y: 0 };
+const q4 = (v: number) => Math.round(v * 10000) / 10000;
+
+/** muda SÓ o mestre (y): r/g/b ficam exatamente como estão (rodas vindas da IA/colagem com luminância própria) */
+export function wheelWithMaster(w: ColorWheel | undefined, y: number): ColorWheel {
+  return { ...(w ?? NEUTRAL), y: q4(clamp(y, -1, 1)) };
+}
+
+/**
+ * Move o disco a partir da roda original `w0`: aplica só a DIFERENÇA de croma entre a
+ * posição nova e a posição em que o disco estava. Preserva a parte de luminância de
+ * r/g/b e o croma além do alcance do disco (que puckFromWheel não representa).
+ */
+export function wheelWithPuck(w0: ColorWheel | undefined, x: number, y: number): ColorWheel {
+  const base = w0 ?? NEUTRAL;
+  const p0 = puckFromWheel(base);
+  const a = wheelFromPuck(p0.x, p0.y), b = wheelFromPuck(x, y);
+  return {
+    r: q4(clamp(num(base.r) + b.r - a.r, -1, 1)),
+    g: q4(clamp(num(base.g) + b.g - a.g, -1, 1)),
+    b: q4(clamp(num(base.b) + b.b - a.b, -1, 1)),
+    y: num(base.y),
+  };
+}
+
+/** zera só o croma, mantendo a luminância embutida em r/g/b e o mestre */
+export function wheelResetChroma(w: ColorWheel | undefined): ColorWheel {
+  if (!w) return { ...NEUTRAL };
+  const Y = 0.2126 * num(w.r) + 0.7152 * num(w.g) + 0.0722 * num(w.b);
+  return { r: q4(Y), g: q4(Y), b: q4(Y), y: num(w.y) };
+}

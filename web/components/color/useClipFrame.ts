@@ -4,7 +4,7 @@
    (miniaturas dos looks e escopos). Usa um <video>/<img> próprio, oculto,
    para não disputar com o preview. Atualiza no máximo a ~5 fps.
    ===================================================================== */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useEditor } from '@/lib/store';
 import type { Clip, MediaAsset, Project, Seconds } from '@/lib/types';
 import { sourceTime } from '@/lib/engine/timing';
@@ -38,7 +38,8 @@ export interface ClipFrame {
 export function useClipFrame(clip: Clip | null, active = true): ClipFrame | null {
   const project = useEditor((s) => s.project);
   const assets = useEditor((s) => s.assets);
-  const playhead = useEditor((s) => s.playhead);
+  // inativo: não assina o playhead (senão o painel re-renderiza a cada quadro do play)
+  const playhead = useEditor((s) => (active ? s.playhead : 0));
   const [version, setVersion] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -126,6 +127,7 @@ export function useClipFrame(clip: Clip | null, active = true): ClipFrame | null
     if (v) { v.removeAttribute('src'); v.load(); videoRef.current = null; }
   }, []);
 
-  if (!canvasRef.current || !url || version === 0) return null;
-  return { canvas: canvasRef.current, version };
+  const canvas = canvasRef.current;
+  // objeto ESTÁVEL por quadro: efeitos que dependem dele só rodam quando chega quadro novo
+  return useMemo(() => (canvas && url && version > 0 ? { canvas, version } : null), [canvas, url, version]);
 }

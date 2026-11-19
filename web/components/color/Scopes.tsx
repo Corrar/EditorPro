@@ -19,25 +19,36 @@ const INTERVAL = 200;
 
 let worker: Worker | null | undefined;
 let seq = 0;
-const waiting = new Map<number, (s: ScopeData) => void>();
+/** pedidos em voo: guarda a imagem ORIGINAL (o worker recebe uma cópia transferida) p/ o cálculo local de reserva */
+const waiting = new Map<number, { img: ImageData; res: (s: ScopeData) => void; t: number }>();
+function failWorker() {
+  worker = null;
+  for (const w of waiting.values()) { window.clearTimeout(w.t); w.res(computeScopes(w.img, OPTS)); }
+  waiting.clear();
+}
 function getWorker(): Worker | null {
   if (worker !== undefined) return worker;
   try {
     worker = new Worker(new URL('../../lib/color/scopes.worker.ts', import.meta.url));
-    worker.onmessage = (e: MessageEvent<{ id: number; s: ScopeData }>) => { waiting.get(e.data.id)?.(e.data.s); waiting.delete(e.data.id); };
-    worker.onerror = () => { worker = null; waiting.clear(); };
+    worker.onmessage = (e: MessageEvent<{ id: number; s: ScopeData }>) => {
+      const w = waiting.get(e.data.id);
+      if (w) { window.clearTimeout(w.t); waiting.delete(e.data.id); w.res(e.data.s); }
+    };
+    worker.onerror = failWorker;
   } catch { worker = null; }
   return worker;
 }
 
-function scopesAsync(img: ImageData): Promise<ScopeData> {
+export function scopesAsync(img: ImageData): Promise<ScopeData> {
   const w = getWorker();
   if (!w) return Promise.resolve(computeScopes(img, OPTS));
   return new Promise((res) => {
     const id = ++seq;
-    const t = window.setTimeout(() => { waiting.delete(id); res(computeScopes(img, OPTS)); }, 1500);
-    waiting.set(id, (s) => { window.clearTimeout(t); res(s); });
-    w.postMessage({ id, data: img.data, width: img.width, height: img.height, opts: OPTS }, [img.data.buffer]);
+    // sem resposta em 1,5 s: calcula aqui (com a imagem intacta) e para de usar o worker
+    const t = window.setTimeout(() => { waiting.delete(id); worker = null; res(computeScopes(img, OPTS)); }, 1500);
+    waiting.set(id, { img, res, t });
+    const data = img.data.slice(); // ≤ 320 px de lado: cópia barata
+    w.postMessage({ id, data, width: img.width, height: img.height, opts: OPTS }, [data.buffer]);
   });
 }
 
@@ -62,6 +73,8 @@ export function useScopes(frame: ClipFrame | null, grade: ColorGrade, active: bo
   const timer = useRef<number | undefined>(undefined);
   const inflight = useRef(false);
   const want = useRef<{ frame: ClipFrame; grade: ColorGrade } | null>(null);
+  // dependências por VALOR (versão do quadro + grade): antes o objeto `frame` novo a cada render
+  // re-agendava o cálculo para sempre (5×/s parado)
   useEffect(() => {
     if (!active || !frame) return;
     want.current = { frame, grade };
@@ -82,7 +95,8 @@ export function useScopes(frame: ClipFrame | null, grade: ColorGrade, active: bo
     window.clearTimeout(timer.current);
     timer.current = window.setTimeout(run, Math.max(0, INTERVAL - (performance.now() - last.current)));
     return () => window.clearTimeout(timer.current);
-  }, [active, frame?.version, frame, grade]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, frame?.version, frame?.canvas, grade]);
   return active ? data : null;
 }
 

@@ -10,7 +10,8 @@ import ColorPanel from '@/components/color/ColorPanel';
 import { useEditor } from '@/lib/store';
 import { makeImageClip } from '@/lib/defaults';
 import type { ColorGrade, MediaAsset } from '@/lib/types';
-import { applyGradeImageData, getColorGrader, gradeLayer, ColorGrader, BUILTIN_LOOKS, getLut, resolveGrade, onCompareChanged } from '@/lib/color';
+import { applyGradeImageData, getColorGrader, gradeLayer, ColorGrader, BUILTIN_LOOKS, getLut, resolveGrade, onCompareChanged, setCompare } from '@/lib/color';
+import { scopesAsync } from '@/components/color/Scopes';
 
 function testCard(W = 640, H = 360): HTMLCanvasElement {
   const c = document.createElement('canvas'); c.width = W; c.height = H;
@@ -76,7 +77,28 @@ export default function DevColor() {
       const b = g.render(src, { saturation: -1 }, 64, 36);
       return { before: a, duringLoss: b === null };
     };
-    window.__color = { runEq, perf, contextLoss, looks: BUILTIN_LOOKS.map((l) => l.id) };
+    /** r2#2: Dividir não pode ir para o export (offline) */
+    const splitTest = () => {
+      const src = testCard(420, 100);
+      const read = (offline: boolean) => {
+        const out = gradeLayer(src, { saturation: -1 }, 420, 100, { offline }) as HTMLCanvasElement;
+        const c = document.createElement('canvas'); c.width = 420; c.height = 100;
+        const x = c.getContext('2d')!; x.drawImage(out, 0, 0);
+        return { left: Array.from(x.getImageData(380, 10, 1, 1).data.slice(0, 3)).concat(Array.from(x.getImageData(250, 10, 1, 1).data.slice(0, 3))) };
+      };
+      setCompare({ mode: 'split', split: 0.9 });
+      const preview = read(false), exp = read(true);
+      setCompare({ mode: 'off' });
+      return { preview, exp };
+    };
+    /** r2#9: escopos com worker que não responde */
+    const scopesTest = async () => {
+      const img = new ImageData(8, 8);
+      for (let i = 0; i < 64; i++) { img.data[i * 4] = 255; img.data[i * 4 + 3] = 255; }
+      const s = await scopesAsync(img);
+      return { histR255: s.histR[255], pixels: s.pixels };
+    };
+    window.__color = { runEq, perf, contextLoss, splitTest, scopesTest, store: useEditor, looks: BUILTIN_LOOKS.map((l) => l.id) };
   }, []);
 
   // simula draw.ts: fonte → gradeLayer → canvas
