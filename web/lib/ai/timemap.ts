@@ -6,6 +6,7 @@
 import type { CaptionSegment, CaptionWord, Clip, Id, Project, Seconds } from '../types';
 import { uid } from '../util';
 import { r3 } from './sanitize';
+import { sourceRangeOf, timelineTimeForSource } from '../ops';
 
 type MediaClip = Extract<Clip, { in: Seconds }>;
 
@@ -19,12 +20,11 @@ export function clipsOfAsset(p: Project, assetId: Id): MediaClip[] {
   return out.sort((a, b) => (a.type === b.type ? a.start - b.start : a.type === 'video' ? -1 : 1));
 }
 
-/** tempo da mídia -> tempo da timeline, ou null se esse trecho não está na timeline */
+/** tempo da mídia -> tempo da timeline, ou null se esse trecho não está na timeline (velocidade, curva e reverso) */
 export function mediaToTimeline(clips: MediaClip[], m: Seconds): { t: Seconds; clipId: Id } | null {
   for (const c of clips) {
-    const sp = c.speed > 0 ? c.speed : 1;
-    const mEnd = c.in + c.duration * sp;
-    if (m >= c.in - 1e-6 && m < mEnd + 1e-6) return { t: c.start + (m - c.in) / sp, clipId: c.id };
+    const t = timelineTimeForSource(c, m);
+    if (t !== null) return { t, clipId: c.id };
   }
   return null;
 }
@@ -33,10 +33,12 @@ export function mediaToTimeline(clips: MediaClip[], m: Seconds): { t: Seconds; c
 export function mediaRangeToTimeline(clips: MediaClip[], m0: Seconds, m1: Seconds): { start: Seconds; end: Seconds; clipId: Id }[] {
   const out: { start: Seconds; end: Seconds; clipId: Id }[] = [];
   for (const c of clips) {
-    const sp = c.speed > 0 ? c.speed : 1;
-    const a = Math.max(m0, c.in);
-    const b = Math.min(m1, c.in + c.duration * sp);
-    if (b - a > 1e-6) out.push({ start: c.start + (a - c.in) / sp, end: c.start + (b - c.in) / sp, clipId: c.id });
+    const [ca, cb] = sourceRangeOf(c);
+    const a = Math.max(m0, ca);
+    const b = Math.min(m1, cb);
+    if (b - a <= 1e-6) continue;
+    const ta = timelineTimeForSource(c, a)!, tb = timelineTimeForSource(c, b)!;
+    out.push({ start: Math.min(ta, tb), end: Math.max(ta, tb), clipId: c.id });
   }
   return out.sort((x, y) => x.start - y.start);
 }
@@ -59,10 +61,13 @@ export function captionsMediaToTimeline(p: Project, assetId: Id, segs: CaptionSe
       const hit = mediaToTimeline(clips, mid);
       if (!hit) continue;
       const c = clips.find((x) => x.id === hit.clipId)!;
-      const sp = c.speed > 0 ? c.speed : 1;
       const cEnd = c.start + c.duration;
-      const ws = Math.max(c.start, c.start + (w.start - c.in) / sp);
-      const we = Math.min(cEnd, c.start + (w.end - c.in) / sp);
+      const [ca, cb] = sourceRangeOf(c);
+      // inverso da curva de velocidade (antes: velocidade constante → até 14,6 s de deriva com "montagem")
+      const ta = timelineTimeForSource(c, Math.min(cb, Math.max(ca, w.start)))!;
+      const tb = timelineTimeForSource(c, Math.min(cb, Math.max(ca, w.end)))!;
+      const ws = Math.max(c.start, Math.min(ta, tb));
+      const we = Math.min(cEnd, Math.max(ta, tb));
       if (we - ws < 0.01) continue;
       if (!groups.has(hit.clipId)) { groups.set(hit.clipId, []); order.push(hit.clipId); }
       groups.get(hit.clipId)!.push({ start: r3(ws), end: r3(we), text: w.text });

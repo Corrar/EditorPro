@@ -146,3 +146,95 @@ describe('marcadores de trecho no ripple_delete', () => {
     expect([m.m3.t, m.m3.end]).toEqual([4, 7]);
   });
 });
+
+/* ---------- legendas ancoradas na mídia (sessão legendas, plano §2.7) ---------- */
+import { applyOps, retimeCaptions, timelineTimeForSource } from './ops';
+import type { CaptionSegment } from './types';
+import { captionsMediaToTimeline } from './ai/timemap';
+
+describe('legendas acompanham a fala depois de mexer nos clipes (deriva ≤ 1 ms)', () => {
+  // 2 clipes da mesma mídia: c1 mostra 0–10 s, c2 mostra 10–20 s; palavra a cada 0,5 s (tempo = mídia)
+  const base = (): Project => {
+    let p = applyOp(createProject(), { op: 'add_clip', trackId: 'track_video_1', clip: { ...makeVideoClip(asset, 0), id: 'c1', in: 0, duration: 10 } as VideoClip });
+    p = applyOp(p, { op: 'add_clip', trackId: 'track_video_1', clip: { ...makeVideoClip(asset, 10), id: 'c2', in: 10, duration: 10 } as VideoClip });
+    const segs: CaptionSegment[] = [];
+    for (let s = 0; s < 20; s += 2) {
+      const words = [0, 0.5, 1, 1.5].map((d, i) => ({ id: `w${s * 10 + i}`, start: s + d + 0.05, end: s + d + 0.4, text: `p${s * 10 + i}` }));
+      segs.push({ id: `s${s}`, start: words[0].start, end: words[3].end, text: words.map((w) => w.text).join(' '), words });
+    }
+    return applyOp(p, { op: 'set_captions', segments: segs, source: 'transcription' });
+  };
+  /** instante da mídia de cada palavra (pelo nome pN, a mídia original é conhecida) */
+  const mediaOf = (text: string) => { const n = +text.slice(1); const s = Math.floor(n / 10); const i = n % 10; return s + [0, 0.5, 1, 1.5][i] + 0.225; };
+  function drift(p: Project): { max: number; words: number } {
+    let max = 0, words = 0;
+    for (const s of p.captions.segments) for (const w of s.words ?? []) {
+      // início da palavra (o meio não serve com curva de velocidade: não é linear)
+      const t = w.start + 1e-6;
+      const c = videoClips(p).find((x) => t >= x.start - 1e-9 && t <= x.start + x.duration + 1e-9);
+      expect(c, `palavra ${w.text} fora de clipe`).toBeTruthy();
+      max = Math.max(max, Math.abs(mapSourceTime(c!, w.start) - (mediaOf(w.text) - 0.175)));
+      words++;
+    }
+    return { max, words };
+  }
+
+  it('velocidade 1,2 no 2º clipe', () => {
+    const p = applyOp(base(), { op: 'update_clip', clipId: 'c2', patch: { speed: 1.2, duration: 10 / 1.2 } });
+    const d = drift(p);
+    expect(d.max).toBeLessThanOrEqual(0.001);
+    expect(d.words).toBe(40);
+  });
+  it('preset de velocidade "herói" no 1º clipe (curva)', () => {
+    const p = applyOp(base(), { op: 'update_clip', clipId: 'c1', patch: { speedPreset: 'hero' } });
+    const d = drift(p);
+    expect(d.max).toBeLessThanOrEqual(0.001);
+  });
+  it('remover o 1º clipe com ripple: palavras dele somem, as do 2º vêm junto', () => {
+    const p = applyOp(base(), { op: 'remove_clip', clipId: 'c1', ripple: true });
+    const d = drift(p);
+    expect(d.max).toBeLessThanOrEqual(0.001);
+    expect(d.words).toBe(20);
+    expect(p.captions.segments[0].start).toBeLessThan(0.2);
+  });
+  it('mover o 2º clipe', () => {
+    const p = applyOp(base(), { op: 'move_clip', clipId: 'c2', start: 11 });
+    expect(drift(p).max).toBeLessThanOrEqual(0.001);
+    expect(p.captions.segments.find((s) => s.id === 's10')!.start).toBeCloseTo(11.05, 3);
+  });
+  it('aparar o fim do 1º clipe: palavras do trecho cortado somem, as outras não mexem', () => {
+    const before = base();
+    const p = applyOp(before, { op: 'trim_clip', clipId: 'c1', end: 8 });
+    const d = drift(p);
+    expect(d.max).toBeLessThanOrEqual(0.001);
+    expect(d.words).toBe(36);
+    expect(p.captions.segments.find((s) => s.id === 's10')).toEqual(before.captions.segments.find((s) => s.id === 's10'));
+  });
+  it('curva "montagem" já na hora de transcrever (timemap usa o inverso da curva)', () => {
+    const p0 = applyOp(base(), { op: 'set_captions', segments: [], source: undefined });
+    const p = applyOp(p0, { op: 'update_clip', clipId: 'c1', patch: { speedPreset: 'montage' } });
+    // transcrição em tempos DA MÍDIA -> timeline
+    const media: CaptionSegment[] = [{ id: 'm', start: 2.05, end: 9.4, text: 'p20 p21 p80 p81', words: [
+      { start: 2.05, end: 2.4, text: 'p20' }, { start: 2.55, end: 2.9, text: 'p21' }, { start: 8.05, end: 8.4, text: 'p80' }, { start: 8.55, end: 8.9, text: 'p81' }] }];
+    const tl = captionsMediaToTimeline(p, 'a1', media);
+    const p2 = applyOp(p, { op: 'set_captions', segments: tl });
+    expect(drift(p2).max).toBeLessThanOrEqual(0.001);
+  });
+  it('clipe sem mudança de tempo (só volume): legendas idênticas (mesmo objeto)', () => {
+    const before = base();
+    const p = applyOp(before, { op: 'update_clip', clipId: 'c1', patch: { volume: 0.5 } });
+    expect(p.captions).toBe(before.captions);
+    const p2 = applyOps(before, [{ op: 'update_clip', clipId: 'c1', patch: { speed: 1 } }]).project;
+    expect(p2.captions.segments).toEqual(before.captions.segments);
+  });
+  it('timelineTimeForSource inverte mapSourceTime (constante, curva e reverso)', () => {
+    for (const patch of [{ speed: 1.7 }, { speedPreset: 'bullet' as const }, { reverse: true }, { reverse: true, speedPreset: 'montage' as const }]) {
+      const c = { ...makeVideoClip(asset, 3), id: 'x', in: 5, duration: 8, ...patch } as VideoClip;
+      for (const t of [3.1, 5, 7.77, 10.9]) {
+        const m = mapSourceTime(c, t);
+        expect(Math.abs(timelineTimeForSource(c, m)! - t)).toBeLessThan(1e-4);
+      }
+    }
+    expect(retimeCaptions(base(), base()).captions.segments.length).toBe(10);
+  });
+});

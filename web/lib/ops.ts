@@ -10,7 +10,7 @@ import type {
 } from './types';
 import { ASPECT_SIZES } from './types';
 import { uid } from './util';
-import { curveOf, curveSpeedAt, sourceOffset, sourceSpan } from './engine/speed';
+import { curveOf, curveSpeedAt, mapSourceTime, sourceOffset, sourceSpan } from './engine/speed';
 import { interpolateTransform } from './engine/easing';
 
 type ClipPatch = Partial<Omit<Clip, 'id' | 'type'>> & Record<string, unknown>;
@@ -254,6 +254,134 @@ function rippleCaptions(segs: CaptionSegment[], start: Seconds, end: Seconds): C
     .filter((s) => s.end - s.start > EPS && (s.words ? s.words.length > 0 : true));
 }
 
+/* ---------- legendas ancoradas na mídia (aditivo, sessão legendas, plano §2.7) ---------- */
+
+type MediaClipV = Extract<Clip, { in: Seconds }>;
+
+/** trecho da mídia [m0,m1] que o clipe mostra (considera velocidade constante, curva e reverso) */
+export function sourceRangeOf(c: MediaClipV): [Seconds, Seconds] {
+  const span = sourceSpan(c as unknown as SpeedyClip);
+  return [c.in, c.in + span];
+}
+
+/**
+ * tempo de TIMELINE em que o clipe mostra o instante `m` da mídia (inverso de mapSourceTime, por busca
+ * binária — vale para curva de velocidade e reverso); null se esse instante não está no clipe.
+ */
+export function timelineTimeForSource(c: MediaClipV, m: Seconds): Seconds | null {
+  const [a, b] = sourceRangeOf(c);
+  if (m < a - 1e-6 || m > b + 1e-6) return null;
+  const sc = c as unknown as SpeedyClip;
+  const target = c.reverse ? c.in + (b - a) - m : m - c.in; // deslocamento consumido da fonte
+  if (!curveOf(sc)) return c.start + target / speedOf(c); // velocidade constante: exato
+  let lo = 0, hi = c.duration;
+  for (let k = 0; k < 50 && hi - lo > 1e-7; k++) {
+    const mid = (lo + hi) / 2;
+    if (sourceOffset(sc, mid) < target) lo = mid; else hi = mid;
+  }
+  return c.start + (lo + hi) / 2;
+}
+
+/** clipe que "fala" no tempo t: vídeo primeiro, depois áudio que não é trilha de fundo (duckUnderVoice) */
+function anchorClipAt(p: Project, t: Seconds): MediaClipV | null {
+  let best: MediaClipV | null = null;
+  let rank = 9;
+  for (const tr of p.tracks) for (const c of tr.clips) {
+    if ((c.type !== 'video' && c.type !== 'audio') || t < c.start - EPS || t > clipEnd(c) + EPS) continue;
+    const r = c.type === 'video' ? 0 : c.duckUnderVoice ? 2 : 1;
+    if (r < rank) { rank = r; best = c; }
+  }
+  return best;
+}
+
+function sameTiming(a: MediaClipV, b: MediaClipV): boolean {
+  return a.start === b.start && a.duration === b.duration && a.in === b.in && a.speed === b.speed && a.reverse === b.reverse
+    && a.speedCurve === b.speedCurve && a.speedPreset === b.speedPreset && (a as { assetId: Id }).assetId === (b as { assetId: Id }).assetId;
+}
+
+/**
+ * Depois de uma op que mexe em clipes de mídia (velocidade, curva, in, reverso, mover, aparar, remover com
+ * ripple), cada palavra da legenda volta para o instante da MÍDIA em que é falada: tempo da timeline ->
+ * mídia pelo clipe de antes -> timeline pelo mesmo clipe (ou um pedaço dele) depois. Palavra cujo trecho
+ * saiu do vídeo some (o texto da linha passa a ser o das palavras que sobraram). Palavras de clipes que
+ * não mudaram ficam exatamente onde estavam.
+ */
+export function retimeCaptions(before: Project, after: Project): Project {
+  if (!before.captions.segments.length) return after;
+  const afterClips = new Map<Id, MediaClipV>();
+  const byAsset = new Map<Id, MediaClipV[]>();
+  for (const tr of after.tracks) for (const c of tr.clips) {
+    if (c.type !== 'video' && c.type !== 'audio') continue;
+    afterClips.set(c.id, c);
+    byAsset.set(c.assetId, [...(byAsset.get(c.assetId) ?? []), c]);
+  }
+  let changed = false;
+  const mapT = (t: Seconds, anchor: MediaClipV | null): Seconds | null | undefined => {
+    if (!anchor) return undefined; // sem mídia embaixo: não mexe
+    const now = afterClips.get(anchor.id);
+    if (now && sameTiming(anchor, now)) return undefined; // clipe intacto
+    const m = mapSourceTime(anchor as unknown as SpeedyClip, Math.min(clipEnd(anchor), Math.max(anchor.start, t)));
+    // mesmo clipe (ou pedaço dele: split/ripple dão ids derivados) que ainda mostra esse instante
+    const cands = [now, ...(byAsset.get(anchor.assetId) ?? []).filter((c) => c.id !== anchor.id && c.id.startsWith(anchor.id))].filter((c): c is MediaClipV => !!c);
+    for (const c of cands) {
+      const tt = timelineTimeForSource(c, m);
+      if (tt !== null) return tt;
+    }
+    return null; // trecho saiu do vídeo
+  };
+  const segments: CaptionSegment[] = [];
+  for (const s of before.captions.segments) {
+    const words = s.words ?? [];
+    if (!words.length) {
+      const a = anchorClipAt(before, (s.start + s.end) / 2);
+      const ns = mapT(s.start, a), ne = mapT(s.end, a);
+      if (ns === undefined && ne === undefined) { segments.push(s); continue; }
+      changed = true;
+      if (ns === null || ne === null || ns === undefined || ne === undefined || ne - ns < EPS) continue;
+      segments.push({ ...s, start: ns, end: ne });
+      continue;
+    }
+    let touched = false;
+    const out: typeof words = [];
+    for (const w of words) {
+      const a = anchorClipAt(before, (w.start + w.end) / 2);
+      const ns = mapT(w.start, a), ne = mapT(w.end, a);
+      if (ns === undefined && ne === undefined) { out.push(w); continue; }
+      touched = true;
+      if (ns === null || ns === undefined) continue; // saiu do vídeo
+      const e = ne === null || ne === undefined ? ns + Math.max(0.05, w.end - w.start) : ne;
+      out.push({ ...w, start: Math.min(ns, e), end: Math.max(ns, e) });
+    }
+    if (!touched) { segments.push(s); continue; }
+    changed = true;
+    if (!out.length) continue;
+    out.sort((x, y) => x.start - y.start);
+    const firstOld = words.find((w) => w.id ? w.id === out[0].id : w.text === out[0].text) ?? words[0];
+    const lastOld = words.find((w) => w.id ? w.id === out[out.length - 1].id : false) ?? words[words.length - 1];
+    const d0 = firstOld.start - s.start, d1 = s.end - lastOld.end; // folgas que o usuário deu nas bordas
+    const text = out.length !== words.length ? out.map((w) => w.text).join(' ') : s.text;
+    segments.push({ ...s, words: out, text, start: Math.max(0, out[0].start - Math.max(0, d0)), end: out[out.length - 1].end + Math.max(0, d1) });
+  }
+  if (!changed) return after;
+  return { ...after, captions: { ...after.captions, segments: segments.sort((a, b) => a.start - b.start) } };
+}
+
+/** a op mexe no tempo de clipes de mídia? (então as legendas acompanham a fala) */
+function retimes(p: Project, op: EditOp): boolean {
+  if (!p.captions.segments.length) return false;
+  const media = (id: Id) => { const f = findClip(p, id); return !!f && (f.clip.type === 'video' || f.clip.type === 'audio'); };
+  switch (op.op) {
+    case 'update_clip': {
+      const k = Object.keys(op.patch);
+      return media(op.clipId) && k.some((x) => ['speed', 'speedCurve', 'speedPreset', 'in', 'reverse', 'start', 'duration'].includes(x));
+    }
+    case 'remove_clip': return !!op.ripple && media(op.clipId);
+    case 'move_clip':
+    case 'trim_clip': return media(op.clipId);
+    default: return false;
+  }
+}
+
 export class OpError extends Error {}
 
 /** todas as palavras das legendas, em ordem */
@@ -272,7 +400,8 @@ export function wordRange(p: Project, fromId: string, toId: string): { start: Se
 }
 
 export function applyOp(p: Project, op: EditOp): Project {
-  const next = applyOpInner(p, op);
+  let next = applyOpInner(p, op);
+  if (next !== p && retimes(p, op)) next = retimeCaptions(p, next);
   return next === p ? p : { ...next, updatedAt: Date.now() };
 }
 
