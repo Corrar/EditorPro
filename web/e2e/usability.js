@@ -512,8 +512,10 @@ async function persona4(media) {
       const back = page.getByRole('button', { name: /Voltar para antes desta edição/ });
       const m = await back.count();
       if (!m) throw new Error('nenhum "Voltar para antes desta edição" visível');
-      // respostas antigas: a 2ª edição é a penúltima (a última tem "Desfazer esta edição")
-      const target = m >= 2 ? back.nth(m - 2) : back.first();
+      // ai @0690788: cada botão traz data-edit="N" (rótulo "· Nª"); sem ele, cai no rótulo "· 2ª"
+      let target = page.locator('[data-edit="2"]').first();
+      if (!(await target.count())) target = page.getByRole('button', { name: /Voltar para antes desta edição.*2ª/ }).first();
+      if (!(await target.count())) throw new Error('botão da 2ª edição não identificado (sem data-edit="2" nem rótulo "· 2ª")');
       await target.scrollIntoViewIfNeeded().catch(() => {});
       await s.tap(target);
       const p = await readProject(page);
