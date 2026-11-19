@@ -14,7 +14,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import type { Clip, Id, Project, Seconds, TrackKind } from '@/lib/types';
 import { useEditor } from '@/lib/store';
-import { applyOps, clipEnd, findClip, projectDuration, trackKindFor, type EditOp } from '@/lib/ops';
+import { applyOps, clipEnd, findClip, opFocus, projectDuration, trackKindFor, type EditOp } from '@/lib/ops';
+import { aiTargetFor } from '@/lib/aiCursor';
 import { makeAudioClip, makeImageClip, makeVideoClip } from '@/lib/defaults';
 import { emit } from '@/lib/events';
 import { uid } from '@/lib/util';
@@ -140,6 +141,58 @@ export default function Timeline() {
     useEditor.getState().dispatch(ops, { history: false });
   }, [project.markers, project.coverTime]);
 
+  /* ---------------- cursor da IA (v2.4) ----------------
+     window.__epTimeToClientX(t): x na tela do tempo t (null se fora da área visível das trilhas);
+     a cada op da IA, revela o alvo (tempo/clipe) ANTES do cursor chegar (rolagem instantânea). */
+  useEffect(() => {
+    const w = window as unknown as { __epTimeToClientX?: (t: number) => number | null };
+    const fn = (t: number) => {
+      const el = scrollRef.current;
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      const x = r.left + hw() + t * zoomRef.current - el.scrollLeft;
+      const minX = r.left + (dimsRef.current.center ? 0 : hw());
+      return x >= minX - 0.5 && x <= r.left + el.clientWidth + 0.5 ? x : null;
+    };
+    w.__epTimeToClientX = fn;
+    const reveal = (op: EditOp) => {
+      const el = scrollRef.current;
+      if (!el) return;
+      const st = useEditor.getState();
+      const p = st.project;
+      const target = aiTargetFor(p, op);
+      const focusClip = target?.kind === 'clip' ? target.clipId : opFocus(p, op).clipId;
+      const f = focusClip ? findClip(p, focusClip) : null;
+      const t0 = target?.kind === 'time' ? target.t : f ? f.clip.start : opFocus(p, op).time;
+      // horizontal (no modo centro quem segue é o playhead, que o applyLive já move)
+      if (t0 != null && !dimsRef.current.center) {
+        const z = zoomRef.current;
+        const x = hw() + t0 * z;
+        const left = el.scrollLeft + hw() + 24;
+        const right = el.scrollLeft + el.clientWidth - 48;
+        if (x < left || x > right) el.scrollLeft = Math.max(0, x - hw() - (el.clientWidth - hw()) * 0.3);
+      }
+      setUi({ scrollLeft: el.scrollLeft, viewH: el.clientHeight }); // virtualização renderiza o alvo já
+      // vertical: a linha da trilha do clipe
+      if (f) {
+        const row = rowsRef.current.find((r) => r.id === f.track.id);
+        if (row) {
+          const top = dimsRef.current.rulerH + row.top;
+          if (top < el.scrollTop + dimsRef.current.rulerH || top + row.height > el.scrollTop + el.clientHeight) {
+            el.scrollTop = Math.max(0, top - dimsRef.current.rulerH - 12);
+          }
+        }
+      }
+    };
+    const unsub = useEditor.subscribe((s, prev) => {
+      if (s.live.running && s.live.current && s.live.current !== prev.live.current) reveal(s.live.current);
+    });
+    return () => {
+      unsub();
+      if (w.__epTimeToClientX === fn) delete w.__epTimeToClientX;
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // desfazer/refazer/IA podem remover clipes selecionados: poda a seleção
   useEffect(() => {
     const st = useEditor.getState();
@@ -204,6 +257,8 @@ export default function Timeline() {
     if (Math.abs(el.scrollLeft - target) < 0.5) return;
     progScroll.current = target;
     el.scrollLeft = target;
+    // virtualização acompanha já (sem esperar o rAF do evento de rolagem)
+    setUi({ scrollLeft: el.scrollLeft });
   };
   useEffect(() => {
     if (!dims.center) return;
@@ -1180,7 +1235,7 @@ export default function Timeline() {
       {showMinimap && !dims.short && !dims.center && <Minimap scrollRef={scrollRef} />}
       <div className="ep-tl-scrollwrap">
       {dims.center && <CenterOverlay actions={toolbarActions} />}
-      <div className="ep-tl-scroll" ref={scrollRef} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
+      <div className="ep-tl-scroll" ref={scrollRef} data-ep-timeline onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
         <div className="ep-tl-content" style={{ width: contentW, height: dimsRef.current.rulerH + rowsH }}>
           <Ruler zoom={zoom} width={laneW} onScrubStart={onScrubStart} />
           <div
