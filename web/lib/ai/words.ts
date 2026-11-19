@@ -69,3 +69,29 @@ export function splitPoints(samples: Float32Array, sampleRate: number, target = 
   points.push(total);
   return points;
 }
+
+/**
+ * "parece fala?" — fala tem energia que oscila sílaba a sílaba; tom contínuo, zumbido ou
+ * silêncio não. Evita mandar ao Whisper trechos que o fazem alucinar/entrar em loop.
+ */
+export function speechLikely(samples: Float32Array, sampleRate: number): boolean {
+  const hop = Math.max(1, Math.round(sampleRate * 0.03));
+  const rms: number[] = [];
+  for (let i = 0; i + hop <= samples.length; i += hop) {
+    let s = 0;
+    for (let k = i; k < i + hop; k++) s += samples[k] * samples[k];
+    rms.push(Math.sqrt(s / hop));
+  }
+  if (rms.length < 10) return false;
+  const peak = Math.max(...rms);
+  if (peak < 0.005) return false; // silêncio
+  const loud = rms.filter((r) => r > peak * 0.1);
+  if (loud.length < rms.length * 0.08) return false;
+  const mean = loud.reduce((a, b) => a + b, 0) / loud.length;
+  const sd = Math.sqrt(loud.reduce((a, b) => a + (b - mean) ** 2, 0) / loud.length);
+  // variação rápida entre janelas vizinhas (modulação silábica)
+  let jitter = 0;
+  for (let i = 1; i < loud.length; i++) jitter += Math.abs(loud[i] - loud[i - 1]);
+  jitter /= (loud.length - 1) * mean;
+  return sd / mean > 0.25 && jitter > 0.08;
+}

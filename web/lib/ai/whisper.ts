@@ -8,7 +8,7 @@
 import type { CaptionSegment, MediaAsset } from '../types';
 import { decodeAudio, toMono16k } from './analysis';
 import { deviceProfile } from './frames';
-import { splitPoints, wordsToSegments, type WhisperChunk } from './words';
+import { speechLikely, splitPoints, wordsToSegments, type WhisperChunk } from './words';
 
 export interface WhisperChoice {
   model: string;
@@ -145,7 +145,8 @@ export async function transcribeMedia(asset: MediaAsset, opts: TranscribeOptions
     const a = cuts[i], b = cuts[i + 1];
     opts.onStatus?.(`Transcrevendo a fala… ${Math.round((a / total) * 100)}%`, a / total);
     const piece = audio.slice(Math.floor(a * 16000), Math.floor(b * 16000)); // cópia: transferida ao worker
-    const res = await request<{ chunks: WhisperChunk[] }>(getWorker(), { type: 'transcribe', audio: piece, language: whisperLanguage(opts.language ?? 'pt-BR') }, undefined, opts.signal, [piece.buffer], Math.max(60_000, (b - a) * 8000));
+    if (!speechLikely(piece, 16000)) continue; // sem fala (silêncio/tom/zumbido): não manda ao Whisper
+    const res = await request<{ chunks: WhisperChunk[] }>(getWorker(), { type: 'transcribe', audio: piece, language: whisperLanguage(opts.language ?? 'pt-BR') }, undefined, opts.signal, [piece.buffer], Math.max(30_000, (b - a) * 4000));
     for (const c of res.chunks) chunks.push({ text: c.text, timestamp: [c.timestamp[0] + a, c.timestamp[1] === null ? null : c.timestamp[1] + a] });
   }
   opts.onStatus?.('Transcrevendo a fala… 100%', 1);

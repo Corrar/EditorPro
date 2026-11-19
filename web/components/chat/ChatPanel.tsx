@@ -175,22 +175,25 @@ export default function ChatPanel() {
   return (
     <div className="ep-ch">
       <header className="ep-ch-head">
-        <div className="ep-ch-avatar lg"><Icon d={I.spark} size={17} /></div>
-        <div className="ep-ch-headtxt">
-          <b>Assistente IA</b>
-          <span>{busy ? 'Trabalhando…' : claude ? 'Pronto para editar' : 'Modo demonstração'}</span>
+        <div className="ep-aicard ep-ch-aicard">
+          <div className="spark"><Icon d={I.spark} size={20} /></div>
+          <div className="ep-ch-headtxt">
+            <b className="t">Assistente IA</b>
+            <span className="d">{busy ? 'Trabalhando…' : claude ? 'Pronto para editar' : 'Modo demonstração'}</span>
+          </div>
+          <button
+            className={`ep-ch-cc${whisper ? ' on' : ''}`}
+            onClick={() => setWhisper(!whisper)}
+            aria-pressed={whisper}
+            aria-label="Transcrição no aparelho"
+            title={whisper ? 'Transcrição no aparelho ligada (Whisper, grátis). Toque para desligar.' : 'Transcrição no aparelho desligada. Toque para ligar.'}
+          >
+            CC
+          </button>
+          <span className={`ep-ch-badge${claude ? ' on' : ''}`} title={claude ? `Claude (${status?.model})` : 'Sem chave de IA: planejador local, grátis'}>
+            {status ? (claude ? 'Claude' : 'Demo') : '…'}
+          </span>
         </div>
-        <button
-          className={`ep-ch-cc${whisper ? ' on' : ''}`}
-          onClick={() => setWhisper(!whisper)}
-          aria-pressed={whisper}
-          title={whisper ? 'Transcrição no aparelho ligada (Whisper, grátis). Toque para desligar.' : 'Transcrição no aparelho desligada. Toque para ligar.'}
-        >
-          CC
-        </button>
-        <span className={`ep-ch-badge${claude ? ' on' : ''}`} title={claude ? `Claude (${status?.model})` : 'Sem chave de IA: planejador local, grátis'}>
-          {status ? (claude ? 'Claude' : 'Demo') : '…'}
-        </span>
       </header>
 
       <div className="ep-ch-list" ref={listRef}>
@@ -247,7 +250,7 @@ export default function ChatPanel() {
         ) : null}
         <div className="ep-ch-chips" role="list">
           {SUGGESTIONS.map((s) => (
-            <button key={s} role="listitem" className="ep-ch-chip" disabled={busy} onClick={() => submit(s)}>
+            <button key={s} role="listitem" className="ep-pill2 ep-ch-chip" disabled={busy} onClick={() => submit(s)}>
               {s}
             </button>
           ))}

@@ -49,6 +49,8 @@ const DEV_CSS = `
 const COLORS: Record<string, string> = { video: '#D9641E', text: '#8B5CF6', audio: '#2ED573' };
 
 export default function DevChat() {
+  const [dark, setDark] = useState(true);
+  useEffect(() => { if (new URLSearchParams(location.search).get('theme') === 'light') setDark(false); }, []);
   const project = useEditor((s) => s.project);
   const assets = useEditor((s) => s.assets);
   const playhead = useEditor((s) => s.playhead);
@@ -67,7 +69,7 @@ export default function DevChat() {
   }, []);
 
   return (
-    <div className="ep-root dark ep-devchat" style={{ background: 'var(--canvasBg)' }}>
+    <div className={`ep-root${dark ? ' dark' : ''} ep-devchat`} style={{ background: 'var(--canvasBg)' }}>
       <style dangerouslySetInnerHTML={{ __html: DEV_CSS }} />
       <main style={{ minHeight: 0, padding: 20, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div className="ep-card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
