@@ -138,6 +138,12 @@ export const TEXT_ANIMATION_LABELS: Record<TextAnimation, string> = {
   none: 'Nenhuma', fade: 'Esmaecer', pop: 'Pop', 'slide-up': 'Subir', typewriter: 'Máquina de escrever', bounce: 'Quicar',
   karaoke: 'Karaokê', 'slide-down': 'Descer', 'slide-left': 'Deslizar ←', 'slide-right': 'Deslizar →', zoom: 'Zoom',
   blur: 'Desfocar', wave: 'Onda', glitch: 'Glitch', flicker: 'Piscar', spin: 'Girar',
+  // biblioteca profissional (rótulos adicionados pela principal; animação implementada pelo engine)
+  'word-pop': 'Palavra a palavra · pop', 'word-fade': 'Palavra a palavra · esmaecer', 'word-slide': 'Palavra a palavra · deslizar',
+  'word-bounce': 'Palavra a palavra · quicar', 'word-drop': 'Palavra a palavra · cair', 'word-highlight': 'Palavra a palavra · destaque',
+  'char-wave': 'Letra a letra · onda', 'char-fade': 'Letra a letra · esmaecer', 'char-pop': 'Letra a letra · pop',
+  'char-typewriter': 'Letra a letra · digitando', 'scale-in': 'Crescer', 'blur-in': 'Surgir do desfoque', stomp: 'Pisão',
+  drop: 'Cair', 'highlight-sweep': 'Marca-texto', 'underline-draw': 'Sublinhar', 'box-reveal': 'Revelar caixa', shake: 'Tremer',
 };
 
 /** escala de tamanho: fontSize do contrato é relativo à altura 1920 */
