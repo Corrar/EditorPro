@@ -15,6 +15,7 @@ import { orderForViewing, shortExplain } from './order';
 import { SCOPE_LABELS, styleScopeFromText, wantsApplyNow, type StyleScope } from './model';
 import { explainChanges, HELP_TEXT, isExplainRequest, isHelpRequest } from './suggest';
 import { DEMO_HELP } from './demo';
+import { abortError, asOwn, isAbort, isOwnChange } from './runGuard';
 import { analyzeModel, applyComments, applyModelStyle, chatEdit, generateCaptions, runFirstEdit, type AskOption, type PipelineOptions, type PipelineResult } from './pipeline';
 
 export type StepState = 'pending' | 'active' | 'done' | 'skipped';
@@ -129,7 +130,26 @@ export const useAIChat = create<AIChatState>((set, get) => {
     const msgId = editor().pushMessage({ role: 'assistant', text: '', status: 'pending' });
     patchRun(msgId, { phase: intro, log: [], steps: [], done: false, before: editor().project, pastLen: editor().past.length });
 
+    // a execução fica presa ao projeto e para por inteiro com Parar / desfazer / edição manual / troca de projeto
+    const pid = editor().project.id;
+    const runCtrl = new AbortController();
+    let stopReason = '';
+    const stopRun = (why: string) => {
+      if (runCtrl.signal.aborted) return;
+      stopReason = why;
+      runCtrl.abort();
+      answers.get(msgId)?.('skip'); // pergunta pendente não prende a execução
+      skips.get(msgId)?.abort();
+    };
+    const unsub = useEditor.subscribe((st, prev) => {
+      if (st.project.id !== pid) stopRun('project');
+      else if (st.live.cancelled && !prev.live.cancelled) stopRun('stop');
+      else if (st.project !== prev.project && !st.live.running && !prev.live.running && !isOwnChange()) stopRun('manual');
+    });
+    const guard = () => { if (runCtrl.signal.aborted || editor().project.id !== pid) throw abortError(); };
+
     const apply: PipelineOptions['apply'] = async (ops: EditOp[], o) => {
+      guard();
       const base = get().runs[msgId]?.steps.length ?? 0;
       // ordem boa de assistir (cortes -> legendas -> efeitos -> textos -> áudio) e balão curto no cursor
       // lote enorme (ex.: run_script com centenas de ops): mostra as primeiras ao vivo e aplica o resto de uma vez
@@ -166,18 +186,20 @@ export const useAIChat = create<AIChatState>((set, get) => {
       let restDone = false;
       if (rest.length && lastStep === withIds.length - 1 && applied.length > 0) {
         patchRun(msgId, (r) => ({ steps: r.steps.map((st) => (st.id === restId ? { ...st, state: 'active' } : st)) }));
-        editor().dispatch(rest);
+        asOwn(() => editor().dispatch(rest));
         restDone = true;
       }
       patchRun(msgId, (r) => ({
         steps: r.steps.map((st) => (ids.includes(st.id) ? { ...st, state: ok.has(st.id) ? 'done' : 'skipped' } : st.id === restId ? { ...st, state: restDone ? 'done' : 'skipped' } : st)),
       }));
+      guard(); // Parar no meio do lote: a execução inteira para aqui
       return restDone ? [...applied, ...rest.map((o) => o.id!)] : applied;
     };
 
     try {
       const res = await task({
         apply,
+        signal: runCtrl.signal,
         onStatus: (phase, progress) => patchRun(msgId, { phase, progress }),
         onLog: (line) => patchRun(msgId, (r) => ({ log: [...r.log, line] })),
         whisper: get().whisper,
@@ -212,11 +234,25 @@ export const useAIChat = create<AIChatState>((set, get) => {
       void getStatus().then((st) => set({ status: st })); // o selo Claude/Demo acompanha a última checagem
       return true;
     } catch (e) {
+      if (isAbort(e) || runCtrl.signal.aborted) {
+        if (stopReason === 'project' || editor().project.id !== pid) {
+          // projeto trocado: nada é aplicado no outro; a mensagem (se ainda existir) não fica "pensando" para sempre
+          if (editor().messages.some((m) => m.id === msgId)) editor().updateMessage(msgId, { text: 'Edição interrompida: o projeto foi trocado.', status: 'done' });
+          patchRun(msgId, { phase: undefined, progress: undefined, done: true });
+          return false;
+        }
+        const after = editor().project;
+        const changed = after !== get().runs[msgId]?.before;
+        patchRun(msgId, { phase: undefined, progress: undefined, done: true, after: changed ? after : undefined, final: after });
+        editor().updateMessage(msgId, { text: stopReason === 'manual' ? 'Parei a edição porque você mexeu no projeto.' : 'Edição parada.', status: 'done' });
+        return false;
+      }
       const msg = e instanceof Error ? e.message : String(e);
       patchRun(msgId, { phase: undefined, progress: undefined, done: true, error: msg });
       editor().updateMessage(msgId, { text: `Não consegui concluir: ${msg}`, status: 'error' });
       return false;
     } finally {
+      unsub();
       answers.delete(msgId);
       skips.delete(msgId);
       patchRun(msgId, { question: undefined, skipLabel: undefined });

@@ -161,7 +161,7 @@ export function emphasisZoomOps(p: Project, max = 8, scale = 1.18): { ops: EditO
   let count = 0;
   for (const { clip, kfs, n } of byClip.values()) {
     const sorted = kfs.sort((a, b) => a.t - b.t).filter((k, i, a) => i === 0 || k.t > a[i - 1].t + 0.005);
-    ops.push({ op: 'update_clip', clipId: clip.id, patch: { keyframes: sorted }, explain: `Zoom na ênfase: ${n} frase${n > 1 ? 's' : ''} a partir de ${fmt(clip.start)}` });
+    ops.push({ op: 'update_clip', clipId: clip.id, patch: { keyframes: mergeKfProps(clip.keyframes, sorted, ['scale']) }, explain: `Zoom na ênfase: ${n} frase${n > 1 ? 's' : ''} a partir de ${fmt(clip.start)}` });
     count += n;
   }
   return { ops, count };
@@ -301,7 +301,7 @@ export function hookOps(p: Project, text: string): EditOp[] {
     { op: 'add_clip', trackId: fxTrack, clip: { id: 'hook_flash', type: 'adjustment', start: 0, duration: 0.35, filters: [], effects: [{ kind: 'flash-strobe', intensity: 0.8 }] }, explain: 'Flash de abertura' },
   ];
   const first = mainVideoClips(p)[0];
-  if (first) ops.push({ op: 'update_clip', clipId: first.id, patch: { keyframes: [{ t: 0, transform: { scale: 1.25 } }, { t: 0.5, transform: { scale: 1 }, easing: 'easeOut' }] }, explain: 'Zoom rápido de abertura' });
+  if (first) ops.push({ op: 'update_clip', clipId: first.id, patch: { keyframes: mergeKfProps(first.keyframes, [{ t: 0, transform: { scale: 1.25 } }, { t: 0.5, transform: { scale: 1 }, easing: 'easeOut' }], ['scale']) }, explain: 'Zoom rápido de abertura' });
   return ops.filter((o) => !(o.op === 'add_clip' && (p.tracks.some((t) => t.clips.some((c) => c.id === o.clip.id)))));
 }
 
@@ -319,6 +319,32 @@ export function reframeX(sx: number, srcAspect: number, outAspect: number, scale
   return r3(Math.max(-maxShift, Math.min(maxShift, x)));
 }
 
+/**
+ * Mescla keyframes POR PROPRIEDADE: tira `props` dos keyframes existentes (os que ficarem vazios saem),
+ * junta com os novos (mesmo t = funde) e ordena. O motor interpola cada propriedade só entre os
+ * keyframes que a definem, então o zoom (scale) não apaga o reenquadramento (x) e vice-versa.
+ */
+export function mergeKfProps(existing: Keyframe[] | undefined, incoming: Keyframe[], props: string[]): Keyframe[] {
+  const drop = new Set(props);
+  const kept: Keyframe[] = [];
+  for (const k of existing ?? []) {
+    const tr = Object.fromEntries(Object.entries(k.transform ?? {}).filter(([key]) => !drop.has(key))) as Keyframe['transform'];
+    const pr = k.props ? Object.fromEntries(Object.entries(k.props).filter(([key]) => !drop.has(key))) : undefined;
+    const hasProps = !!pr && Object.keys(pr).length > 0;
+    if (!Object.keys(tr).length && !hasProps) continue;
+    const { props: _p, ...rest } = k;
+    kept.push({ ...rest, transform: tr, ...(hasProps ? { props: pr } : {}) });
+  }
+  const out: Keyframe[] = [];
+  for (const k of [...kept, ...incoming].sort((a, b) => a.t - b.t)) {
+    const last = out[out.length - 1];
+    if (last && Math.abs(last.t - k.t) < 0.005) {
+      out[out.length - 1] = { ...last, ...k, transform: { ...last.transform, ...k.transform }, ...(last.props || k.props ? { props: { ...last.props, ...k.props } } : {}) };
+    } else out.push(k);
+  }
+  return out;
+}
+
 /** suaviza a trajetória do assunto (média móvel + zona morta p/ não "tremer") */
 export function smoothTrack(points: { t: number; x: number }[], window = 2, deadZone = 0.04): { t: number; x: number }[] {
   const sm = points.map((p, i) => {
@@ -333,7 +359,23 @@ export function smoothTrack(points: { t: number; x: number }[], window = 2, dead
 /** keyframes de reenquadramento p/ um clipe a partir de pontos (t na MÍDIA, x do assunto 0..1) */
 export function reframeKeyframes(clip: VideoClip, subject: { t: number; x: number }[], srcAspect: number, outAspect: number): Keyframe[] {
   const sp = clip.speed > 0 ? clip.speed : 1;
-  const pts = smoothTrack(subject.filter((s) => s.t >= clip.in - 0.5 && s.t <= clip.in + clip.duration * sp + 0.5));
+  const sorted = [...subject].sort((a, b) => a.t - b.t);
+  const a0 = clip.in - 0.5, a1 = clip.in + clip.duration * sp + 0.5;
+  const inside = sorted.filter((s) => s.t >= a0 && s.t <= a1);
+  if (!inside.length) {
+    // pedaço curto sem amostra: posição interpolada entre os vizinhos (ou o mais próximo), nunca o centro
+    if (!sorted.length) return [{ t: 0, transform: { x: 0 } }];
+    const mid = clip.in + (clip.duration * sp) / 2;
+    const before = [...sorted].reverse().find((s) => s.t <= mid);
+    const after = sorted.find((s) => s.t >= mid);
+    const x = before && after && after.t > before.t ? before.x + ((after.x - before.x) * (mid - before.t)) / (after.t - before.t) : (before ?? after)!.x;
+    return [{ t: 0, transform: { x: reframeX(x, srcAspect, outAspect, clip.transform.scale) } }];
+  }
+  // vizinhos reais antes/depois da janela entram na suavização (bordas do pedaço sem salto)
+  const prev = [...sorted].reverse().find((s) => s.t < a0);
+  const next = sorted.find((s) => s.t > a1);
+  const pts = smoothTrack([...(prev ? [prev] : []), ...inside, ...(next ? [next] : [])]).filter((s) => s.t >= a0 - 1e-6 && s.t <= a1 + 1e-6);
+  if (!pts.length) pts.push(...smoothTrack(inside).slice(0, 1));
   const kf: Keyframe[] = pts
     .map((s) => ({ t: r3(Math.max(0, Math.min(clip.duration, (s.t - clip.in) / sp))), transform: { x: reframeX(s.x, srcAspect, outAspect, clip.transform.scale) }, easing: 'easeInOut' as const }))
     .filter((k, i, a) => i === 0 || k.t - a[i - 1].t > 0.2);
@@ -350,7 +392,7 @@ export function reframeOps(p: Project, assets: Record<Id, MediaAsset>, subjects:
     if (!a?.width || !a.height || !sub?.length) continue;
     const src = a.width / a.height;
     if (src <= outAspect + 0.01) continue; // mídia não é mais larga: nada a reenquadrar
-    ops.push({ op: 'update_clip', clipId: c.id, patch: { fit: 'cover', keyframes: reframeKeyframes(c, sub, src, outAspect) }, explain: `Reenquadrando ${c.label ? `"${c.label}"` : 'o clipe'} para ${p.aspect} seguindo o assunto` });
+    ops.push({ op: 'update_clip', clipId: c.id, patch: { fit: 'cover', keyframes: mergeKfProps(c.keyframes, reframeKeyframes(c, sub, src, outAspect), ['x']) }, explain: `Reenquadrando ${c.label ? `"${c.label}"` : 'o clipe'} para ${p.aspect} seguindo o assunto` });
   }
   return ops;
 }
@@ -387,4 +429,9 @@ export function detectBeats(samples: Float32Array, sampleRate: number, minInterv
     }
   }
   return out;
+}
+
+/** propriedades que os keyframes animam (chaves de transform + caminhos de props) */
+export function kfPropsOf(kfs: Keyframe[]): string[] {
+  return [...new Set(kfs.flatMap((k) => [...Object.keys(k.transform ?? {}), ...Object.keys(k.props ?? {})]))];
 }

@@ -25,6 +25,8 @@ export interface EditRequest {
   context?: ChatContext;
   /** miniaturas do material p/ o Claude "ver" o vídeo */
   frames?: EditFrame[];
+  /** cancela o pedido (Parar / projeto trocado) */
+  signal?: AbortSignal;
 }
 
 export interface EditResponse {
@@ -59,15 +61,23 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), CLIENT_TIMEOUT_MS);
+  // signal do usuário (Parar / projeto trocado) soma com o timer
+  const user = init?.signal;
+  const onUser = () => ctrl.abort();
+  if (user) { if (user.aborted) ctrl.abort(); else user.addEventListener('abort', onUser, { once: true }); }
   try {
-    res = await fetch(path, { credentials: 'same-origin', ...init, signal: init?.signal ?? ctrl.signal });
+    res = await fetch(path, { credentials: 'same-origin', ...init, signal: ctrl.signal });
   } catch (e) {
     clearTimeout(timer);
+    user?.removeEventListener('abort', onUser);
+    if (user?.aborted) { const err = new Error('Edição parada'); err.name = 'AbortError'; throw err; }
     if (ctrl.signal.aborted) throw new AIClientError('A IA demorou demais para responder. Tente de novo ou peça algo menor.', 504, 'timeout');
     throw new AIClientError('Sem conexão com o servidor.', 0, 'network');
   }
   const data = (await res.json().catch(() => ({}))) as T & { error?: string; code?: string };
   clearTimeout(timer);
+  user?.removeEventListener('abort', onUser);
+  if (user?.aborted) { const err = new Error('Edição parada'); err.name = 'AbortError'; throw err; }
   if (!res.ok) {
     if (res.status === 401 && !data.code) throw new AIClientError('Sessão expirada — entre de novo.', 401, 'login');
     if ((res.status === 504 || res.status === 502) && !data.code) throw new AIClientError('A IA demorou demais para responder. Tente de novo ou peça algo menor.', res.status, 'timeout');
@@ -77,10 +87,10 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   return data;
 }
 
-function postJson<T>(path: string, body: unknown): Promise<T> {
+function postJson<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
   const json = JSON.stringify(body);
   if (json.length > MAX_BODY) throw new AIClientError('Pedido grande demais para enviar à IA.', 413, 'too_big');
-  return call<T>(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: json });
+  return call<T>(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: json, ...(signal ? { signal } : {}) });
 }
 
 let statusCache: Promise<AIStatus> | null = null;
@@ -129,7 +139,7 @@ export async function requestEdit(req: EditRequest): Promise<EditResponse> {
   let frames = req.frames ?? [];
   const baseLen = JSON.stringify(base).length;
   while (frames.length && baseLen + JSON.stringify(frames).length > MAX_BODY) frames = frames.length > 2 ? frames.filter((_, i) => i % 2 === 0) : [];
-  const r = await postJson<EditResponse>('/api/ai/edit', { ...base, frames });
+  const r = await postJson<EditResponse>('/api/ai/edit', { ...base, frames }, req.signal);
   return { reply: r.reply, ops: r.ops, comments: r.comments, sfx: r.sfx, deferred: r.deferred, droppedReasons: r.droppedReasons, ok: r.ok };
 }
 

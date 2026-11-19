@@ -20,6 +20,8 @@ export interface LiveState {
   current?: EditOp;
   done: number;
   total: number;
+  /** o último lote foi interrompido (Parar / desfazer / edição manual), não terminou sozinho */
+  cancelled?: boolean;
   /** clipe a destacar com brilho na timeline */
   highlightClipId?: Id;
 }
@@ -205,7 +207,7 @@ export const useEditor = create<EditorState>((set, get) => ({
     const { project } = get();
     // fecha o lote parcial como 1 passo de desfazer (só se ainda for o mesmo projeto)
     if (before && project !== before && project.id === before.id) set((s) => ({ past: [...s.past, before].slice(-HISTORY_LIMIT), future: [] }));
-    set((s) => ({ live: { ...s.live, running: false, current: undefined, highlightClipId: undefined } }));
+    set((s) => ({ live: { ...s.live, running: false, current: undefined, highlightClipId: undefined, cancelled: true } }));
   },
 }));
 

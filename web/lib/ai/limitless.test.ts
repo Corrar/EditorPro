@@ -19,7 +19,7 @@ const TR = 'vec4 transition(vec2 uv){ return mix(texture2D(uFrom, uv), texture2D
 describe('contrato "IA sem limites" no validate', () => {
   it('efeito e transição custom (GLSL) passam; sem a função de entrada ou grande demais caem', () => {
     const r = sanitizeOps([
-      { op: 'update_clip', clipId: 'c2', patch: { effects: [{ kind: 'custom', code: FX, name: 'Pulso', params: [1, 2, 3, 4, 5, 6, 7, 8, 9], intensity: 0.8 }, { kind: 'custom', code: 'void main(){}' }, { kind: 'custom', code: FX + '//' + 'x'.repeat(9000) }], transitionIn: { kind: 'custom', code: TR, duration: 0.8, name: 'Cortina' } } },
+      { op: 'update_clip', clipId: 'c2', patch: { effects: [{ kind: 'custom', code: FX, name: 'Pulso', params: [1, 2, 3, 4, 5, 6, 7, 8, 9], intensity: 0.8 }, { kind: 'custom', code: 'void main(){}' }, { kind: 'custom', code: FX + '//' + 'x'.repeat(17000) }], transitionIn: { kind: 'custom', code: TR, duration: 0.8, name: 'Cortina' } } },
     ], base(), assets);
     expect(r.dropped).toEqual([]);
     const c = r.project.tracks[0].clips.find((x) => x.id === 'c2') as VideoClip;

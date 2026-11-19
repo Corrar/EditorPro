@@ -85,7 +85,10 @@ describe('combinar cor com o modelo (ColorGrade)', () => {
     expect(c.colorPreset).toBe('warm');
     expect(c.filters.some((f) => f.kind === 'temperature')).toBe(false);
     const s1 = sanitizeOps([{ op: 'update_clip', clipId: 'c1', patch: { colorGrade: { lut: { id: 'look:teal-orange', intensity: 0.8 }, contrast: 0.1 } } }], s.project, { a1: src });
-    expect((s1.project.tracks[0].clips[0] as VideoClip).colorGrade).toEqual({ lut: { id: 'look:teal-orange', intensity: 0.8 }, contrast: 0.1 });
+    // mescla (bug r2 #2): mantém o match (offset) e acrescenta LUT/contraste
+    const g1 = (s1.project.tracks[0].clips[0] as VideoClip).colorGrade!;
+    expect(g1).toMatchObject({ lut: { id: 'look:teal-orange', intensity: 0.8 }, contrast: 0.1 });
+    expect(g1.offset).toEqual(c.colorGrade!.offset);
     const s2 = sanitizeOps([{ op: 'update_clip', clipId: 'c1', patch: { colorGrade: null } }], s.project, { a1: src });
     expect((s2.project.tracks[0].clips[0] as VideoClip).colorGrade).toBeUndefined();
     const { engineCatalogForAI } = await import('./catalogs');

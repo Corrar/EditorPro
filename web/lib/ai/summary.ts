@@ -20,7 +20,11 @@ function clipLine(c: Clip): Record<string, unknown> {
   if (c.type === 'image') base.assetId = c.assetId;
   if (c.type === 'video' || c.type === 'image') {
     if (c.transform.scale !== 1 || c.transform.x || c.transform.y) base.transform = c.transform;
-    if (c.keyframes?.length) base.keyframes = c.keyframes.length;
+    if (c.keyframes?.length) {
+      // quais propriedades já animam (a IA manda só as novas; o validate/recursos mesclam por campo)
+      const props = [...new Set(c.keyframes.flatMap((k) => [...Object.keys(k.transform ?? {}), ...Object.keys(k.props ?? {})]))];
+      base.keyframes = { count: c.keyframes.length, props };
+    }
     if (c.filters.length) base.filters = c.filters;
     if (c.transitionIn) {
       const tr = c.transitionIn as { kind: string; duration: number; name?: string };
@@ -28,6 +32,18 @@ function clipLine(c: Clip): Record<string, unknown> {
     }
   }
   if (c.type === 'video' && c.colorPreset) base.colorPreset = c.colorPreset;
+  const cg = (c as { colorGrade?: import('../types').ColorGrade }).colorGrade;
+  if (cg) {
+    // resumo da correção de cor atual (update_clip.colorGrade só troca os campos enviados)
+    const g: Record<string, unknown> = {};
+    if (cg.lut) g.lut = `${cg.lut.id}@${cg.lut.intensity}`;
+    for (const k of ['exposure', 'contrast', 'saturation', 'vibrance', 'temperature', 'tint', 'highlights', 'shadows'] as const) if (cg[k]) g[k] = cg[k];
+    const wheels = (['lift', 'gamma', 'gain', 'offset'] as const).filter((k) => cg[k]);
+    if (wheels.length) g.wheels = wheels;
+    if (cg.curves) g.curves = Object.keys(cg.curves);
+    if (cg.hsl) g.hsl = Object.keys(cg.hsl);
+    base.colorGrade = g;
+  }
   if (c.type === 'audio' && c.duckUnderVoice) base.duck = true;
   if (c.type === 'text') Object.assign(base, { text: c.text, position: c.position, animation: c.animation, fontSize: c.style.fontSize, color: c.style.color });
   if (c.type === 'sticker') Object.assign(base, c.emoji ? { emoji: c.emoji } : { assetId: c.assetId });
