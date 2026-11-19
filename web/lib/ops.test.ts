@@ -167,3 +167,17 @@ describe('ops — cortes ancorados em palavras', () => {
     expect(r.captions.segments[0].text).toBe('olá pessoal');
   });
 });
+
+describe('ops — campos aditivos da timeline (linkId, solo, height)', () => {
+  it('update_clip grava e remove linkId; update_track grava solo e height', () => {
+    const { p } = withClip();
+    const a = applyOp(p, { op: 'update_clip', clipId: 'c1', patch: { linkId: 'lk1' } });
+    expect(findClip(a, 'c1')!.clip.linkId).toBe('lk1');
+    const b = applyOp(a, { op: 'update_clip', clipId: 'c1', patch: { linkId: undefined } });
+    expect(findClip(b, 'c1')!.clip.linkId).toBeUndefined();
+    const c = applyOp(p, { op: 'update_track', trackId: 'track_video_1', patch: { solo: true, height: 1.5 } });
+    const tr = c.tracks.find((t) => t.id === 'track_video_1')!;
+    expect(tr.solo).toBe(true);
+    expect(tr.height).toBe(1.5);
+  });
+});

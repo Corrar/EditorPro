@@ -192,6 +192,8 @@ interface BaseClip {
   id: Id;
   /** clipes de um mesmo modelo (lower third, CTA…) compartilham o groupId e se movem juntos */
   groupId?: Id;
+  /** (aditivo, timeline) vínculo áudio↔vídeo estilo DaVinci: clipes com o mesmo linkId movem e aparam juntos */
+  linkId?: Id;
   /** posição na timeline */
   start: Seconds;
   /** duração NA TIMELINE (já considerando speed) */
@@ -383,6 +385,10 @@ export interface Track {
   muted?: boolean;
   hidden?: boolean;
   locked?: boolean;
+  /** (aditivo, timeline) solo: se alguma trilha estiver em solo, só elas tocam áudio */
+  solo?: boolean;
+  /** (aditivo, timeline) altura da linha na timeline (multiplicador 0.6..2.5; padrão automático) */
+  height?: number;
   clips: Clip[]; // ordenados por start
 }
 
