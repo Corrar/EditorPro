@@ -186,7 +186,7 @@ function ToolbarInner({ actions }: { actions: ToolbarActions }) {
   const magnetic = useTimelineUi((s) => s.magnetic);
   const setUi = useTimelineUi((s) => s.set);
   const open = useTimelineUi((s) => (s.overflowOpen ? 'more' : s.addTrackOpen ? 'add' : s.speedPop ? 'speed' : null)) as PopKind;
-  const { barCompact: compact } = useDims();
+  const { barCompact: compact, compact: narrow } = useDims();
   const moreRef = useRef<HTMLButtonElement>(null);
   const speedRef = useRef<HTMLButtonElement>(null);
   const addRef = useRef<HTMLButtonElement>(null);
@@ -222,9 +222,14 @@ function ToolbarInner({ actions }: { actions: ToolbarActions }) {
     return (
       <div className="ep-tl-bar compact" role="toolbar" aria-label="Ferramentas da timeline">
         <div className="ep-tl-barscroll">
-          <PlayBtn />
-          <TimeReadout compact />
-          <span className="ep-tl-sep" />
+          {/* no celular (<600px) o preview já tem play e tempo: a linha fica para as ferramentas */}
+          {!narrow && (
+            <>
+              <PlayBtn />
+              <TimeReadout compact />
+              <span className="ep-tl-sep" />
+            </>
+          )}
           {editBtns}
           <button ref={addRef} className={`ep-tl-btn${open === 'add' ? ' on' : ''}`} onClick={toggle('add')} aria-label="Adicionar trilha" aria-haspopup="menu"><IPlus /></button>
           <span className="ep-tl-sep" />
