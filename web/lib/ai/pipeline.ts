@@ -10,7 +10,7 @@ import { useEditor } from '../store';
 import { AIClientError, analyzeReference, getStatus, requestEdit, translateSegments, type AIStatus, type EditFrame } from './client';
 import { beatsOf, colorStatsOf, sampleReference, silencesFor } from './analysis';
 import { colorGradeOps, matchColorGrade } from './colormatch';
-import { chatIntent, demoCaptions, demoNeeds, planFirstEdit, silenceCutOps, silenceOptsFromText, speechRanges, type Range } from './demo';
+import { CAPTION_ADD, canonVerbs, chatIntent, demoCaptions, demoNeeds, planFirstEdit, silenceCutOps, silenceOptsFromText, speechRanges, type Range } from './demo';
 import { deviceProfile, framesFromThumbnails, sampleVideo } from './frames';
 import { captionsMediaToTimeline } from './timemap';
 import { sanitizeOps } from './validate';
@@ -432,7 +432,7 @@ async function claudeChat(text: string, apply: NonNullable<PipelineOptions['appl
     return { reply: res.reply, ops, appliedIds, provider: 'anthropic', warnings: [] };
   } catch (e) {
     // IA indisponível: tenta o intérprete local antes de desistir
-    const local = chatIntent(text, { project: store().project, assets: store().assets, target: opts.context });
+    const local = chatIntent(canonVerbs(text), { project: store().project, assets: store().assets, target: opts.context });
     if (local.ops.length) {
       const san = sanitizeOps(local.ops, store().project, store().assets);
       const ops = await withSfx(san.ops, san.sfx, opts.onStatus);
@@ -452,7 +452,9 @@ export async function chatEdit(text: string, opts: PipelineOptions = {}): Promis
       const pre = prelimOps(store().project, store().assets, '');
       if (pre.length) await apply(pre, { delayMs: 260 });
     }
-    const res = (await localFeature(text, apply, opts, status)) ?? (status.configured ? await claudeChat(text, apply, opts) : await demoChat(text, apply, opts));
+    // intérprete local recebe os verbos normalizados ("coloque" → "coloca"); o Claude recebe o texto original
+    const local = canonVerbs(text);
+    const res = (await localFeature(local, apply, opts, status, text)) ?? (status.configured ? await claudeChat(text, apply, opts) : await demoChat(local, apply, opts));
     // pedido feito apontando para um comentário de revisão: se editou, o comentário fica resolvido
     const mid = opts.context?.markerId;
     const cm = mid ? store().project.markers?.find((m) => m.id === mid && m.kind === 'comment' && !m.resolved) : undefined;
@@ -519,7 +521,7 @@ async function ensureBeats(opts: PipelineOptions): Promise<number> {
   return n;
 }
 
-async function localFeature(text: string, apply: NonNullable<PipelineOptions['apply']>, opts: PipelineOptions, status: AIStatus): Promise<PipelineResult | null> {
+async function localFeature(text: string, apply: NonNullable<PipelineOptions['apply']>, opts: PipelineOptions, status: AIStatus, original = text): Promise<PipelineResult | null> {
   const t = norm(text);
   const provider = status.provider;
   const warnings: string[] = [];
@@ -539,6 +541,16 @@ async function localFeature(text: string, apply: NonNullable<PipelineOptions['ap
     opts.onStatus?.('Escolhendo uma música do catálogo…');
     const m = await catalogMusicOps(text, sim, { exclude, onStatus: opts.onStatus });
     if (m) return done([...removeOps, ...m.ops], `${cur.length ? 'Troquei a música por' : 'Coloquei a música'} “${m.name}” do catálogo de músicas livres (sem direitos autorais)${store().project.captions.segments.length ? ', baixinha e abaixando na fala' : ''}.`);
+  }
+
+  // "coloque legenda no vídeo" sem legendas ainda → transcreve a fala de verdade (Whisper no aparelho),
+  // nos dois modos; se o pedido também traz estilo ("…estilo TikTok", "amarela"), aplica em seguida
+  if (/legenda/.test(t) && CAPTION_ADD.test(t) && !/(sem|tir|remov|escond|deslig|apag|ocult)\w* .{0,12}legenda/.test(t) && !RE.translate.test(t) && !store().project.captions.segments.length) {
+    const cap = await generateCaptions({ ...opts, apply });
+    const styleWords = /estilo|tiktok|karaok|neon|maior|menor|em cima|embaixo|no meio|centro|amarel|vermelh|branc|pret|azul|verde|rosa|laranja|roxo|dourad|negrito|caixa|fundo|contorno|anima|palavra/.test(t.replace(/^.*?legendas?/, ''));
+    if (!cap.ops.length || !styleWords) return { ...cap, warnings: [...warnings, ...cap.warnings] };
+    const rest = status.configured ? await claudeChat(original, apply, opts) : await demoChat(text, apply, opts);
+    return { ...rest, reply: `${cap.reply.replace(/ Quer mudar o estilo.*$/, '')} ${rest.reply}`, ops: [...cap.ops, ...rest.ops], appliedIds: [...cap.appliedIds, ...rest.appliedIds], warnings: [...cap.warnings, ...rest.warnings] };
   }
 
   // auto-reframe (rosto/assunto) — no navegador

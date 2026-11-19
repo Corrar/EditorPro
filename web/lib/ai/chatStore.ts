@@ -182,6 +182,7 @@ export const useAIChat = create<AIChatState>((set, get) => {
       patchRun(msgId, { phase: undefined, progress: undefined, done: true, after: changed ? after : undefined, final: after });
       editor().updateMessage(msgId, { text: res.reply, status: 'done', opIds: res.appliedIds });
       onDone?.(msgId, res);
+      void getStatus().then((st) => set({ status: st })); // o selo Claude/Demo acompanha a última checagem
       return true;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);

@@ -142,8 +142,8 @@ export default function AiPopup({ onMinimize, onExpand, autoFocus = false, initi
       <header className="ep-aip-head">
         <div className="ep-aip-spark"><Icon name="ai" size={18} /></div>
         <b className="ep-aip-title">Editar com IA</b>
-        <span className={`ep-ch-badge${claude ? ' on' : ''}`} title={claude ? `Claude (${status?.model})` : 'Sem chave de IA: planejador local, grátis'}>
-          {status ? (claude ? 'Claude' : 'Demo') : '…'}
+        <span className={`ep-ch-badge${claude ? ' on' : ''}`} title={claude ? `Claude (${status?.model})` : status?.offline ? 'Não consegui falar com o servidor da IA — tento de novo no próximo pedido' : 'Sem chave de IA: planejador local, grátis'}>
+          {status ? (claude ? 'Claude' : status.offline ? 'Sem conexão' : 'Demo') : '…'}
         </span>
         <span className="ep-aip-sp" />
         {onMinimize ? (

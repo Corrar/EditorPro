@@ -10,7 +10,7 @@ import type { Frame } from './frames';
 import type { ReferenceSample } from './analysis';
 import { slimAssets } from './summary';
 
-export interface AIStatus { configured: boolean; provider: 'anthropic' | 'demo'; model?: string }
+export interface AIStatus { configured: boolean; provider: 'anthropic' | 'demo'; model?: string; /** a checagem falhou (rede/sessão): não é demo de verdade, tenta de novo no próximo pedido */ offline?: boolean }
 
 export interface EditFrame extends Frame { assetId: string }
 
@@ -79,9 +79,24 @@ function postJson<T>(path: string, body: unknown): Promise<T> {
 
 let statusCache: Promise<AIStatus> | null = null;
 
+async function fetchStatus(): Promise<AIStatus> {
+  try {
+    return await call<AIStatus>('/api/ai/status');
+  } catch {
+    // rede instável no celular: 1 nova tentativa antes de cair no modo local
+    await new Promise((r) => setTimeout(r, 700));
+    return call<AIStatus>('/api/ai/status');
+  }
+}
+
+/** status da IA no servidor. Falha (rede/sessão) NÃO fica em cache: o próximo pedido checa de novo. */
 export async function getStatus(force = false): Promise<AIStatus> {
   if (!statusCache || force) {
-    statusCache = call<AIStatus>('/api/ai/status').catch(() => ({ configured: false, provider: 'demo' as const }));
+    const p: Promise<AIStatus> = fetchStatus().catch(() => {
+      if (statusCache === p) statusCache = null;
+      return { configured: false, provider: 'demo' as const, offline: true };
+    });
+    statusCache = p;
   }
   return statusCache;
 }

@@ -199,8 +199,8 @@ export default function ChatPanel() {
           >
             CC
           </button>
-          <span className={`ep-ch-badge${claude ? ' on' : ''}`} title={claude ? `Claude (${status?.model})` : 'Sem chave de IA: planejador local, grátis'}>
-            {status ? (claude ? 'Claude' : 'Demo') : '…'}
+          <span className={`ep-ch-badge${claude ? ' on' : ''}`} title={claude ? `Claude (${status?.model})` : status?.offline ? 'Não consegui falar com o servidor da IA — tento de novo no próximo pedido' : 'Sem chave de IA: planejador local, grátis'}>
+            {status ? (claude ? 'Claude' : status.offline ? 'Sem conexão' : 'Demo') : '…'}
           </span>
         </div>
         <ModelChip />

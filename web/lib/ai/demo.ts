@@ -27,6 +27,34 @@ export function norm(s: string): string {
   return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
+/* ---------- verbos: "coloque/colocar/coloca" → "coloca" ---------- */
+
+/** radicais de verbos -ar usados em pedidos de edição (c→qu e g→gu no subjuntivo: coloque, ligue) */
+const AR_STEMS = 'coloc aplic tir cort deix adicion bot troc mud aceler desaceler us aument lig deslig mostr sincroniz marc apag ajust transform cri ger centraliz gir espelh destac pul encurt along junt separ duplic copi anim suaviz clare ilumin baix abaix ativ desativ ampli recort enquadr foc desfoc legend acrescent estabiliz normaliz limp elimin coloriz arrum melhor organiz edit pint enfeit enxug renomei'.split(' ');
+const ER_IR: [string, string][] = [
+  ['remov(?:a|am|er|endo)', 'remove'], ['escond(?:a|am|er)', 'esconde'], ['insir(?:a|am)|inserir', 'insere'], ['inclu(?:a|am|ir)', 'inclui'],
+  ['diminu(?:a|am|ir)', 'diminui'], ['substitu(?:a|am|ir)', 'substitui'], ['divid(?:a|am|ir)', 'divide'], ['reduz(?:a|am|ir)', 'reduz'],
+  ['traduz(?:a|am|ir)', 'traduz'], ['fa[cç](?:a|am)|fazer', 'faz'], ['refa[cç](?:a|am)|refazer', 'refaz'], ['ponha|ponham', 'poe'],
+  ['escurec(?:a|am|er)', 'escurece'], ['invert(?:a|am|er)', 'inverte'],
+];
+const VERB_ALTS: [string, string][] = [
+  ...AR_STEMS.map((st): [string, string] => {
+    const sub = st.endsWith('c') ? `${st.slice(0, -1)}qu` : st.endsWith('g') ? `${st}u` : st;
+    return [`${st}(?:ar|ando|a)|${sub}(?:em|e)`, `${st}a`];
+  }),
+  ...ER_IR,
+];
+/** só no começo de uma frase/oração ("Coloque…", "pode colocar…", "e corte…"): "um corte", "o ajuste" ficam como estão */
+const CLAUSE = String.raw`(^|[.,;:!?\n]\s*|\b(?:e|pode|podia|poderia|por favor|favor|agora|tambem|também|entao|então|ai|aí|que|a|pra|para|quero|queria|preciso|precisa|tem que|vamos|vai|consegue|da pra|dá pra|dá para|me ajuda a|tente|tenta)\s+)`;
+const VERB_RE = VERB_ALTS.map(([alt, to]) => [new RegExp(`${CLAUSE}(?:${alt})(?![\\p{L}])`, 'giu'), to] as const);
+
+/** pedido do chat com os verbos na forma que o intérprete local entende ("Coloque legenda" → "coloca legenda") */
+export function canonVerbs(text: string): string {
+  let out = text;
+  for (const [re, to] of VERB_RE) out = out.replace(re, (_m, pre: string) => `${pre}${to}`);
+  return out;
+}
+
 const fmt = (t: number) => formatTime(t, { decimals: true });
 
 /* ---------- silêncios (áudio) ---------- */
@@ -745,13 +773,16 @@ export function silenceOptsFromText(text: string): SilenceOptions | undefined {
 
 export function demoNeeds(text: string): { silences: boolean } {
   const t = norm(text);
-  return { silences: /silenc|pausa|respiro|enrola|tempo morto|parte(s)? parada|dinamic|ritmo/.test(t) || /legenda/.test(t) && /(gera|coloca|adiciona|cria|faz)/.test(t) };
+  return { silences: /silenc|pausa|respiro|enrola|tempo morto|parte(s)? parada|dinamic|ritmo/.test(t) || /legenda/.test(t) && CAPTION_ADD.test(t) };
 }
 
 function parseNumber(s: string): number | undefined {
   const n = Number(s.replace(',', '.'));
   return Number.isFinite(n) ? n : undefined;
 }
+
+/** verbos de "pôr legenda" em qualquer forma (coloca/coloque/colocar, gere, adicione, ponha, bota…) */
+export const CAPTION_ADD = /(colo[cq]|liga|ligu|mostr|ativ|volt|gera|gere|adicion|cria|crie|quer|ponh|poe|bota|bote|insir|insere|inclu|\bfaz|\bfac|precis)/;
 
 const HELP = 'No modo demonstração eu entendo comandos como: "legenda estilo creator", "lower third com meu nome Ana", "whoosh nas transições", "look cinema", "CTA siga no final", "legenda maior/menor/amarela/em cima", "legendas estilo TikTok", "legenda karaokê", "cortar silêncios", "cortar vícios", "melhores momentos em 30 s", "tira o zoom", "corta os primeiros 3 s", "acelera 1.2x", "câmera lenta", "curva herói", "coloca efeito VHS nos primeiros 3 s", "transição de giro", "voz de robô", "remove o fundo", "adiciona emoji de fogo", "sincroniza na batida", "marca as batidas", "cria capítulos", "gancho com zoom e flash", "música mais baixa", "deixa preto e branco", "formato 16:9" e "deixar mais dinâmico".';
 
@@ -784,7 +815,7 @@ export function chatIntent(text: string, ctx: ChatContext): DemoResult {
   // --- legendas: liga/desliga
   if (mentionsCaption && negate.test(t) && !/(maior|menor|cor|zoom)/.test(t)) {
     push([{ op: 'toggle_captions', enabled: false, explain: 'Escondendo as legendas' }], 'escondi as legendas');
-  } else if (mentionsCaption && /(coloca|liga|mostra|ativa|volta|gera|adiciona|cria|quero)/.test(t) && !/(maior|menor|estilo|cor\b)/.test(t)) {
+  } else if (mentionsCaption && CAPTION_ADD.test(t) && !/(maior|menor|estilo|cor\b)/.test(t)) {
     if (hasCaps && !p.captions.enabled) push([{ op: 'toggle_captions', enabled: true, explain: 'Mostrando as legendas' }], 'liguei as legendas');
     else if (!hasCaps && ctx.silencesByAsset) {
       const speech: Record<Id, Range[]> = {};

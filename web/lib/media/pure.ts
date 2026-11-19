@@ -30,6 +30,7 @@ export const ROLE_LABEL: Record<MediaRole, string> = {
   reference: 'Modelo',
   music: 'Música',
   broll: 'B-roll',
+  graphic: 'Gráfico (IA)',
 };
 
 /** quantos picos guardar para uma duração (≈50/s, entre 64 e 6000) */

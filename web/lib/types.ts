@@ -22,7 +22,9 @@ export const ASPECT_SIZES: Record<AspectRatio, { width: number; height: number }
 
 export type MediaKind = 'video' | 'audio' | 'image';
 /** source = material bruto do usuário; reference = vídeo-exemplo de estilo; music = trilha */
-export type MediaRole = 'source' | 'reference' | 'music' | 'broll';
+export type MediaRole = 'source' | 'reference' | 'music' | 'broll'
+  /* (aditivo 2026-11-19, "IA sem limites") gráfico desenhado pela IA (SVG rasterizado) */
+  | 'graphic';
 
 export interface MediaAsset {
   id: Id;
@@ -51,6 +53,8 @@ export interface MediaAsset {
   proxyUrl?: string;
   /** estado da geração do proxy */
   proxyStatus?: 'pending' | 'ready' | 'failed';
+  /** (aditivo, "IA sem limites") código SVG de origem de um gráfico gerado pela IA (role 'graphic'); a imagem é a rasterização dele */
+  svg?: string;
 }
 
 /* ---------- efeitos ---------- */
@@ -124,7 +128,9 @@ export type TransitionKind =
   | 'zoom-blur' | 'spin-blur' | 'stretch' | 'ink' | 'smoke' | 'mosaic' | 'pixel-sort' | 'glitch-2' | 'camera-flash'
   | 'whip-left' | 'whip-right' | 'whip-up' | 'whip-down' | 'uncover-left' | 'uncover-up' | 'iris-close' | 'diamond'
   | 'wind' | 'wave' | 'burn-2' | 'flare' | 'swirl' | 'split-open' | 'shutter' | 'checkerboard' | 'squares'
-  | 'polka' | 'film-roll' | 'tv-off' | 'kaleido' | 'dreamy' | 'zoom-rotate' | 'squeeze' | 'luma-melt';
+  | 'polka' | 'film-roll' | 'tv-off' | 'kaleido' | 'dreamy' | 'zoom-rotate' | 'squeeze' | 'luma-melt'
+  /* (aditivo, "IA sem limites") transição escrita pela IA em GLSL — ver Transition.code */
+  | 'custom';
 
 /** efeitos visuais aplicados ao clipe (ou a uma camada de ajuste) */
 export type VisualEffectKind =
@@ -144,7 +150,9 @@ export type VisualEffectKind =
   | 'strobe-color' | 'flash-black' | 'freeze-flash'
   | 'snow' | 'rain' | 'confetti' | 'hearts' | 'bubbles' | 'fireflies' | 'embers'
   | 'frame-border' | 'polaroid' | 'film-frame' | 'cinema-bars-anim' | 'vignette' | 'rounded-frame' | 'drop-shadow'
-  | 'disco' | 'countdown';
+  | 'disco' | 'countdown'
+  /* (aditivo, "IA sem limites") efeito escrito pela IA em GLSL — ver VisualEffect.code */
+  | 'custom';
 
 export interface VisualEffect {
   kind: VisualEffectKind;
@@ -154,6 +162,18 @@ export interface VisualEffect {
   color?: string;
   /** (aditivo, fx) direção em graus (0 = →, 90 = ↓) — desfoque direcional, chuva, vazamento */
   angle?: number;
+  /**
+   * (aditivo, "IA sem limites") kind 'custom': corpo GLSL ES 1.00 com `vec4 effect(vec2 uv)`.
+   * Uniforms prontos: uTex (quadro do clipe; na camada de ajuste = tudo abaixo), uResolution (px),
+   * uTime (s desde o início do clipe), uDuration, uProgress (0..1 no clipe), uIntensity, uSpeed,
+   * uColor (vec3 de `color`), uParams[8] (de `params`). Helpers: rand, noise, fbm, luma, rgb2hsv, hsv2rgb.
+   * Não compila → o efeito vira passagem direta (nunca tela preta). Contrato em lib/fx/customShader.ts.
+   */
+  code?: string;
+  /** (aditivo) nome legível do efeito personalizado ("Ondas neon") — aparece nos painéis */
+  name?: string;
+  /** (aditivo) até 8 parâmetros numéricos para uParams[0..7] */
+  params?: number[];
 }
 
 export type BlendMode = 'normal' | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten' | 'add' | 'difference'
@@ -212,6 +232,14 @@ export interface Transition {
   duration: Seconds; // tipicamente 0.2–0.8
   /** (aditivo, fx) curva aplicada ao progresso (ausente = curva própria da transição) */
   easing?: Easing;
+  /**
+   * (aditivo, "IA sem limites") kind 'custom': corpo GLSL ES 1.00 com `vec4 transition(vec2 uv)`.
+   * Uniforms: uFrom, uTo (quadros que saem/entram), uProgress (0..1, já com easing), uResolution, uTime,
+   * uParams[8]. Helpers iguais aos do efeito. Não compila → crossfade.
+   */
+  code?: string;
+  name?: string;
+  params?: number[];
 }
 
 export interface Transform {
@@ -231,6 +259,13 @@ export interface Keyframe {
   t: Seconds; // relativo ao início do clipe
   transform: Partial<Transform>;
   easing?: Easing;
+  /**
+   * (aditivo, "IA sem limites") keyframe de QUALQUER propriedade numérica ou de cor do clipe, por caminho:
+   * 'volume', 'style.fontSize', 'style.color', 'effects.0.intensity', 'colorGrade.saturation',
+   * 'filters.brightness', 'mask.feather', 'position.x', 'speed'… Números interpolam; cores '#RRGGBB'
+   * interpolam em RGB; o resto troca no keyframe. Resolvido por lib/engine/animate.ts (preview e export).
+   */
+  props?: Record<string, number | string>;
 }
 
 /* ---------- clipes ---------- */
@@ -328,6 +363,8 @@ export interface AudioClip extends BaseClip, AudioExtras {
   fadeOut?: Seconds;
   /** abaixa automaticamente quando há fala (ducking) */
   duckUnderVoice?: boolean;
+  /** (aditivo, "IA sem limites") automação (ex.: props.volume) — só `props` vale em áudio */
+  keyframes?: Keyframe[];
 }
 
 export type TextAnimation =
