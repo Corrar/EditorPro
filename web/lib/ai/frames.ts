@@ -7,6 +7,8 @@
    ===================================================================== */
 
 export interface Frame { t: number; data: string; mediaType: 'image/jpeg' }
+/** cor média do vídeo (0..1) */
+export interface ColorStats { r: number; g: number; b: number; sat: number; lum: number }
 
 export interface DeviceProfile { mobile: boolean; weak: boolean; memoryGB?: number; cores?: number }
 
@@ -110,6 +112,7 @@ export interface SampleResult {
   frames: Frame[];
   diffs: number[];
   diffTimes: number[];
+  color?: ColorStats;
   duration: number;
   width: number;
   height: number;
@@ -152,12 +155,14 @@ export async function sampleVideo(url: string, opts: SampleOptions = {}): Promis
           const diffTimes = Array.from({ length: n }, (_, k) => Math.round((((k + 0.5) * duration) / n) * 1000) / 1000);
           return { diffTimes, jpegIdx: new Set(diffTimes.map((_, i) => i)) };
         })()
-      : planSamples(duration, { diffStep: opts.diffStep ?? (dev.weak ? 0.5 : 0.25), frameEvery: opts.frameEvery ?? 1, maxFrames, maxDiffs: dev.weak ? 160 : 360 });
+      : planSamples(duration, { diffStep: opts.diffStep ?? (dev.weak && duration > 40 ? 0.5 : 0.25), frameEvery: opts.frameEvery ?? 1, maxFrames, maxDiffs: dev.weak ? 160 : 360 });
 
     const frames: Frame[] = [];
     const diffs: number[] = [];
     const diffTimes: number[] = [];
     let prev: Uint8ClampedArray | null = null;
+    // médias de cor (p/ detectar o "look" do vídeo-exemplo sem IA)
+    const acc = { r: 0, g: 0, b: 0, sat: 0, n: 0 };
     for (let i = 0; i < plan.diffTimes.length; i++) {
       const t = plan.diffTimes[i];
       video.currentTime = t;
@@ -165,15 +170,21 @@ export async function sampleVideo(url: string, opts: SampleOptions = {}): Promis
       if (!opts.noDiffs) {
         tctx.drawImage(video, 0, 0, 48, 27);
         const d = tctx.getImageData(0, 0, 48, 27).data;
-        const lum = new Uint8ClampedArray(48 * 27);
-        for (let k = 0; k < lum.length; k++) lum[k] = (d[k * 4] * 0.299 + d[k * 4 + 1] * 0.587 + d[k * 4 + 2] * 0.114) | 0;
+        // diferença em RGB (cortes entre cenas de brilho parecido também contam)
+        const px = new Uint8ClampedArray(48 * 27 * 3);
+        for (let k = 0; k < 48 * 27; k++) {
+          const r = d[k * 4], g = d[k * 4 + 1], b = d[k * 4 + 2];
+          px[k * 3] = r; px[k * 3 + 1] = g; px[k * 3 + 2] = b;
+          const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+          acc.r += r; acc.g += g; acc.b += b; acc.sat += mx ? (mx - mn) / mx : 0; acc.n++;
+        }
         if (prev) {
           let s = 0;
-          for (let k = 0; k < lum.length; k++) s += Math.abs(lum[k] - prev[k]);
-          diffs.push(s / (lum.length * 255));
+          for (let k = 0; k < px.length; k++) s += Math.abs(px[k] - prev[k]);
+          diffs.push(s / (px.length * 255));
           diffTimes.push(t);
         }
-        prev = lum;
+        prev = px;
       }
       if (plan.jpegIdx.has(i)) {
         bctx.drawImage(video, 0, 0, big.width, big.height);
@@ -181,7 +192,10 @@ export async function sampleVideo(url: string, opts: SampleOptions = {}): Promis
       }
       opts.onProgress?.((i + 1) / plan.diffTimes.length);
     }
-    return { frames: fitBudget(frames, opts.budgetBytes ?? 2_800_000), diffs, diffTimes, duration, width: W, height: H };
+    const color: ColorStats | undefined = acc.n
+      ? { r: acc.r / acc.n / 255, g: acc.g / acc.n / 255, b: acc.b / acc.n / 255, sat: acc.sat / acc.n, lum: (0.299 * acc.r + 0.587 * acc.g + 0.114 * acc.b) / acc.n / 255 }
+      : undefined;
+    return { frames: fitBudget(frames, opts.budgetBytes ?? 2_800_000), diffs, diffTimes, duration, width: W, height: H, color };
   } finally {
     video.removeAttribute('src');
     video.load();
