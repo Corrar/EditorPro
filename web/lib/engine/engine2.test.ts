@@ -133,3 +133,13 @@ describe('transições em shader (HyperFrames)', () => {
     expect(ALL_TRANSITIONS.length).toBeGreaterThanOrEqual(38);
   });
 });
+
+import { chunkCaptions } from './captions';
+describe('legenda a partir de words', () => {
+  it('usa as palavras (com tempos) mesmo se o texto do segmento estiver diferente', () => {
+    const ch = chunkCaptions([{ id: 's', start: 0, end: 2, text: 'texto antigo com né tipo', words: [
+      { start: 0, end: 0.5, text: 'texto' }, { start: 0.6, end: 1, text: 'novo' }] }], 3);
+    expect(ch).toHaveLength(1);
+    expect(ch[0].words.map((w) => w.text)).toEqual(['texto', 'novo']);
+  });
+});
