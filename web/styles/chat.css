@@ -132,3 +132,56 @@
   .ep-ch-ctx button { width:36px; height:36px; }
   .ep-ch-cc, .ep-ch-badge { height:34px; }
 }
+
+/* ================= Pop-up "Editar com IA" (celular, sheet ~45%) ================= */
+.ep-aip { isolation:isolate; container-type:inline-size; min-width:0; display:flex; flex-direction:column; gap:10px; height:100%; min-height:0; width:100%; background:var(--card); color:var(--ink); padding:12px 14px max(12px, env(safe-area-inset-bottom)); }
+.ep-aip-head { flex:none; display:flex; align-items:center; gap:10px; min-height:44px; }
+.ep-aip-spark { width:36px; height:36px; flex:none; border-radius:50%; background:var(--ai); color:#fff; display:grid; place-items:center; position:relative; }
+.ep-aip-spark::before { content:''; position:absolute; inset:-5px; border-radius:50%; background:radial-gradient(circle,rgba(255,140,70,.45),rgba(255,140,70,0) 68%); animation:epChGlow 3.2s ease-in-out infinite; z-index:-1; }
+.ep-aip-title { font-size:17px; font-weight:800; letter-spacing:-0.02em; white-space:nowrap; }
+.ep-aip .ep-ch-badge { background:var(--tile); color:var(--sub); height:26px; }
+.ep-aip .ep-ch-badge.on { background:var(--green); color:#fff; }
+.ep-aip-sp { flex:1; }
+.ep-aip-iconbtn { width:44px; height:44px; flex:none; border:0; border-radius:50%; background:var(--tile); color:var(--ink); display:grid; place-items:center; cursor:pointer; }
+.ep-aip-body { flex:1; min-height:56px; overflow-y:auto; display:flex; flex-direction:column; gap:8px; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+.ep-aip-body::-webkit-scrollbar { display:none; }
+.ep-aip-hint { margin:auto 0; font-size:14px; line-height:1.45; color:var(--muted); text-align:center; padding:0 8px; }
+.ep-aip-me { align-self:flex-end; max-width:88%; background:var(--green); color:#fff; border-radius:18px 18px 6px 18px; padding:8px 13px; font-size:14px; line-height:1.4; overflow-wrap:anywhere; white-space:pre-wrap; animation:rise .25s ease both; }
+.ep-aip-ai { background:var(--tile); border-radius:6px 18px 18px 18px; padding:10px 13px; font-size:14px; line-height:1.45; animation:rise .25s ease both; }
+.ep-aip-ai.err { background:var(--redTint); color:var(--red); }
+.ep-aip-ai .ep-ch-phase { margin-bottom:6px; font-size:13.5px; }
+.ep-aip-text { white-space:pre-wrap; overflow-wrap:anywhere; }
+.ep-aip-ai .ep-ch-undo { margin-top:8px; height:36px; }
+.ep-aip-steps { margin:0 0 6px; }
+.ep-aip-stepshead { display:flex; justify-content:space-between; font-size:12px; font-weight:700; color:var(--muted); margin-bottom:6px; }
+.ep-aip-stepshead b { color:var(--ink); }
+.ep-aip-steps ol { list-style:none; margin-top:6px; }
+.ep-aip-steps .ep-ch-step { padding:5px 0; font-size:13px; }
+.ep-aip-steps .ep-ch-stepic { width:20px; height:20px; }
+.ep-aip-chips { flex:none; display:flex; gap:8px; overflow-x:auto; scrollbar-width:none; overscroll-behavior-x:contain; scroll-snap-type:x proximity; margin:0 -14px; padding:0 14px; }
+.ep-aip-chips::-webkit-scrollbar { display:none; }
+.ep-aip-ctx { flex:none; height:36px; }
+.ep-aip-input { flex:none; min-height:50px; }
+.ep-aip-input textarea { font-size:16px; padding:10px 4px; max-height:96px; }
+.ep-aip-mic { width:44px; height:44px; flex:none; border:0; border-radius:50%; background:none; color:var(--sub); display:grid; place-items:center; cursor:pointer; position:relative; transition:background .15s, color .15s; }
+.ep-aip-mic.on { background:var(--red, #E5484D); color:#fff; }
+.ep-aip-mic.on::after { content:''; position:absolute; inset:-4px; border-radius:50%; border:2px solid var(--red, #E5484D); opacity:.5; animation:epAipPulse 1.2s ease-out infinite; }
+@keyframes epAipPulse { from { transform:scale(.9); opacity:.6; } to { transform:scale(1.25); opacity:0; } }
+.ep-aip-expand { flex:none; align-self:center; display:inline-flex; align-items:center; gap:6px; min-height:40px; border:0; background:none; color:var(--sub); font:inherit; font-size:13px; font-weight:700; cursor:pointer; padding:0 12px; border-radius:999px; }
+.ep-aip-expand:hover { background:var(--tile); color:var(--ink); }
+@media (pointer: coarse) {
+  .ep-aip-expand { min-height:44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ep-aip-spark::before, .ep-aip-mic.on::after { animation:none; }
+}
+
+/* pílula "IA editando 3/8" sobre o preview (popup minimizado) */
+.ep-ailive { position:relative; overflow:hidden; display:inline-flex; align-items:center; gap:8px; height:40px; padding:0 16px 0 8px; border:0; border-radius:999px; background:rgba(20,20,20,.82); color:#fff; font:inherit; font-size:13.5px; font-weight:700; cursor:pointer; box-shadow:0 6px 24px rgba(0,0,0,.28); -webkit-backdrop-filter:blur(12px); backdrop-filter:blur(12px); animation:rise .25s ease both; }
+.ep-ailive-ic { width:26px; height:26px; flex:none; border-radius:50%; background:var(--green); display:grid; place-items:center; }
+.ep-ailive-ic .ep-ch-spin.light { width:14px; height:14px; border-width:2px; }
+.ep-ailive.waiting .ep-ailive-ic { animation:epAipPulseBg 1.4s ease-in-out infinite; }
+@keyframes epAipPulseBg { 50% { transform:scale(1.12); } }
+.ep-ailive-t { white-space:nowrap; font-variant-numeric:tabular-nums; }
+.ep-ailive-bar { position:absolute; left:0; bottom:0; height:3px; background:var(--green); transition:width .3s ease; }
+@media (pointer: coarse) { .ep-ailive { height:44px; } }

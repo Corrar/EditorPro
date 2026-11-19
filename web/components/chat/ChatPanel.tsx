@@ -9,11 +9,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Icon from '@/components/ui/Icon';
 import { useEditor } from '@/lib/store';
-import { emit, on } from '@/lib/events';
+import { emit } from '@/lib/events';
+import { useAIBridge } from '@/lib/ai/bridge';
 import { useAIChat, type RunState } from '@/lib/ai/chatStore';
 import type { ChatMessage } from '@/lib/types';
 
-const SUGGESTIONS = [
+export const SUGGESTIONS = [
   'Legendas estilo TikTok', 'Cortar silêncios', 'Cortar vícios de linguagem', 'Deixar mais dinâmico', 'Melhores momentos em 30 s',
   'Sincronizar cortes na batida', 'Auto-reframe seguindo o rosto', 'Gancho com zoom e flash', 'Criar capítulos',
   'Traduzir legendas para inglês', 'Cores cinematográficas',
@@ -107,12 +108,8 @@ export default function ChatPanel() {
 
   useEffect(() => { loadStatus(); }, [loadStatus]);
 
-  // pedidos vindos de outros módulos (wizard, painel de legendas)
-  useEffect(() => {
-    const off1 = on('ep:start-ai-edit', ({ brief }) => { useAIChat.getState().firstEdit(brief); });
-    const off2 = on('ep:generate-captions', ({ language }) => { useAIChat.getState().captions(language); });
-    return () => { off1(); off2(); };
-  }, []);
+  // pedidos vindos de outros módulos (wizard, painel de legendas) — compartilhado com o AiPopup
+  useAIBridge();
 
   // rola para o fim quando chega mensagem/passo novo
   const stepCount = useMemo(() => Object.values(runs).reduce((n, r) => n + r.steps.length + r.log.length + (r.phase ? 1 : 0), 0), [runs]);

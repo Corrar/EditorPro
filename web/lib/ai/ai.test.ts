@@ -401,3 +401,53 @@ describe('groupId', () => {
     expect(findClip(p, 'c1')?.clip.groupId).toBe('lt1');
   });
 });
+
+describe('pop-up da IA', () => {
+  it('liveSummary/liveLabel resumem a última execução', async () => {
+    const { liveSummary, liveLabel } = await import('./live');
+    const msgs = [
+      { id: 'u1', role: 'user', text: 'oi', status: 'done', at: 0 },
+      { id: 'a1', role: 'assistant', text: '', status: 'applying', at: 1 },
+    ] as never[];
+    const run = { log: [], done: false, phase: 'Editando…', steps: [
+      { id: '1', text: 'a', state: 'done' }, { id: '2', text: 'b', state: 'done' }, { id: '3', text: 'c', state: 'active' },
+      { id: '4', text: 'd', state: 'pending' }, { id: '5', text: 'e', state: 'pending' }, { id: '6', text: 'f', state: 'pending' },
+      { id: '7', text: 'g', state: 'pending' }, { id: '8', text: 'h', state: 'pending' },
+    ] } as never;
+    const s = liveSummary(msgs, { a1: run });
+    expect(s).toMatchObject({ msgId: 'a1', working: true, done: 2, total: 8 });
+    expect(liveLabel(s)).toBe('IA editando 2/8');
+    expect(liveLabel(liveSummary([], {}))).toBe('Editar com IA');
+    expect(liveLabel({ working: true, done: 0, total: 0, waiting: false, phase: 'Transcrevendo…' })).toBe('Transcrevendo…');
+  });
+
+  it('ditado: junta texto digitado e falado; ponte registra uma vez', async () => {
+    const { joinDictation, speechCtor } = await import('./speech');
+    expect(joinDictation('', 'corta o começo')).toBe('Corta o começo');
+    expect(joinDictation('Legenda maior ', 'e amarela')).toBe('Legenda maior e amarela');
+    expect(joinDictation('abc', '  ')).toBe('abc');
+    expect(speechCtor({})).toBeUndefined();
+    class W {}
+    expect(speechCtor({ webkitSpeechRecognition: W })).toBe(W);
+
+    const hadWindow = 'window' in globalThis;
+    if (!hadWindow) (globalThis as Record<string, unknown>).window = new EventTarget();
+    const { acquireAIBridge } = await import('./bridge');
+    const { emit } = await import('../events');
+    const { useAIChat } = await import('./chatStore');
+    let calls = 0;
+    const orig = useAIChat.getState().captions;
+    useAIChat.setState({ captions: async () => { calls++; } });
+    const r1 = acquireAIBridge(); const r2 = acquireAIBridge();
+    emit('ep:generate-captions', {});
+    expect(calls).toBe(1);
+    r1(); r1();
+    emit('ep:generate-captions', {});
+    expect(calls).toBe(2);
+    r2();
+    emit('ep:generate-captions', {});
+    expect(calls).toBe(2);
+    useAIChat.setState({ captions: orig });
+    if (!hadWindow) delete (globalThis as Record<string, unknown>).window;
+  });
+});
