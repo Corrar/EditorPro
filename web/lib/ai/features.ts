@@ -234,6 +234,14 @@ export function hookOps(p: Project, text: string): EditOp[] {
   const trackId = p.tracks.find((t) => t.kind === 'text' && !t.locked)?.id ?? 'track_text_1';
   const fxTrack = p.tracks.find((t) => t.kind === 'effect' && !t.locked)?.id ?? 'track_effect_1';
   const d = Math.min(2.8, Math.max(1.2, projectDuration(p) * 0.3));
+  // já existe um título de gancho: troca o texto em vez de empilhar outro
+  const existing = p.tracks.flatMap((t) => t.clips).find((c) => c.type === 'text' && (c.label === 'gancho' || c.templateId === 'hook'));
+  if (existing) {
+    const ops: EditOp[] = [{ op: 'update_clip', clipId: existing.id, patch: { text, start: 0, duration: r3(d), animation: 'pop' }, explain: `Gancho: "${text}"` }];
+    const hasFlash = p.tracks.some((t) => t.clips.some((c) => c.type === 'adjustment' && c.start < 0.5 && c.effects?.some((e) => e.kind === 'flash-strobe')));
+    if (!hasFlash) ops.push({ op: 'add_clip', trackId: fxTrack, clip: { id: 'hook_flash', type: 'adjustment', start: 0, duration: 0.35, filters: [], effects: [{ kind: 'flash-strobe', intensity: 0.8 }] }, explain: 'Flash de abertura' });
+    return ops;
+  }
   const ops: EditOp[] = [
     {
       op: 'add_clip', trackId,
