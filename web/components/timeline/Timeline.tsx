@@ -37,6 +37,7 @@ import { MarkerLines, MarkerPop, RangePop } from './Markers';
 import { Minimap } from './Minimap';
 import { keyframesOf, moveKeyframeOps } from '@/lib/timeline/keyframes';
 import { assetOf } from '@/lib/timeline/clip';
+import { syncLinkedAfterPack } from '@/lib/timeline/links';
 import { expandLinks, linkedEdgePartners, monitorFrames, overridesAfter, proSession, type ProSession, type TrimTool } from '@/lib/timeline/trim';
 
 const ASSET_MIME = 'application/x-ep-asset';
@@ -827,7 +828,8 @@ export default function Timeline() {
         if (ui.magnetic && target === mainTrackId(st.project)) {
           const mid = applyOps(st.project, [move]).project;
           const mainAfter = mid.tracks.find((t) => t.id === target)!;
-          ops.push(move, ...packOps(mainAfter, magneticOrder(mainAfter, id, start, o.duration)));
+          const pk = packOps(mainAfter, magneticOrder(mainAfter, id, start, o.duration));
+          ops.push(move, ...pk, ...syncLinkedAfterPack(st.project, [...ops, move], pk, target));
         } else if (overlaps(tr, start, o.duration, [id])) {
           const pre = ui.dropMode === 'insert' ? insertOps(tr, start, o.duration, [id]) : overwriteOps(tr, start, start + o.duration, [id]);
           ops.push(...pre, move);
@@ -1352,7 +1354,8 @@ export default function Timeline() {
     if (hostable && ui.magnetic && hostable.id === mainTrackId(st.project)) {
       const mid = applyOps(st.project, [add]).project;
       const mainAfter = mid.tracks.find((t) => t.id === hostable.id)!;
-      ops.push(add, ...packOps(mainAfter, magneticOrder(mainAfter, clip.id, at, dur)));
+      const pk = packOps(mainAfter, magneticOrder(mainAfter, clip.id, at, dur));
+      ops.push(add, ...pk, ...syncLinkedAfterPack(st.project, [...ops, add], pk, hostable.id));
     } else if (hostable && overlaps(hostable, at, dur)) {
       ops.push(...(ui.dropMode === 'insert' ? insertOps(hostable, at, dur) : overwriteOps(hostable, at, at + dur)), add);
     } else ops.push(add);

@@ -6,6 +6,7 @@
 import type { Clip, Id, MediaAsset, MediaKind, Project, Seconds, Track, TrackKind } from '../types';
 import { applyOp as applyOpFn, clipEnd, findClip, trackKindFor, type EditOp } from '../ops';
 import { uid } from '../util';
+import { batchRemap, remapClone } from './links';
 
 export const MIN_CLIP: Seconds = 0.1;
 const EPS = 1e-6;
@@ -143,10 +144,12 @@ export function deleteOps(p: Project, ids: Id[], ripple = false): EditOp[] {
 }
 
 /** duplica logo após o original (no espaço livre mais próximo da mesma trilha) — op duplicate_clip */
-export function duplicateOps(p: Project, ids: Id[]): { ops: EditOp[]; newIds: Id[] } {
+export function duplicateOps(p: Project, ids: Id[], links?: Map<Id, Id | undefined>): { ops: EditOp[]; newIds: Id[]; project: Project } {
   const ops: EditOp[] = [];
   const newIds: Id[] = [];
   let proj = p; // aplica em sequência p/ cópias não colidirem entre si
+  // vínculos copiados juntos viram um vínculo NOVO só entre as cópias; copiado sozinho = sem vínculo
+  const lm = links ?? batchRemap(ids.map((id) => findClip(p, id)?.clip.linkId), 'link');
   for (const id of ids) {
     const f = findClip(proj, id);
     if (!f || f.track.locked) continue;
@@ -156,8 +159,17 @@ export function duplicateOps(p: Project, ids: Id[]): { ops: EditOp[]; newIds: Id
     ops.push(op);
     newIds.push(newId);
     proj = applyLocal(proj, op);
+    // membro de modelo duplicado sozinho não entra no modelo original
+    if (f.clip.linkId || f.clip.groupId) {
+      const patch: Record<string, unknown> = {};
+      if (f.clip.linkId) patch.linkId = lm.get(f.clip.linkId);
+      if (f.clip.groupId) patch.groupId = undefined;
+      const up: EditOp = { op: 'update_clip', clipId: newId, patch };
+      ops.push(up);
+      proj = applyLocal(proj, up);
+    }
   }
-  return { ops, newIds };
+  return { ops, newIds, project: proj };
 }
 
 function structuredCloneSafe<T>(v: T): T {
@@ -369,9 +381,12 @@ export function pasteOps(p: Project, items: ClipboardItem[], t: Seconds): { ops:
   const ops: EditOp[] = [];
   const newIds: Id[] = [];
   const created = new Map<Id, Id>(); // trilha de origem -> trilha nova (cola em grupo na mesma trilha nova)
+  // cada colagem cria vínculo/grupo novos, válidos só entre as cópias (membro avulso fica sem)
+  const links = batchRemap(items.map((i) => i.clip.linkId), 'link');
+  const groups = batchRemap(items.map((i) => i.clip.groupId), 'grp');
   for (const it of items) {
     const start = Math.max(0, t + (it.clip.start - base));
-    const clip = { ...structuredCloneSafe(it.clip), id: uid('clip'), start } as Clip;
+    const clip = remapClone({ ...structuredCloneSafe(it.clip), id: uid('clip'), start } as Clip, links, groups);
     const pref = created.get(it.trackId) ?? it.trackId;
     const pl = placeClip(proj, it.kind, clip.duration, start, pref);
     if (pl.newTrack) created.set(it.trackId, pl.trackId);
@@ -525,20 +540,35 @@ export function duplicateWithGroups(p: Project, ids: Id[]): { ops: EditOp[]; new
   const inGroup = new Set([...groups.values()].flat().map((c) => c.id));
   const ops: EditOp[] = [];
   const newIds: Id[] = [];
-  for (const [, cs] of groups) {
+  const links = batchRemap(ids.map((id) => findClip(p, id)?.clip.linkId), 'link');
+  let proj = p; // em sequência: grupos e avulsos não caem uns sobre os outros
+  for (const [, cs0] of groups) {
+    const cs = cs0.filter((c) => {
+      const f = findClip(proj, c.id);
+      return f && !f.track.locked;
+    });
+    if (!cs.length) continue;
     const g0 = Math.min(...cs.map((c) => c.start));
     const g1 = Math.max(...cs.map(clipEnd));
-    const offset = g1 - g0;
+    // menor deslocamento ≥ tamanho do modelo em que nenhuma cópia sobrepõe clipes das trilhas de destino
+    const base = g1 - g0;
+    const trackOf = (c: Clip) => findClip(proj, c.id)!.track;
+    const cand = [base, ...cs.flatMap((c) => trackOf(c).clips.map((o) => clipEnd(o) - c.start))]
+      .filter((d) => d >= base - EPS)
+      .sort((a, b) => a - b);
+    const offset = cand.find((d) => cs.every((c) => !overlaps(trackOf(c), c.start + d, c.duration))) ?? base;
     const ng = uid('grp');
     for (const c of cs) {
-      const f = findClip(p, c.id);
-      if (!f || f.track.locked) continue;
       const newId = uid('clip');
-      ops.push({ op: 'duplicate_clip', clipId: c.id, newId, start: c.start + offset });
-      ops.push({ op: 'update_clip', clipId: newId, patch: { groupId: ng } });
+      const dup: EditOp = { op: 'duplicate_clip', clipId: c.id, newId, start: c.start + offset };
+      const patch: Record<string, unknown> = { groupId: ng };
+      if (c.linkId) patch.linkId = links.get(c.linkId);
+      const up: EditOp = { op: 'update_clip', clipId: newId, patch };
+      ops.push(dup, up);
+      proj = applyLocal(applyLocal(proj, dup), up);
       newIds.push(newId);
     }
   }
-  const rest = duplicateOps(p, ids.filter((id) => !inGroup.has(id)));
+  const rest = duplicateOps(proj, ids.filter((id) => !inGroup.has(id)), links);
   return { ops: [...ops, ...rest.ops], newIds: [...newIds, ...rest.newIds] };
 }

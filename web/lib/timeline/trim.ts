@@ -43,7 +43,6 @@ export function rippleTrimOps(p: Project, clipId: Id, edge: 'start' | 'end', t: 
   const end = clipEnd(c);
   const delta = edge === 'end' ? t - end : c.start - t; // >0 = trecho cresce
   if (Math.abs(delta) < EPS) return [];
-  if (edge === 'start' && c.start - delta < -EPS && !hasMedia(c)) return [];
   const ops: EditOp[] = [];
   if (edge === 'end') ops.push({ op: 'trim_clip', clipId, end: t });
   else {
