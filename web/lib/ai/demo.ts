@@ -527,6 +527,7 @@ export function planFirstEdit(input: FirstEditInput): DemoResult {
     said.push(`formato ${aspect}`);
   }
 
+  let exampleCaptions = false; // legendas de exemplo não servem de fonte p/ o gancho
   // 1) legendas de exemplo nos trechos de fala (antes dos cortes: o ripple leva junto)
   const durations: Record<Id, number> = {};
   for (const id of Object.keys(silencesByAsset)) durations[id] = assets[id]?.duration ?? 0;
@@ -536,6 +537,7 @@ export function planFirstEdit(input: FirstEditInput): DemoResult {
     const segs = demoCaptions(p, speech, brief);
     if (segs.length) {
       push([{ op: 'set_captions', segments: segs, language: 'pt-BR', explain: `Colocando ${segs.length} legendas de exemplo nos trechos de fala` }]);
+      exampleCaptions = true;
       said.push('legendas de exemplo nos trechos de fala');
     }
   }
@@ -557,10 +559,15 @@ export function planFirstEdit(input: FirstEditInput): DemoResult {
   }
 
   // 4) gancho/título nos primeiros segundos
-  const hook = intent.hook ?? style?.textOverlays?.examples?.[0];
+  // pedido explícito de título/gancho sem texto citado: tira da fala (frase mais forte) ou usa um padrão
+  const wantsHook = /titulo|gancho|chamada|headline|\bhook\b/.test(norm(brief));
+  const hook = intent.hook ?? style?.textOverlays?.examples?.[0]
+    ?? (wantsHook ? (!exampleCaptions ? hookFromTranscript(p) : undefined) ?? 'Você precisa ver isso!' : undefined);
   if (hook) {
-    const d = Math.min(3, Math.max(1.2, projectDuration(p) * 0.3));
-    push([{ op: 'add_clip', trackId: textTrackId(p), clip: hookClip(hook, 0, d, 'gancho', 0.2), explain: `Título de gancho: "${hook}"` }]);
+    const d = r3(Math.min(2.5, Math.max(1.2, projectDuration(p) * 0.3)));
+    const existing = p.tracks.flatMap((tr) => tr.clips).find((c) => c.type === 'text' && (c.label === 'gancho' || c.templateId === 'hook'));
+    if (existing) push([{ op: 'update_clip', clipId: existing.id, patch: { text: hook, start: 0, duration: d, animation: 'pop' }, explain: `Título de gancho: "${hook}"` }]);
+    else push([{ op: 'add_clip', trackId: textTrackId(p), clip: { ...hookClip(hook, 0, d, 'gancho', 0.2), templateId: 'hook' }, explain: `Título de gancho: "${hook}"` }]);
     said.push(`título "${hook}"`);
   }
 
@@ -857,7 +864,9 @@ export function chatIntent(text: string, ctx: ChatContext): DemoResult {
   // ===== estilo CapCut =====
   total = projectDuration(p);
   const point = ctx.target?.point;
-  const range = rangeFromText(t, total) ?? ctx.target?.range;
+  const rawRange = rangeFromText(t, total) ?? ctx.target?.range;
+  // trecho de duração ~zero (comentário num instante) vira uma janela curta em volta do ponto
+  const range = rawRange && rawRange.end - rawRange.start < 0.3 ? { start: Math.max(0, rawRange.start - 0.5), end: Math.min(total, rawRange.start + 1.5) } : rawRange;
   const visual = (c: Clip) => (c.type === 'video' || c.type === 'image') && !c.locked && (!only || only.has(c.id));
   const visuals = () => p.tracks.flatMap((tr) => tr.clips).filter(visual);
   const fxTrack = () => p.tracks.find((tr) => tr.kind === 'effect' && !tr.locked)?.id ?? 'track_effect_1';

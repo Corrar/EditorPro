@@ -41,7 +41,7 @@ interface AIChatState {
   /** envia um pedido; usa (e limpa) o contexto apontado no editor (store.chatContext) */
   send: (text: string) => Promise<void>;
   /** aplica os comentários de revisão pendentes (marcadores kind 'comment') */
-  comments: () => Promise<void>;
+  comments: (markerIds?: Id[]) => Promise<void>;
   firstEdit: (brief: string) => Promise<void>;
   captions: (language?: string) => Promise<void>;
   /** desfaz a edição feita por uma mensagem (só se ela ainda for a última mudança) */
@@ -182,10 +182,12 @@ export const useAIChat = create<AIChatState>((set, get) => {
       await run('Pensando…', (o) => chatEdit(text, o), context);
     },
 
-    comments: async () => {
+    comments: async (markerIds) => {
       if (get().busy) return;
-      editor().pushMessage({ role: 'user', text: 'Aplicar os comentários de revisão', status: 'done' });
-      await run('Lendo os comentários…', (o) => applyComments(o));
+      const one = markerIds?.length === 1 ? (editor().project.markers ?? []).find((m) => m.id === markerIds[0]) : undefined;
+      editor().pushMessage({ role: 'user', text: one ? `Aplicar o comentário: “${one.label ?? ''}”` : 'Aplicar os comentários de revisão', status: 'done' });
+      if (markerIds && editor().chatContext?.markerId && markerIds.includes(editor().chatContext!.markerId!)) editor().setChatContext(undefined);
+      await run('Lendo os comentários…', (o) => applyComments({ ...o, markerIds }));
     },
 
     firstEdit: async (brief) => {

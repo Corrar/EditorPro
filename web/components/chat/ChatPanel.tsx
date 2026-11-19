@@ -116,6 +116,7 @@ export default function ChatPanel() {
   const chatContext = useEditor((s) => s.chatContext);
   const setChatContext = useEditor((s) => s.setChatContext);
   const pendingComments = useEditor((s) => (s.project.markers ?? []).filter((m) => m.kind === 'comment' && !m.resolved).length);
+  const ctxComment = useEditor((s) => (s.chatContext?.markerId ? (s.project.markers ?? []).find((m) => m.id === s.chatContext!.markerId && m.kind === 'comment' && !m.resolved) : undefined));
   const [text, setText] = useState('');
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -229,7 +230,7 @@ export default function ChatPanel() {
       <div className="ep-ch-foot">
         {pendingComments ? (
           <button className="ep-ch-comments" disabled={busy} onClick={() => comments()}>
-            <Icon d={I.note} size={14} /> Aplicar comentários <b>{pendingComments}</b>
+            <Icon d={I.note} size={14} /> Aplicar comentários com IA <b>{pendingComments}</b>
           </button>
         ) : null}
         {chatContext ? (
@@ -238,6 +239,11 @@ export default function ChatPanel() {
             <span>Apontando para: <b>{chatContext.label}</b></span>
             <button aria-label="Limpar o alvo" title="Limpar" onClick={() => setChatContext(undefined)}><Icon d={I.x} size={12} /></button>
           </div>
+        ) : null}
+        {ctxComment ? (
+          <button className="ep-ch-applyone" disabled={busy} onClick={() => comments([ctxComment.id])}>
+            <Icon d={I.spark} size={13} /> Aplicar este comentário
+          </button>
         ) : null}
         <div className="ep-ch-chips" role="list">
           {SUGGESTIONS.map((s) => (

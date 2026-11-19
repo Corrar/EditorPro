@@ -207,3 +207,16 @@ describe('demo: comandos estilo CapCut', () => {
     expect(rangeFromText('de 4 a 9 segundos', 20)).toEqual({ start: 4, end: 9 });
   });
 });
+
+describe('1ª edição demo: gancho', () => {
+  it('brief pedindo "título de gancho" sem texto cria TextClip pop nos primeiros ~2,5 s', async () => {
+    const { planFirstEdit } = await import('./demo');
+    const p = base(SPEECH);
+    const res = planFirstEdit({ project: p, assets, brief: 'Quero um vídeo dinâmico com título de gancho e legendas', silencesByAsset: {} });
+    const v = sanitizeOps(res.ops, p, assets);
+    const t = v.project.tracks.find((tr) => tr.kind === 'text')!.clips[0] as import('../types').TextClip;
+    expect(t).toMatchObject({ type: 'text', start: 0, animation: 'pop', label: 'gancho', templateId: 'hook' });
+    expect(t.duration).toBeLessThanOrEqual(2.5);
+    expect(t.text.length).toBeGreaterThan(3);
+  });
+});

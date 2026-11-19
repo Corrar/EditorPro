@@ -377,9 +377,15 @@ export async function chatEdit(text: string, opts: PipelineOptions = {}): Promis
       const pre = prelimOps(store().project, store().assets, '');
       if (pre.length) await apply(pre, { delayMs: 260 });
     }
-    const local = await localFeature(text, apply, opts, status);
-    if (local) return local;
-    return status.configured ? claudeChat(text, apply, opts) : demoChat(text, apply, opts);
+    const res = (await localFeature(text, apply, opts, status)) ?? (status.configured ? await claudeChat(text, apply, opts) : await demoChat(text, apply, opts));
+    // pedido feito apontando para um comentário de revisão: se editou, o comentário fica resolvido
+    const mid = opts.context?.markerId;
+    const cm = mid ? store().project.markers?.find((m) => m.id === mid && m.kind === 'comment' && !m.resolved) : undefined;
+    if (cm && res.appliedIds.length) {
+      const ids = await apply([{ op: 'update_marker', markerId: cm.id, patch: { resolved: true }, explain: 'Comentário resolvido' }], { delayMs: 150 });
+      res.appliedIds.push(...ids);
+    }
+    return res;
   });
 }
 
@@ -503,10 +509,10 @@ async function localFeature(text: string, apply: NonNullable<PipelineOptions['ap
 
 /* ---------- comentários de revisão ---------- */
 
-export async function applyComments(opts: PipelineOptions = {}): Promise<PipelineResult> {
+export async function applyComments(opts: PipelineOptions & { markerIds?: Id[] } = {}): Promise<PipelineResult> {
   const apply = opts.apply ?? defaultApply;
   const status = await getStatus();
-  const pending = (store().project.markers ?? []).filter((m) => m.kind === 'comment' && !m.resolved);
+  const pending = (store().project.markers ?? []).filter((m) => m.kind === 'comment' && !m.resolved && (!opts.markerIds || opts.markerIds.includes(m.id)));
   if (!pending.length) return { reply: 'Não há comentários pendentes. Adicione comentários na timeline (marcadores de comentário) e toque em "Aplicar comentários".', ops: [], appliedIds: [], provider: status.provider, warnings: [] };
   const f = (n: number) => n.toFixed(1);
   const list = pending.map((m, i) => `${i + 1}. [${m.id}] em ${f(m.t)}${m.end !== undefined ? `–${f(m.end)}` : ''} s: "${m.label ?? ''}"`).join('\n');
