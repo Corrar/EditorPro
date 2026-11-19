@@ -236,6 +236,7 @@ function buildClipPatch(raw: Record<string, unknown>, clip: Clip, assets: Record
   const out: Record<string, unknown> = {};
   const asset = 'assetId' in clip && clip.assetId ? assets[clip.assetId] : undefined;
   const label = str(raw.label, 60); if (label) out.label = label;
+  const gid = str(raw.groupId, 80); if (gid) out.groupId = gid;
   const locked = bool(raw.locked); if (locked !== undefined) out.locked = locked;
   const start = clampNum(raw.start, 0, 24 * 3600); if (start !== undefined) out.start = r3(start);
 
@@ -398,7 +399,10 @@ export function sanitizeOp(raw: unknown, p: Project, assets: Record<Id, MediaAss
       return { op: 'move_track', trackId: tid, index, ...meta };
     }
     case 'add_clip': {
-      const clip = buildClip(isObj(r.clip) ? r.clip : fail('clip ausente'), p, assets);
+      const rc = isObj(r.clip) ? r.clip : fail('clip ausente');
+      const built = buildClip(rc, p, assets);
+      const gid = str(rc.groupId, 80);
+      const clip = (gid ? { ...built, groupId: gid } : built) as Clip;
       const trackId = pickTrack(p, trackKindFor(clip), r.trackId);
       return { op: 'add_clip', trackId, clip, ...meta };
     }

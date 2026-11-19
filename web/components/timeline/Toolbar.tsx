@@ -89,6 +89,7 @@ function Popover({ open, anchor, onClose, children, width = 240, role = 'menu' }
 /** itens de configuração/ações menos usados (menu "⋯") */
 function MoreItems({ actions, close, compact }: { actions: ToolbarActions; close: () => void; compact: boolean }) {
   const ui = useTimelineUi();
+  const zoom = useEditor((s) => s.zoom);
   const hasSel = useEditor((s) => s.selection.length > 0);
   const run = (fn: () => void) => () => { close(); fn(); };
   return (
@@ -112,6 +113,23 @@ function MoreItems({ actions, close, compact }: { actions: ToolbarActions; close
         </button>
       )}
       <button role="menuitem" onClick={run(actions.fit)}><IFit size={15} /> Ajustar à tela</button>
+      {compact && (
+        <div className="ep-tl-speedrow" role="group" aria-label="Zoom">
+          <button onClick={() => actions.zoomTo(zoom / 1.4)} aria-label="Diminuir zoom"><IZoomOut size={15} /></button>
+          <button onClick={() => actions.zoomTo(zoom * 1.4)} aria-label="Aumentar zoom"><IZoomIn size={15} /></button>
+        </div>
+      )}
+      {compact && (
+        <>
+          <div className="ep-tl-menusep" />
+          <div className="ep-tl-menuhead">Adicionar trilha</div>
+          <div className="ep-tl-speedrow" role="group" aria-label="Adicionar trilha">
+            {TRACK_KINDS.map(({ kind, icon: I }) => (
+              <button key={kind} onClick={run(() => addTrack(kind))} aria-label={`Adicionar trilha de ${TRACK_NAMES[kind]}`} title={TRACK_NAMES[kind]}><I size={15} /></button>
+            ))}
+          </div>
+        </>
+      )}
       {compact && (
         <>
           <div className="ep-tl-menusep" />
@@ -186,7 +204,7 @@ function ToolbarInner({ actions }: { actions: ToolbarActions }) {
   const magnetic = useTimelineUi((s) => s.magnetic);
   const setUi = useTimelineUi((s) => s.set);
   const open = useTimelineUi((s) => (s.overflowOpen ? 'more' : s.addTrackOpen ? 'add' : s.speedPop ? 'speed' : null)) as PopKind;
-  const { barCompact: compact } = useDims();
+  const { barCompact: compact, compact: narrow } = useDims();
   const moreRef = useRef<HTMLButtonElement>(null);
   const speedRef = useRef<HTMLButtonElement>(null);
   const addRef = useRef<HTMLButtonElement>(null);
@@ -218,13 +236,36 @@ function ToolbarInner({ actions }: { actions: ToolbarActions }) {
     </>
   );
 
+  if (compact && narrow)
+    // celular: as ações do clipe ficam na barra contextual do shell; aqui só o essencial (+ ⋯)
+    return (
+      <div className="ep-tl-bar compact" role="toolbar" aria-label="Ferramentas da timeline">
+        <div className="ep-tl-barscroll">
+          <button className="ep-tl-btn" onClick={undo} disabled={!canUndo} aria-label="Desfazer"><IUndo /></button>
+          <button className="ep-tl-btn" onClick={redo} disabled={!canRedo} aria-label="Refazer"><IRedo /></button>
+          <span className="ep-tl-sep" />
+          <button className="ep-tl-btn" onClick={actions.split} aria-label="Dividir no cursor"><ISplit /></button>
+          <button className="ep-tl-btn" onClick={() => toggleKeyframe()} disabled={!hasSel} aria-label="Keyframe no cursor"><IDiamond /></button>
+        </div>
+        <button ref={moreRef} className={`ep-tl-btn more${open === 'more' ? ' on' : ''}`} onClick={toggle('more')} aria-label="Mais opções" aria-haspopup="menu" aria-expanded={open === 'more'}>
+          <IMore />
+        </button>
+        {pops}
+      </div>
+    );
+
   if (compact)
     return (
       <div className="ep-tl-bar compact" role="toolbar" aria-label="Ferramentas da timeline">
         <div className="ep-tl-barscroll">
-          <PlayBtn />
-          <TimeReadout compact />
-          <span className="ep-tl-sep" />
+          {/* no celular (<600px) o preview já tem play e tempo: a linha fica para as ferramentas */}
+          {!narrow && (
+            <>
+              <PlayBtn />
+              <TimeReadout compact />
+              <span className="ep-tl-sep" />
+            </>
+          )}
           {editBtns}
           <button ref={addRef} className={`ep-tl-btn${open === 'add' ? ' on' : ''}`} onClick={toggle('add')} aria-label="Adicionar trilha" aria-haspopup="menu"><IPlus /></button>
           <span className="ep-tl-sep" />

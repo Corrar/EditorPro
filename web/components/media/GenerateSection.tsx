@@ -3,8 +3,8 @@
    "Gerar com IA" na ferramenta Mídia: B-roll por texto, Animar foto,
    Estender clipe, Avatar falando. Consulta GET /api/gen/status?probe=1;
    sem rota ou configured:false → cartões desabilitados "Em breve".
-   A chamada real (`requestGeneration` de @/lib/ai/generate, sessão de IA)
-   entra quando o módulo existir na integração — ver submitGeneration().
+   A geração usa probeGeneration/requestGeneration/attachGenerated de
+   @/lib/ai/generate (sessão de IA); o vídeo pronto entra na Mídia como B-roll.
    ===================================================================== */
 import { useEffect, useMemo, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
@@ -12,22 +12,41 @@ import { emit } from '@/lib/events';
 import { useEditor } from '@/lib/store';
 import type { MediaAsset } from '@/lib/types';
 import { IconImage, IconMusic, IconSpark, IconVideo } from '@/components/shell/icons';
+import Icon, { type IconName } from '@/components/ui/Icon';
+import { attachGenerated, probeGeneration, requestGeneration, type GenKind as AiGenKind } from '@/lib/ai/generate';
 
 type GenKind = 'broll' | 'animate-photo' | 'extend-clip' | 'avatar';
-interface GenStatus { configured: boolean; provider?: string }
+interface GenStatus { configured: boolean; capabilities: AiGenKind[] }
+const AI_KIND: Record<GenKind, AiGenKind> = { broll: 'text-to-video', 'animate-photo': 'image-to-video', 'extend-clip': 'extend', avatar: 'avatar' };
 
-const CARDS: { id: GenKind; title: string; desc: string; emoji: string }[] = [
-  { id: 'broll', title: 'B-roll por texto', desc: 'Descreva a cena e a IA cria um clipe', emoji: '🎬' },
-  { id: 'animate-photo', title: 'Animar foto', desc: 'Dá movimento a uma imagem', emoji: '🖼️' },
-  { id: 'extend-clip', title: 'Estender clipe', desc: 'Continua o vídeo por mais alguns segundos', emoji: '⏩' },
-  { id: 'avatar', title: 'Avatar falando', desc: 'Foto + áudio viram uma pessoa falando', emoji: '🗣️' },
+const CARDS: { id: GenKind; title: string; desc: string; icon: IconName }[] = [
+  { id: 'broll', title: 'B-roll por texto', desc: 'Descreva a cena e a IA cria um clipe', icon: 'video' as const },
+  { id: 'animate-photo', title: 'Animar foto', desc: 'Dá movimento a uma imagem', icon: 'image' as const },
+  { id: 'extend-clip', title: 'Estender clipe', desc: 'Continua o vídeo por mais alguns segundos', icon: 'extend' as const },
+  { id: 'avatar', title: 'Avatar falando', desc: 'Foto + áudio viram uma pessoa falando', icon: 'mic' as const },
 ];
 
 export interface GenRequest { kind: GenKind; prompt?: string; imageAssetId?: string; videoAssetId?: string; audioAssetId?: string; seconds?: number }
 
-/** ponto único de troca: quando @/lib/ai/generate existir, chamar requestGeneration(req, onProgress) aqui */
-async function submitGeneration(_req: GenRequest, _onProgress: (f: number, stage: string) => void): Promise<void> {
-  throw new Error('O módulo de geração ainda não foi integrado');
+async function assetDataUrl(id: string | undefined): Promise<string | undefined> {
+  const a = id ? useEditor.getState().assets[id] : undefined;
+  if (!a?.url) return undefined;
+  const blob = await (await fetch(a.url)).blob();
+  return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = () => rej(new Error('Não consegui ler a mídia')); r.readAsDataURL(blob); });
+}
+
+/** envia ao gerador do servidor, acompanha o progresso e coloca o vídeo pronto na Mídia (B-roll) */
+async function submitGeneration(req: GenRequest, onProgress: (f: number, stage: string) => void): Promise<void> {
+  const aspect = useEditor.getState().project.aspect;
+  onProgress(0.02, 'Preparando…');
+  const [imageUrl, videoUrl, audioUrl] = await Promise.all([assetDataUrl(req.imageAssetId), assetDataUrl(req.videoAssetId), assetDataUrl(req.audioAssetId)]);
+  const stage = { queued: 'Na fila…', running: 'Gerando…', done: 'Baixando…', error: 'Erro' } as const;
+  const { url } = await requestGeneration(AI_KIND[req.kind], { prompt: req.prompt, imageUrl, videoUrl, audioUrl, duration: req.seconds, aspect }, {
+    onProgress: (st, pr) => onProgress(Math.max(0.05, Math.min(0.97, pr ?? (st === 'queued' ? 0.05 : 0.5))), stage[st]),
+  });
+  const title = CARDS.find((c) => c.id === req.kind)?.title ?? 'Vídeo gerado';
+  await attachGenerated(url, `${title} ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }).replace(':', 'h')}.mp4`);
+  onProgress(1, 'Pronto');
 }
 
 function AssetPick({ kind, value, onChange, label }: { kind: MediaAsset['kind']; value: string; onChange: (id: string) => void; label: string }) {
@@ -64,7 +83,7 @@ function GenForm({ kind, onDone }: { kind: GenKind; onDone: () => void }) {
     setProgress({ f: 0, stage: 'Enviando…' });
     try {
       await submitGeneration({ kind, prompt: prompt.trim() || undefined, imageAssetId: image || undefined, videoAssetId: video || undefined, audioAssetId: audio || undefined, seconds }, (f, stage) => setProgress({ f, stage }));
-      emit('ep:toast', { text: 'Clipe gerado e adicionado à mídia', kind: 'ok' });
+      emit('ep:toast', { text: 'Vídeo gerado — já está na Mídia como B-roll', kind: 'ok' });
       onDone();
     } catch (e) {
       emit('ep:toast', { text: e instanceof Error ? e.message : 'Falha na geração', kind: 'error' });
@@ -105,10 +124,7 @@ export default function GenerateSection() {
   const [open, setOpen] = useState<GenKind | null>(null);
   useEffect(() => {
     let alive = true;
-    fetch('/api/gen/status?probe=1')
-      .then((r) => (r.ok ? r.json() : { configured: false }))
-      .catch(() => ({ configured: false }))
-      .then((j: GenStatus) => { if (alive) setStatus({ configured: !!j?.configured, provider: j?.provider }); });
+    probeGeneration().then((j) => { if (alive) setStatus({ configured: !!j?.configured, capabilities: j?.capabilities ?? [] }); });
     return () => { alive = false; };
   }, []);
   const on = !!status?.configured;
@@ -122,9 +138,9 @@ export default function GenerateSection() {
       {status && !on && <p className="ep-pnote">Geração de vídeo precisa de uma GPU — será ligada depois.</p>}
       <div className="ep-gengrid">
         {CARDS.map((c) => (
-          <button key={c.id} type="button" className={`ep-gencard${open === c.id ? ' on' : ''}`} disabled={!on} aria-expanded={open === c.id}
+          <button key={c.id} type="button" className={`ep-gencard${open === c.id ? ' on' : ''}`} disabled={!on || !status?.capabilities.includes(AI_KIND[c.id])} aria-expanded={open === c.id}
             onClick={() => setOpen(open === c.id ? null : c.id)} title={on ? c.desc : 'Em breve'}>
-            <span className="em">{c.emoji}</span>
+            <span className="em"><Icon name={c.icon} size={22} /></span>
             <b>{c.title}</b>
             <span>{c.desc}</span>
           </button>

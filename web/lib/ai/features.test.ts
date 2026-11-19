@@ -5,7 +5,7 @@ import type { AdjustmentClip, CaptionSegment, MediaAsset, Project, StickerClip, 
 import { sanitizeOps } from './validate';
 import { summarizeProject } from './summary';
 import {
-  assignWordIds, beatMarkerOps, beatSyncOps, chapterOps, fillerOps, highlightOps, hookFromTranscript, isFiller, reframeKeyframes,
+  assignWordIds, beatMarkerOps, beatSyncOps, chapterOps, fillerOps, highlightOps, hookFromTranscript, hookOps, isFiller, reframeKeyframes,
   reframeOps, reframeX, timelineBeats,
 } from './features';
 import { chatIntent, rangeFromText } from './demo';
@@ -236,5 +236,18 @@ describe('speechLikely (filtro antes do Whisper)', () => {
     expect(speechLikely(tone, sr)).toBe(false);
     expect(speechLikely(silence, sr)).toBe(false);
     expect(speechLikely(speech, sr)).toBe(true);
+  });
+});
+
+describe('gancho pelo chat', () => {
+  it('troca o texto do gancho existente em vez de empilhar', () => {
+    const p0 = base(SPEECH);
+    const first = sanitizeOps(hookOps(p0, 'Primeiro'), p0, assets).project;
+    const r = chatIntent('adiciona um título de gancho "3 dicas rápidas"', { project: first, assets });
+    const after = sanitizeOps(r.ops, first, assets).project;
+    const texts = after.tracks.flatMap((t) => t.clips).filter((c) => c.type === 'text');
+    expect(texts).toHaveLength(1);
+    expect((texts[0] as import('../types').TextClip).text).toBe('3 dicas rápidas');
+    expect(after.tracks.flatMap((t) => t.clips).filter((c) => c.type === 'adjustment')).toHaveLength(1);
   });
 });

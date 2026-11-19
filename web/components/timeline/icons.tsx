@@ -1,76 +1,54 @@
-/* ícones de traço (estilo Lucide) usados só na timeline */
-import type { ReactNode, SVGProps } from 'react';
+/* Ícones da timeline = conjunto único do app (@/components/ui/Icon, lucide).
+   Adaptador fino: mantém os nomes usados no módulo, sem nenhum SVG próprio. */
+import Icon, { type IconName } from '@/components/ui/Icon';
 
-type P = SVGProps<SVGSVGElement> & { size?: number };
+type P = { size?: number; className?: string; title?: string };
 
-function Svg({ size = 16, children, ...rest }: P & { children: ReactNode }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-      {...rest}
-    >
-      {children}
-    </svg>
-  );
-}
+const make = (name: IconName) => {
+  const C = ({ size = 16, className, title }: P) => <Icon name={name} size={size} className={className} title={title} />;
+  C.displayName = `I_${name}`;
+  return C;
+};
 
-export const IUndo = (p: P) => <Svg {...p}><path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></Svg>;
-export const IRedo = (p: P) => <Svg {...p}><path d="m15 14 5-5-5-5" /><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" /></Svg>;
-export const ISplit = (p: P) => (
-  <Svg {...p}><circle cx="6" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><path d="M20 4 8.12 15.88" /><path d="M14.47 14.48 20 20" /><path d="M8.12 8.12 12 12" /></Svg>
-);
-export const ITrash = (p: P) => <Svg {...p}><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></Svg>;
-export const IMagnet = (p: P) => (
-  <Svg {...p}><path d="m6 15-4-4 6.75-6.77a7.79 7.79 0 0 1 11 11L13 22l-4-4 6.39-6.36a2.14 2.14 0 0 0-3-3L6 15" /><path d="m5 8 4 4" /><path d="m12 15 4 4" /></Svg>
-);
-export const IFit = (p: P) => (
-  <Svg {...p}><path d="M8 3H5a2 2 0 0 0-2 2v3" /><path d="M21 8V5a2 2 0 0 0-2-2h-3" /><path d="M3 16v3a2 2 0 0 0 2 2h3" /><path d="M16 21h3a2 2 0 0 0 2-2v-3" /></Svg>
-);
-export const IZoomIn = (p: P) => <Svg {...p}><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /><path d="M11 8v6M8 11h6" /></Svg>;
-export const IZoomOut = (p: P) => <Svg {...p}><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /><path d="M8 11h6" /></Svg>;
-export const IPlay = (p: P) => <Svg {...p}><path d="M7 4v16l13-8z" fill="currentColor" /></Svg>;
-export const IPause = (p: P) => <Svg {...p}><rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor" /><rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor" /></Svg>;
-export const IVideo = (p: P) => <Svg {...p}><rect x="2" y="5" width="14" height="14" rx="2" /><path d="m22 8-6 4 6 4z" /></Svg>;
-export const IText = (p: P) => <Svg {...p}><path d="M4 7V4h16v3" /><path d="M9 20h6" /><path d="M12 4v16" /></Svg>;
-export const IAudio = (p: P) => <Svg {...p}><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></Svg>;
-export const ICaptions = (p: P) => <Svg {...p}><rect x="2" y="5" width="20" height="14" rx="2" /><path d="M7 15h4M15 15h2M7 11h2M13 11h4" /></Svg>;
-export const IImage = (p: P) => <Svg {...p}><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21" /></Svg>;
-export const IEye = (p: P) => <Svg {...p}><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12" /><circle cx="12" cy="12" r="3" /></Svg>;
-export const IEyeOff = (p: P) => (
-  <Svg {...p}><path d="M9.9 4.2A10.9 10.9 0 0 1 12 4c6.5 0 10 8 10 8a17.6 17.6 0 0 1-2.2 3.2" /><path d="M6.6 6.6A17.6 17.6 0 0 0 2 12s3.5 8 10 8a10.7 10.7 0 0 0 5.4-1.4" /><path d="m2 2 20 20" /><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" /></Svg>
-);
-export const IVolume = (p: P) => <Svg {...p}><path d="M11 5 6 9H2v6h4l5 4z" /><path d="M15.5 8.5a5 5 0 0 1 0 7" /><path d="M19 5a10 10 0 0 1 0 14" /></Svg>;
-export const IMute = (p: P) => <Svg {...p}><path d="M11 5 6 9H2v6h4l5 4z" /><path d="m22 9-6 6M16 9l6 6" /></Svg>;
-export const ILock = (p: P) => <Svg {...p}><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></Svg>;
-export const IUnlock = (p: P) => <Svg {...p}><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 7.5-2" /></Svg>;
-export const ICopy = (p: P) => <Svg {...p}><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></Svg>;
-export const IRipple = (p: P) => <Svg {...p}><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M4 14h11" /><path d="m12 11 3 3-3 3" /><path d="M19 11v6" /></Svg>;
-export const ISparkle = (p: P) => (
-  <Svg {...p}><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" fill="currentColor" stroke="none" /><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z" fill="currentColor" stroke="none" /></Svg>
-);
-export const IPlus = (p: P) => <Svg {...p}><path d="M12 5v14M5 12h14" /></Svg>;
-export const IGauge = (p: P) => <Svg {...p}><path d="m12 14 4-4" /><path d="M3.3 19a10 10 0 1 1 17.4 0" /></Svg>;
-export const IMore = (p: P) => <Svg {...p}><circle cx="5" cy="12" r="1.6" fill="currentColor" /><circle cx="12" cy="12" r="1.6" fill="currentColor" /><circle cx="19" cy="12" r="1.6" fill="currentColor" /></Svg>;
-export const ISticker = (p: P) => <Svg {...p}><path d="M15.5 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h9.5L21 14.5V5a2 2 0 0 0-2-2z" /><path d="M14 21v-5a2 2 0 0 1 2-2h5" /><path d="M8.5 13.5s1.2 1.5 3.5 1.5 3.5-1.5 3.5-1.5" /><path d="M9 9h.01M15 9h.01" /></Svg>;
-export const IShape = (p: P) => <Svg {...p}><circle cx="8" cy="8" r="5" /><rect x="11" y="11" width="10" height="10" rx="1.5" /></Svg>;
-export const ISliders = (p: P) => <Svg {...p}><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6" /></Svg>;
-export const IReverse = (p: P) => <Svg {...p}><path d="M3 7h13a5 5 0 0 1 0 10H8" /><path d="m7 3-4 4 4 4" /></Svg>;
-export const IMask = (p: P) => <Svg {...p}><circle cx="12" cy="12" r="9" /><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" /></Svg>;
-export const IChroma = (p: P) => <Svg {...p}><rect x="3" y="3" width="18" height="18" rx="3" /><path d="M3 15l5-5 4 4 3-3 6 6" /></Svg>;
-export const IDiamond = (p: P) => <Svg {...p}><path d="M12 2 22 12 12 22 2 12z" /></Svg>;
-export const IFlag = (p: P) => <Svg {...p}><path d="M4 22V4" /><path d="M4 4h13l-2 4 2 4H4" /></Svg>;
-export const IComment = (p: P) => <Svg {...p}><path d="M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-6.4A8 8 0 1 1 21 12z" /></Svg>;
-export const IClipboard = (p: P) => <Svg {...p}><rect x="8" y="2" width="8" height="4" rx="1" /><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /></Svg>;
-export const ISnowflake = (p: P) => <Svg {...p}><path d="M12 2v20M2 12h20M5 5l14 14M19 5 5 19" /></Svg>;
-export const IAudioSplit = (p: P) => <Svg {...p}><rect x="2" y="3" width="20" height="7" rx="2" /><path d="M4 17h1M7 14v6M10 15v4M13 13v8M16 15v4M19 16v2" /></Svg>;
-export const IMagnetTrack = (p: P) => <Svg {...p}><path d="M3 8h18v8H3z" /><path d="M9 8v8M15 8v8" /></Svg>;
-export const IAsk = (p: P) => <Svg {...p}><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" /><path d="M19 17v4M17 19h4" /></Svg>;
-export const IInsert = (p: P) => <Svg {...p}><path d="M3 12h7M14 12h7M12 4v16" /><path d="m7 9 3 3-3 3M17 9l-3 3 3 3" /></Svg>;
+export const IUndo = make('undo');
+export const IRedo = make('redo');
+export const ISplit = make('cut');
+export const ITrash = make('delete');
+export const IMagnet = make('magnet');
+export const IFit = make('fullscreen');
+export const IZoomIn = make('zoomIn');
+export const IZoomOut = make('zoomOut');
+export const IPlay = make('play');
+export const IPause = make('pause');
+export const IVideo = make('video');
+export const IText = make('text');
+export const IAudio = make('music');
+export const ICaptions = make('captions');
+export const IImage = make('image');
+export const IEye = make('show');
+export const IEyeOff = make('hide');
+export const IVolume = make('volume');
+export const IMute = make('mute');
+export const ILock = make('lock');
+export const IUnlock = make('unlock');
+export const ICopy = make('copy');
+export const IRipple = make('delete');
+export const ISparkle = make('ai');
+export const IPlus = make('add');
+export const IGauge = make('speed');
+export const IMore = make('more');
+export const ISticker = make('stickers');
+export const IShape = make('shapes');
+export const ISliders = make('adjust');
+export const IReverse = make('loop');
+export const IMask = make('crop');
+export const IChroma = make('chroma');
+export const IDiamond = make('keyframe');
+export const IFlag = make('marker');
+export const IComment = make('review');
+export const IClipboard = make('copy');
+export const ISnowflake = make('freeze');
+export const IAudioSplit = make('audio');
+export const IMagnetTrack = make('layers');
+export const IAsk = make('ai');
+export const IInsert = make('layers');

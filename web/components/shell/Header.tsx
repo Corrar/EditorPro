@@ -7,7 +7,7 @@ import { useSaveStatus } from '@/lib/persist';
 import { useEditor } from '@/lib/store';
 import type { AspectRatio } from '@/lib/types';
 import { formatTime } from '@/lib/util';
-import { IconExport, IconRedo, IconUndo } from './icons';
+import { IconArrowLeft, IconExport, IconRedo, IconUndo } from './icons';
 
 const ASPECTS: AspectRatio[] = ['9:16', '16:9', '1:1', '4:5'];
 
@@ -46,7 +46,7 @@ function SaveBadge() {
   return <span className={`ep-save s-${status}`}><i />{label}</span>;
 }
 
-export default function Header() {
+export default function Header({ onHome }: { onHome?: () => void }) {
   const aspect = useEditor((s) => s.project.aspect);
   const duration = useEditor((s) => projectDuration(s.project));
   const clips = useEditor((s) => s.project.tracks.reduce((n, t) => n + t.clips.length, 0));
@@ -60,6 +60,7 @@ export default function Header() {
   return (
     <header className="ep-header">
       <div className="ep-hmain">
+        {onHome && <button type="button" className="ep-hback" onClick={onHome} aria-label="Voltar ao início" title="Início"><IconArrowLeft size={22} /></button>}
         <ProjectName />
         <div className="ep-stats">
           <span className="ep-statpill"><span className="dot" style={{ background: 'var(--green)' }} /><b className="mono">{formatTime(duration)}</b><span>duração</span></span>
