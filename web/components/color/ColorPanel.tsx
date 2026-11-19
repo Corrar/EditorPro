@@ -5,7 +5,7 @@
    dispatch({op:'update_clip', patch:{colorGrade}}).
    ===================================================================== */
 import '@/styles/color.css';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useEditor } from '@/lib/store';
 import type { ColorGrade } from '@/lib/types';
 import { isNeutralGrade, normalizeGrade } from '@/lib/color/grade';
@@ -45,19 +45,33 @@ export default function ColorPanel({ initialTab = 'basic' }: { initialTab?: Colo
   const frame = useClipFrame(clip, needFrame);
   const scopes = useScopes(frame, grade, tab === 'scopes' || tab === 'curves');
 
-  // segurar "Original": tira a grade sem histórico e devolve ao soltar (funciona em qualquer modo de render)
+  // segurar "Original": tira a grade sem histórico e devolve ao soltar (funciona em qualquer modo de render).
+  // O estado vive num REF: pointerup/lostpointercapture/keyup podem chegar juntos e não podem restaurar duas vezes,
+  // e nada aqui roda dentro de efeito por render (antes: loop "Maximum update depth").
+  const holdRef = useRef<{ id: string; g?: ColorGrade } | null>(null);
   const [holding, setHolding] = useState<{ id: string; g?: ColorGrade } | null>(null);
+  const restoreHold = () => {
+    const h = holdRef.current;
+    if (!h) return;
+    holdRef.current = null;
+    useEditor.getState().dispatch({ op: 'update_clip', clipId: h.id, patch: { colorGrade: h.g } }, { history: false });
+  };
   const holdStart = () => {
-    if (!clip || holding) return;
-    setHolding({ id: clip.id, g: clip.colorGrade });
+    if (!clip || holdRef.current) return;
+    holdRef.current = { id: clip.id, g: clip.colorGrade };
+    setHolding(holdRef.current);
     useEditor.getState().dispatch({ op: 'update_clip', clipId: clip.id, patch: { colorGrade: undefined } }, { history: false });
   };
   const holdEnd = () => {
-    if (!holding) return;
-    useEditor.getState().dispatch({ op: 'update_clip', clipId: holding.id, patch: { colorGrade: holding.g } }, { history: false });
+    if (!holdRef.current) return;
+    restoreHold();
     setHolding(null);
   };
-  useEffect(() => () => { if (holding) holdEnd(); }); // segurança ao desmontar
+  // trocou de clipe no meio do "segurar": devolve a grade ao anterior
+  const clipId = clip?.id;
+  useEffect(() => { if (holdRef.current && holdRef.current.id !== clipId) { restoreHold(); setHolding(null); } }, [clipId]);
+  // desmontou segurando: devolve (só no desmontar)
+  useEffect(() => () => restoreHold(), []);
 
   useEffect(() => () => { if (getCompare().mode === 'split') setCompare({ mode: 'off' }); }, []);
 

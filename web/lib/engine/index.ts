@@ -83,7 +83,7 @@ export function renderFrame(ctx: CanvasRenderingContext2D, project: Project, t: 
       }
     } else if (track.kind === 'effect') {
       for (const c of track.clips) {
-        if (c.type === 'adjustment' && t >= c.start && t < c.start + c.duration) applyAdjustment(ctx, c, t, W, H);
+        if (c.type === 'adjustment' && t >= c.start && t < c.start + c.duration) applyAdjustment(ctx, c, t, W, H, media.offline);
       }
     }
   }

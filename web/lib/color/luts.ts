@@ -129,7 +129,11 @@ export const BUILTIN_LUT_SIZE = 33;
 const registry = new Map<string, Lut3D>();
 const listeners = new Set<() => void>();
 
-function notify() { for (const f of listeners) { try { f(); } catch { /* ignora */ } } }
+let registryVersion = 0;
+/** muda sempre que uma LUT entra ou sai do registro (cache de grades resolvidas) */
+export function lutVersion(): number { return registryVersion; }
+
+function notify() { registryVersion++; for (const f of listeners) { try { f(); } catch { /* ignora */ } } }
 
 /** avisa quando uma LUT nova fica disponível (o preview pode redesenhar) */
 export function onLutsChanged(f: () => void): () => void {

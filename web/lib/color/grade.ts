@@ -111,12 +111,15 @@ export function normalizeGrade(g?: ColorGrade | null): ColorGrade | undefined {
     if (Object.keys(h).length) out.hsl = h;
   }
   if (g.lut && typeof g.lut.id === 'string' && g.lut.id) {
-    const i = clamp(num(g.lut.intensity, 1), 0, 1);
-    if (i > EPS) out.lut = { id: g.lut.id, intensity: i };
+    // intensidade 0 é guardada (o slider do look continua e dá para subir de novo);
+    // isNeutralGrade já ignora LUT com intensidade ~0 no processamento
+    out.lut = { id: g.lut.id, intensity: clamp(num(g.lut.intensity, 1), 0, 1) };
   }
   const mix = clamp(num(g.mix, 1), 0, 1);
   if (mix < 1 - EPS) out.mix = mix;
-  return isNeutralGrade(out) ? undefined : out;
+  // apaga só pelos PARÂMETROS: mix 0 / intensidade 0 não jogam a correção fora
+  const params: ColorGrade = { ...out, mix: undefined, lut: out.lut && { ...out.lut, intensity: 1 } };
+  return isNeutralGrade(params) ? undefined : out;
 }
 
 const addW = (a?: ColorWheel, b?: ColorWheel): ColorWheel | undefined => {
@@ -194,9 +197,13 @@ export function gradeToCssFilter(g?: ColorGrade | null): string {
  */
 export function gradeCssEquivalent(g?: ColorGrade | null): string | null {
   const n = normalizeGrade(g);
-  if (!n) return 'none';
-  const allowed = new Set(['exposure', 'contrast', 'saturation', 'mix']);
-  for (const k of Object.keys(n)) if (!allowed.has(k)) return null;
-  // contraste no CSS pivota em 0,5 — aceitável só se não houver contraste ou com pivô padrão próximo
-  return gradeToCssFilter(n);
+  if (!n || isNeutralGrade(n)) return 'none';
+  // só saturação (e mix) batem exatamente com o motor: o saturate() do CSS usa a mesma
+  // luma Rec.709. Contraste (pivô 0,435 × 0,5 do CSS) e exposição (linear × codificado)
+  // NÃO batem — vão para o canvas/WebGL, idêntico ao export.
+  for (const k of Object.keys(n)) if (k !== 'saturation' && k !== 'mix') return null;
+  const sat = Math.max(0, 1 + num(n.saturation));
+  const mix = num(n.mix, 1);
+  const v = 1 + (sat - 1) * mix;
+  return Math.abs(v - 1) > 1e-3 ? `saturate(${f3(v)})` : 'none';
 }
