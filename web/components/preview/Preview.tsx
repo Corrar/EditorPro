@@ -545,6 +545,18 @@ export default function Preview() {
     return () => window.removeEventListener('keydown', h);
   }, [pointMode]);
   /** quadro a quadro (pausa a reprodução) */
+  /** menu ⋯: mede e encaixa na tela (8 px de margem), como os popovers da timeline */
+  const fitMenu = useCallback((el: HTMLDivElement | null) => {
+    if (!el) return;
+    el.style.marginLeft = '';
+    const r = el.getBoundingClientRect();
+    const vw = document.documentElement.clientWidth;
+    let dx = 0;
+    if (r.right > vw - 8) dx = vw - 8 - r.right;
+    if (r.left + dx < 8) dx = 8 - r.left;
+    // (margin, não transform: a animação de entrada usa transform)
+    if (dx) el.style.marginLeft = `${Math.round(dx)}px`;
+  }, []);
   const step = (dir: 1 | -1) => {
     const st = useEditor.getState();
     if (st.playing) st.setPlaying(false);
@@ -720,7 +732,7 @@ export default function Preview() {
             <div className="ep-pv-more">
               <button className={`ep-pv-mbtn${moreOpen || pointMode || safe || grid || loop || compare || zoom !== 'fit' || playRate !== 1 ? ' on' : ''}`} onClick={() => setMoreOpen(!moreOpen)} aria-label="Mais opções" aria-expanded={moreOpen}><Icon name="more" size={22} /></button>
               {moreOpen && (
-                <div className="ep-pv-menu" role="menu">
+                <div className="ep-pv-menu" role="menu" ref={fitMenu}>
                   <button role="menuitemcheckbox" aria-checked={pointMode} className={pointMode ? 'on' : ''} onClick={() => { setPointMode(!pointMode); setMoreOpen(false); }}>
                     <Icon name="point" size={18} /> Apontar no vídeo <small>ou toque longo</small>
                   </button>
