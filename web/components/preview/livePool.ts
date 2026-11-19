@@ -214,7 +214,7 @@ export class LiveMediaPool implements MediaSources {
   }
 
   /** sincroniza todos os elementos com o tempo t */
-  sync(p: Project, assets: Record<string, MediaAsset>, t: Seconds, playing: boolean, fps = 30): SyncState {
+  sync(p: Project, assets: Record<string, MediaAsset>, t: Seconds, playing: boolean, fps = 30, playRate = 1): SyncState {
     this.lastPlaying = playing;
     const now = performance.now();
     const active: { clip: Clip; track: Track; role?: 'in' | 'out' }[] = [];
@@ -276,7 +276,9 @@ export class LiveMediaPool implements MediaSources {
       const routed = this.route(el, clip, gain);
       if (!routed) el.volume = Math.min(1, Math.max(0, gain));
       el.muted = !this.unlocked || gain <= 0.0001;
-      const rate = Math.min(16, Math.max(0.0625, clipSpeed(clip, t)));
+      const speed = clipSpeed(clip, t);
+      // velocidade do elemento = velocidade do clipe × velocidade de reprodução do preview
+      const rate = Math.min(16, Math.max(0.0625, speed * playRate));
       if (playing && reverse) {
         if (!el.paused) el.pause();
         if (!el.seeking && Math.abs(el.currentTime - target) > 0.5 / fps) this.seek(el, target, now);
@@ -290,7 +292,7 @@ export class LiveMediaPool implements MediaSources {
           if (el.paused) this.play(el, now);
           if (isLead) {
             // tempo de timeline mostrado pelo vídeo (1ª ordem; vale p/ curva de velocidade)
-            const videoT = t + (el.currentTime - target) / rate;
+            const videoT = t + (el.currentTime - target) / Math.max(0.0625, speed);
             const stalled = el.paused || el.seeking || el.readyState < 3;
             lead = { videoT, stalled };
           }
@@ -314,8 +316,9 @@ export class LiveMediaPool implements MediaSources {
         const el = this.acquire(clip, asset);
         el.muted = true;
         const at = sourceTime(clip, clip.start);
-        const rate = Math.min(16, Math.max(0.0625, clipSpeed(clip, clip.start)));
-        const pos = warmPosition(at, clip.start - t, rate, !!clip.reverse);
+        const speed = Math.max(0.0625, clipSpeed(clip, clip.start));
+        const rate = Math.min(16, speed * playRate);
+        const pos = warmPosition(at, clip.start - t, speed, !!clip.reverse);
         if (pos.play) {
           // partida a quente: já tocando (mudo) quando o corte chegar — sem a latência do play()
           const dec = driftDecision({ drift: pos.at - el.currentTime, rate, sinceKickMs: now - (this.kicks.get(el) ?? -Infinity), lead: false });

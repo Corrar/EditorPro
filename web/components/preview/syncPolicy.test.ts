@@ -192,3 +192,15 @@ describe('staleIdle (libera decodificadores presos)', () => {
     expect(staleIdle([b], 'blob:proxy')).toEqual([]);
   });
 });
+
+describe('PlaybackClock com velocidade de reprodução', () => {
+  it('2× anda o dobro; 0,5× a metade', () => {
+    const c = new PlaybackClock();
+    c.reset(0, 0); c.rate = 2;
+    let t = 0; for (let w = 100; w <= 1000; w += 100) t = c.tick(w, null);
+    expect(t).toBeCloseTo(2);
+    c.reset(0, 0); c.rate = 0.5;
+    for (let w = 100; w <= 1000; w += 100) t = c.tick(w, null);
+    expect(t).toBeCloseTo(0.5);
+  });
+});

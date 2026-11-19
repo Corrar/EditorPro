@@ -68,6 +68,8 @@ export class PlaybackClock {
   private t = 0;
   private wall = 0;
   private holdMs = 0;
+  /** velocidade de reprodução do preview (0,5×–2×) */
+  rate = 1;
 
   reset(t: Seconds, wall: number) {
     this.t = t;
@@ -89,7 +91,7 @@ export class PlaybackClock {
       return this.t;
     }
     if (!lead?.stalled) this.holdMs = Math.max(0, this.holdMs - dtMs * 0.5);
-    this.t += dtMs / 1000;
+    this.t += (dtMs / 1000) * this.rate;
     if (lead && !lead.stalled) {
       const d = lead.videoT - this.t;
       // perto: converge 15% por tick (sem saltos); longe: não segue (o seek do elemento resolve)

@@ -13,6 +13,7 @@ import { formatTime } from '@/lib/util';
 import { LiveMediaPool } from './livePool';
 import { PlaybackClock, QualityGovernor, frameInterval } from './syncPolicy';
 import { nativePlan } from './hybrid';
+import { PLAY_RATES, rateLabel, loopRange, wrapLoop, stepFrame, zoomScale, VIEW_ZOOMS, zoomLabel, SAFE_ZONES, SAFE_LABELS, type ViewZoom, type SafePlatform } from './viewing';
 import PerfHud, { type PreviewStats } from './PerfHud';
 import ExportDialog from './ExportDialog';
 import Icon from '@/components/ui/Icon';
@@ -76,6 +77,15 @@ export default function Preview() {
   const fitRef = useRef(fit);
   fitRef.current = fit;
   const [safe, setSafe] = useState(false);
+  /* ferramentas de visualização */
+  const [playRate, setPlayRate] = useState(1);
+  const [loop, setLoop] = useState(false);
+  const [zoom, setZoom] = useState<ViewZoom>('fit');
+  const [grid, setGrid] = useState(false);
+  const [platform, setPlatform] = useState<SafePlatform>('tiktok');
+  const [viewOpen, setViewOpen] = useState(false);
+  const viewRef = useRef({ playRate: 1, loop: false });
+  viewRef.current = { playRate, loop };
   /* "Mostrar desempenho" (lembrado no aparelho) */
   const [perf, setPerfState] = useState(false);
   useEffect(() => { try { setPerfState(localStorage.getItem('ep:pv-perf') === '1'); } catch { /* sem storage */ } }, []);
@@ -237,12 +247,14 @@ export default function Preview() {
       const cs = getComputedStyle(el);
       const w = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
       const h = el.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
-      const k = Math.max(0, Math.min(w / projW, h / projH));
+      const fitK = Math.max(0, Math.min(w / projW, h / projH));
+      // zoom do quadro: 'Ajustar' cabe no palco; 100%/200% = pixels reais (o palco rola)
+      const k = zoomScale(zoom, fitK, window.devicePixelRatio || 1);
       setFit({ w: Math.max(0, Math.floor(projW * k)), h: Math.max(0, Math.floor(projH * k)) });
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [projW, projH, fullscreen, cssFull]);
+  }, [projW, projH, fullscreen, cssFull, zoom]);
 
   /* resolução interna adaptativa */
   useEffect(() => {
@@ -251,13 +263,14 @@ export default function Preview() {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const short = Math.min(projW, projH);
     const cssShort = Math.min(fit.w, fit.h) * dpr;
-    const maxShort = isWeakDevice() ? PREVIEW_MAX_SHORT_WEAK : PREVIEW_MAX_SHORT;
+    // com zoom, a resolução interna acompanha (até 1440 no lado menor) p/ não ficar borrado
+    const maxShort = zoom !== 'fit' ? 1440 : isWeakDevice() ? PREVIEW_MAX_SHORT_WEAK : PREVIEW_MAX_SHORT;
     const targetShort = Math.max(Math.min(PREVIEW_MIN_SHORT, short), Math.min(maxShort, cssShort, short));
     const k = targetShort / short;
     baseRef.current = { w: Math.round((projW * k) / 2) * 2, h: Math.round((projH * k) / 2) * 2 };
     applySize();
     requestStill();
-  }, [fit.w, fit.h, projW, projH, requestStill, applySize]);
+  }, [fit.w, fit.h, projW, projH, requestStill, applySize, zoom]);
 
   /* ---------- pausado: re-renderiza ao mudar playhead/projeto/mídia ---------- */
   useEffect(() => {
@@ -293,7 +306,12 @@ export default function Preview() {
     if (d0 <= 0) { setPlaying(false); return; }
     let start = st0.playhead;
     if (start >= d0 - 1 / 30) start = 0;
+    if (viewRef.current.loop) {
+      const r = loopRange(st0.project, st0.selection);
+      if (start < r.start || start >= r.end - 1 / 30) start = r.start;
+    }
     const clock = clockRef.current;
+    clock.rate = viewRef.current.playRate;
     clock.reset(start, performance.now());
     lastSetRef.current = start;
     if (start !== st0.playhead) setPlayhead(start);
@@ -306,7 +324,13 @@ export default function Preview() {
       if (!st.playing) return;
       const d = projectDuration(st.project);
       const now = performance.now();
-      const t = clock.tick(now, lead);
+      clock.rate = viewRef.current.playRate;
+      let t = clock.tick(now, lead);
+      // repetir: volta ao início do trecho (clipe selecionado ou vídeo inteiro)
+      if (viewRef.current.loop) {
+        const w = wrapLoop(t, loopRange(st.project, st.selection));
+        if (w.wrapped) { t = w.t; clock.reset(t, now); lead = null; }
+      }
       if (t >= d) {
         pool.pauseAll();
         lastSetRef.current = d;
@@ -319,7 +343,7 @@ export default function Preview() {
       // ritmo: desenha no fps do projeto (tela de 90/120 Hz não precisa redesenhar o mesmo quadro 3–4x)
       if (now - lastDraw < frameInterval(st.project.fps)) return;
       lastDraw = now;
-      const s = pool.sync(st.project, st.assets, t, true, st.project.fps);
+      const s = pool.sync(st.project, st.assets, t, true, st.project.fps, viewRef.current.playRate);
       lead = s.lead;
       // falta o quadro do vídeo (corte/seek ainda decodificando): mantém o último quadro bom
       if (s.pending || !draw(t)) { STATS.held++; showTime(t); }
@@ -332,6 +356,15 @@ export default function Preview() {
 
   /* ---------- eventos / tela cheia ---------- */
   useEffect(() => on('ep:open-export', (d) => { setPlaying(false); setExportInit(d ?? {}); setExportOpen(true); }), [setPlaying]);
+  /* fecha o popover "Visualização" ao tocar fora */
+  useEffect(() => {
+    if (!viewOpen) return;
+    const h = (e: PointerEvent) => { if (!(e.target as HTMLElement | null)?.closest?.('.ep-pv-viewwrap')) setViewOpen(false); };
+    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') setViewOpen(false); };
+    document.addEventListener('pointerdown', h, true);
+    window.addEventListener('keydown', k);
+    return () => { document.removeEventListener('pointerdown', h, true); window.removeEventListener('keydown', k); };
+  }, [viewOpen]);
   const glowTimer = useRef(0);
   useEffect(() => {
     if (!liveApplied) return;
@@ -422,6 +455,23 @@ export default function Preview() {
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, [pointMode]);
+  /** quadro a quadro (pausa a reprodução) */
+  const step = (dir: 1 | -1) => {
+    const st = useEditor.getState();
+    if (st.playing) st.setPlaying(false);
+    st.setPlayhead(stepFrame(st.playhead, st.project.fps || 30, dir, projectDuration(st.project)));
+  };
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      const tg = e.target as HTMLElement | null;
+      if (tg && (tg.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(tg.tagName))) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === ',') { e.preventDefault(); step(-1); }
+      else if (e.key === '.') { e.preventDefault(); step(1); }
+    };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, []);
   const toStart = () => { setPlayhead(0); if (playing) clockRef.current.reset(0, performance.now()); };
   const toggleFull = async () => {
     const el = frameRef.current?.parentElement as FsEl | null | undefined;
@@ -446,10 +496,47 @@ export default function Preview() {
 
   const empty = duration <= 0;
   const isVertical = projAspect === '9:16';
+  const loopLabel = useEditor((s) => loopRange(s.project, s.selection).label);
+
+  /** itens de "Visualização" (mesmos no popover do desktop e no menu ⋯ do celular) */
+  const viewItems = (
+    <div className="ep-pv-view" role="group" aria-label="Visualização">
+      <div className="row"><span>Velocidade</span>
+        <div className="chips" role="radiogroup" aria-label="Velocidade de reprodução">
+          {PLAY_RATES.map((r) => <button key={r} role="radio" aria-checked={playRate === r} className={playRate === r ? 'on' : ''} onClick={() => setPlayRate(r)}>{rateLabel(r)}</button>)}
+        </div>
+      </div>
+      <div className="row"><span>Zoom</span>
+        <div className="chips" role="radiogroup" aria-label="Zoom do quadro">
+          {VIEW_ZOOMS.map((z) => <button key={String(z)} role="radio" aria-checked={zoom === z} className={zoom === z ? 'on' : ''} onClick={() => setZoom(z)}>{zoomLabel(z)}</button>)}
+        </div>
+      </div>
+      <button role="menuitemcheckbox" aria-checked={loop} className={`tog${loop ? ' on' : ''}`} onClick={() => setLoop(!loop)}>
+        <Icon name="loop" size={18} /> Repetir <small>{loopLabel}</small>
+      </button>
+      <button role="menuitemcheckbox" aria-checked={grid} className={`tog${grid ? ' on' : ''}`} onClick={() => setGrid(!grid)}>
+        <Icon name="grid" size={18} /> Grade de terços
+      </button>
+      <button role="menuitemcheckbox" aria-checked={safe} className={`tog${safe ? ' on' : ''}`} onClick={() => setSafe(!safe)}>
+        <Icon name="safearea" size={18} /> Zonas seguras
+      </button>
+      {safe && isVertical && (
+        <div className="row sub"><span>Plataforma</span>
+          <div className="chips" role="radiogroup" aria-label="Plataforma">
+            {(Object.keys(SAFE_LABELS) as SafePlatform[]).map((k) => <button key={k} role="radio" aria-checked={platform === k} className={platform === k ? 'on' : ''} onClick={() => setPlatform(k)}>{SAFE_LABELS[k]}</button>)}
+          </div>
+        </div>
+      )}
+      <button role="menuitemcheckbox" aria-checked={perf} className={`tog${perf ? ' on' : ''}`} onClick={() => setPerf(!perf)}>
+        <Icon name="beats" size={18} /> Mostrar desempenho
+      </button>
+    </div>
+  );
+  const sz = SAFE_ZONES[platform];
 
   return (
     <div className={`ep-pv${fullscreen ? ' is-full' : ''}${cssFull ? ' is-cssfull' : ''}`}>
-      <div className="ep-pv-box" ref={boxRef}>
+      <div className={`ep-pv-box${zoom !== 'fit' ? ' zoomed' : ''}`} ref={boxRef}>
         <div className="ep-pv-frame" ref={frameRef} style={{ width: fit.w, height: fit.h, background: frameBg }} data-aspect={aspect}>
           <div ref={hostRef} className="ep-pv-host" aria-hidden="true" />
           <canvas
@@ -466,14 +553,15 @@ export default function Preview() {
             </div>
           )}
           {pointMode && <div className="ep-pv-pointhint" role="status">Toque no ponto do vídeo para perguntar à IA · Esc cancela</div>}
+          {grid && !empty && <div className="ep-pv-grid" aria-hidden="true"><i /><i /><i /><i /></div>}
           {safe && !empty && (
             <div className={`ep-pv-safe${isVertical ? ' vertical' : ''}`} aria-hidden="true">
               {isVertical ? (
                 <>
-                  <div className="z top"><span>Barra do app</span></div>
-                  <div className="z bottom"><span>Legenda/@perfil do app</span></div>
-                  <div className="z right"><span>Botões</span></div>
-                  <div className="area" />
+                  <div className="z top" style={{ height: `${sz.top * 100}%` }}><span>{SAFE_LABELS[platform]} · barra</span></div>
+                  <div className="z bottom" style={{ height: `${sz.bottom * 100}%` }}><span>Legenda/@perfil</span></div>
+                  <div className="z right" style={{ top: `${sz.top * 100}%`, bottom: `${sz.bottom * 100}%`, width: `${sz.right * 100}%` }}><span>Botões</span></div>
+                  <div className="area" style={{ left: `${sz.left * 100}%`, right: `${sz.right * 100}%`, top: `${sz.top * 100}%`, bottom: `${sz.bottom * 100}%` }} />
                 </>
               ) : (
                 <><div className="title-safe" /><div className="action-safe" /></>
@@ -517,18 +605,13 @@ export default function Preview() {
           <div className="side">
             <button className="ep-pv-mbtn" onClick={toggleFull} aria-label="Tela cheia" title="Tela cheia"><Icon name="fullscreen" size={22} /></button>
             <div className="ep-pv-more">
-              <button className={`ep-pv-mbtn${moreOpen || pointMode || safe ? ' on' : ''}`} onClick={() => setMoreOpen(!moreOpen)} aria-label="Mais opções" aria-expanded={moreOpen}><Icon name="more" size={22} /></button>
+              <button className={`ep-pv-mbtn${moreOpen || pointMode || safe || grid || loop || zoom !== 'fit' || playRate !== 1 ? ' on' : ''}`} onClick={() => setMoreOpen(!moreOpen)} aria-label="Mais opções" aria-expanded={moreOpen}><Icon name="more" size={22} /></button>
               {moreOpen && (
                 <div className="ep-pv-menu" role="menu">
                   <button role="menuitemcheckbox" aria-checked={pointMode} className={pointMode ? 'on' : ''} onClick={() => { setPointMode(!pointMode); setMoreOpen(false); }}>
                     <Icon name="point" size={18} /> Apontar no vídeo <small>ou toque longo</small>
                   </button>
-                  <button role="menuitemcheckbox" aria-checked={safe} className={safe ? 'on' : ''} onClick={() => { setSafe(!safe); setMoreOpen(false); }}>
-                    <Icon name="safearea" size={18} /> Área segura
-                  </button>
-                  <button role="menuitemcheckbox" aria-checked={perf} className={perf ? 'on' : ''} onClick={() => { setPerf(!perf); setMoreOpen(false); }}>
-                    <Icon name="beats" size={18} /> Mostrar desempenho
-                  </button>
+                  {viewItems}
                 </div>
               )}
             </div>
@@ -545,9 +628,12 @@ export default function Preview() {
       {!empty && (
       <div className="ep-pv-controls" role="toolbar" aria-label="Reprodução">
         <button className="ep-circle sm ep-pv-c ep-pv-rew" onClick={toStart} title="Voltar ao início" aria-label="Voltar ao início" disabled={empty}><Icon name="back" size={16}/></button>
+        <button className="ep-circle sm ep-pv-c" onClick={() => step(-1)} title="Quadro anterior ( , )" aria-label="Quadro anterior" disabled={empty}><Icon name="prev" size={16}/></button>
         <button className="ep-pv-play" onClick={togglePlay} title={playing ? 'Pausar' : 'Reproduzir'} aria-label={playing ? 'Pausar' : 'Reproduzir'} disabled={empty}>
           {playing ? <Icon name="pause" size={20}/> : <Icon name="play" size={20}/>}
         </button>
+        <button className="ep-circle sm ep-pv-c" onClick={() => step(1)} title="Próximo quadro ( . )" aria-label="Próximo quadro" disabled={empty}><Icon name="next" size={16}/></button>
+        {playRate !== 1 && <span className="ep-pv-rate mono" title="Velocidade de reprodução">{rateLabel(playRate)}</span>}
         <div className="ep-pv-time mono"><span ref={timeRef}>{fmt(0)}</span><i>/</i><span className="tot">{fmt(duration)}</span></div>
         <div className="ep-pv-scrub" onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); seekFromBar(e); }}
           onPointerMove={(e) => { if (e.buttons) seekFromBar(e); }} role="slider" aria-label="Posição"
@@ -559,14 +645,13 @@ export default function Preview() {
             title="Apontar um ponto do vídeo para o chat (ou Alt+clique / toque longo)" aria-label="Apontar" aria-pressed={pointMode}>
             <Icon name="point" size={17}/>
           </button>
-          <button className={`ep-circle sm ep-pv-c${safe ? ' on' : ''}`} onClick={() => setSafe(!safe)} disabled={empty}
-            title="Guias de área segura (TikTok/Reels)" aria-label="Área segura" aria-pressed={safe}>
-            <Icon name="safearea" size={17}/>
-          </button>
-          <button className={`ep-circle sm ep-pv-c${perf ? ' on' : ''}`} onClick={() => setPerf(!perf)}
-            title="Mostrar desempenho (fps, modo, fonte)" aria-label="Mostrar desempenho" aria-pressed={perf}>
-            <Icon name="beats" size={17}/>
-          </button>
+          <div className="ep-pv-viewwrap">
+            <button className={`ep-circle sm ep-pv-c${viewOpen || safe || grid || loop || zoom !== 'fit' || playRate !== 1 ? ' on' : ''}`} onClick={() => setViewOpen(!viewOpen)} disabled={empty}
+              title="Visualização: velocidade, repetir, zoom, grade, zonas seguras" aria-label="Visualização" aria-expanded={viewOpen}>
+              <Icon name="layers" size={17}/>
+            </button>
+            {viewOpen && <div className="ep-pv-pop" role="menu">{viewItems}</div>}
+          </div>
           <button className="ep-circle sm ep-pv-c ep-pv-exp" onClick={() => emit('ep:open-export', {})} title="Exportar" aria-label="Exportar" disabled={empty}><Icon name="export" size={17}/></button>
           <button className="ep-circle sm ep-pv-c" onClick={toggleFull} title={fullscreen || cssFull ? 'Sair da tela cheia' : 'Tela cheia'} aria-label="Tela cheia"><Icon name="fullscreen" size={17}/></button>
         </div>
