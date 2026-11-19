@@ -1,23 +1,33 @@
 /* =====================================================================
    Pool de elementos <video>/<audio>/<img> para o preview em tempo real.
-   - vídeo/áudio: um elemento por CLIPE ativo (dois clipes do mesmo asset
-     podem tocar juntos numa transição); elementos livres são reaproveitados
-     por asset (após um split, a metade seguinte herda o elemento já no ponto).
+   - vídeo/áudio: um elemento por CLIPE (dois clipes do mesmo asset — ex.: cortes
+     de um ripple_delete — nunca dividem o mesmo elemento, então o corte não
+     custa um seek). O próximo clipe é PRÉ-POSICIONADO (pausado no ponto de
+     entrada) ~1 s antes do corte; no corte só troca de elemento.
    - imagem: uma por asset.
-   Sincroniza tempo (seek se desvio > 0,15 s), play/pause, playbackRate e volume.
+   - sincronização: o relógio do Preview segue o vídeo principal (lead); os
+     demais corrigem desvio com playbackRate e só fazem seek com desvio grande
+     (ver syncPolicy.ts).
    ===================================================================== */
 import type { Clip, MediaAsset, Project, Seconds, Track } from '@/lib/types';
 import type { MediaElement, MediaSources } from '@/lib/engine';
 import { sourceTime, clipSpeed, trackLayers } from '@/lib/engine/timing';
 import { clipGainAt } from '@/lib/engine/audio';
 import { buildAudioChain, chainKey, needsAudioChain, type FxChain } from '@/lib/engine/audioFx';
+import { driftDecision, frameReady, prerollPlan, warmPosition, type LeadState } from './syncPolicy';
 
 /** roteamento de um elemento pelo grafo WebAudio (efeitos de voz / tom) */
 interface Route { source: MediaElementAudioSourceNode; gain: GainNode; chain: FxChain | null; key: string }
 
-const DRIFT = 0.15;
-const PREROLL = 1.0;
-const MAX_IDLE_PER_ASSET = 2;
+/** resultado de um sync: estado do vídeo principal e se falta quadro p/ desenhar */
+export interface SyncState {
+  lead: LeadState | null;
+  /** algum vídeo visível ainda não tem o quadro do alvo (não desenhe: mantenha o último quadro) */
+  pending: boolean;
+}
+
+/** elementos livres guardados por asset (prontos p/ pré-carga sem criar/decodificar de novo) */
+const MAX_IDLE_PER_ASSET = 3;
 
 type AV = HTMLVideoElement | HTMLAudioElement;
 
@@ -31,6 +41,8 @@ export class LiveMediaPool implements MediaSources {
   private actx: AudioContext | null = null;
   private lastPlaying = false;
   private routes = new WeakMap<AV, Route>();
+  /** último play()/seek de cada elemento (ms) — carência antes de corrigir desvio com seek */
+  private kicks = new WeakMap<AV, number>();
   /** chamado quando um quadro novo fica disponível (seek terminou / dados carregaram) */
   onFrame: () => void = () => {};
 
@@ -124,37 +136,54 @@ export class LiveMediaPool implements MediaSources {
     this.images.set(asset.id, img);
   }
 
+  private seek(el: AV, to: Seconds, now: number) {
+    el.currentTime = to;
+    this.kicks.set(el, now);
+  }
+
+  private play(el: AV, now: number) {
+    this.kicks.set(el, now);
+    el.play().catch(() => { /* autoplay bloqueado: segue mudo */ });
+  }
+
   /** sincroniza todos os elementos com o tempo t */
-  sync(p: Project, assets: Record<string, MediaAsset>, t: Seconds, playing: boolean, fps = 30) {
+  sync(p: Project, assets: Record<string, MediaAsset>, t: Seconds, playing: boolean, fps = 30): SyncState {
     this.lastPlaying = playing;
-    const active: { clip: Clip; track: Track }[] = [];
-    const preroll: { clip: Clip; track: Track }[] = [];
+    const now = performance.now();
+    const active: { clip: Clip; track: Track; role?: 'in' | 'out' }[] = [];
+    let leadTrack: Track | null = null;
     for (const track of p.tracks) {
-      if (track.kind === 'video') {
-        if (!track.hidden) for (const l of trackLayers(track, t)) active.push({ clip: l.clip, track });
+      if (track.kind === 'video' || track.kind === 'overlay') {
+        if (!track.hidden) for (const l of trackLayers(track, t)) active.push({ clip: l.clip, track, role: l.transition?.role });
+        if (!track.hidden && track.kind === 'video' && !leadTrack) leadTrack = track;
         for (const c of track.clips) {
           if (c.type === 'image' || (c.type === 'sticker' && c.assetId)) { const a = assets[c.assetId!]; if (a?.url) this.ensureImage(a); }
-          if (playing && !track.hidden && c.type === 'video' && c.start > t && c.start - t <= PREROLL) preroll.push({ clip: c, track });
         }
-      } else if (track.kind === 'overlay') {
-        for (const c of track.clips) if (c.type === 'sticker' && c.assetId) { const a = assets[c.assetId]; if (a?.url) this.ensureImage(a); }
       } else if (track.kind === 'audio') {
         for (const c of track.clips) {
           if (c.type !== 'audio') continue;
           if (t >= c.start && t < c.start + c.duration) active.push({ clip: c, track });
-          else if (playing && c.start > t && c.start - t <= PREROLL) preroll.push({ clip: c, track });
         }
       }
     }
     if (p.canvas?.type === 'image' && p.canvas.assetId) { const a = assets[p.canvas.assetId]; if (a?.url) this.ensureImage(a); }
+
+    // vídeo principal: clipe de vídeo da 1ª trilha de vídeo visível (na transição, o que entra)
+    const leadItem = active.find((x) => x.track === leadTrack && x.clip.type === 'video' && x.role !== 'out' && !x.clip.reverse)
+      ?? active.find((x) => x.track === leadTrack && x.clip.type === 'video' && !x.clip.reverse);
+    let lead: LeadState | null = null;
+    let pending = false;
+
     const keep = new Set<string>();
-    for (const { clip, track } of active) {
+    for (const item of active) {
+      const { clip, track } = item;
       if (clip.type !== 'video' && clip.type !== 'audio') continue;
       const asset = assets[clip.assetId];
       if (!asset?.url || asset.kind === 'image') continue;
       keep.add(clip.id);
       const el = this.acquire(clip, asset);
       const target = sourceTime(clip, t);
+      const isLead = item === leadItem;
       // reverso: o elemento não toca para trás → busca quadro a quadro, sem som
       const reverse = !!clip.reverse;
       const gain = reverse ? 0 : clipGainAt(p, track, clip, t);
@@ -162,31 +191,57 @@ export class LiveMediaPool implements MediaSources {
       if (!routed) el.volume = Math.min(1, Math.max(0, gain));
       el.muted = !this.unlocked || gain <= 0.0001;
       const rate = Math.min(16, Math.max(0.0625, clipSpeed(clip, t)));
+      if (clip.type === 'video' && el instanceof HTMLVideoElement && !frameReady(el, target)) pending = true;
       if (playing && reverse) {
         if (!el.paused) el.pause();
-        if (!el.seeking && Math.abs(el.currentTime - target) > 0.5 / fps) el.currentTime = target;
+        if (!el.seeking && Math.abs(el.currentTime - target) > 0.5 / fps) this.seek(el, target, now);
       } else if (playing) {
-        if (el.playbackRate !== rate) el.playbackRate = rate;
         const dur = Number.isFinite(el.duration) ? el.duration : Infinity;
         if (target < dur - 0.05) {
-          if (Math.abs(el.currentTime - target) > DRIFT && !el.seeking) el.currentTime = target;
-          if (el.paused) el.play().catch(() => { /* autoplay bloqueado: segue mudo */ });
+          const kick = this.kicks.get(el) ?? -Infinity;
+          const dec = driftDecision({ drift: target - el.currentTime, rate, sinceKickMs: now - kick, lead: isLead });
+          if (dec.seek && !el.seeking) this.seek(el, target, now);
+          if (Math.abs(el.playbackRate - dec.rate) > 0.004) el.playbackRate = dec.rate;
+          if (el.paused) this.play(el, now);
+          if (isLead) {
+            // tempo de timeline mostrado pelo vídeo (1ª ordem; vale p/ curva de velocidade)
+            const videoT = t + (el.currentTime - target) / rate;
+            const stalled = el.paused || el.seeking || el.readyState < 3;
+            lead = { videoT, stalled };
+          }
         } else if (!el.paused) el.pause();
       } else {
         if (!el.paused) el.pause();
-        if (Math.abs(el.currentTime - target) > 0.5 / fps) el.currentTime = target;
+        if (el.playbackRate !== rate) el.playbackRate = rate;
+        if (Math.abs(el.currentTime - target) > 0.5 / fps) this.seek(el, target, now);
       }
     }
-    for (const { clip } of preroll) {
-      if (clip.type !== 'video' && clip.type !== 'audio') continue;
-      const asset = assets[clip.assetId];
-      if (!asset?.url || asset.kind === 'image' || keep.has(clip.id)) continue;
-      keep.add(clip.id);
-      const el = this.acquire(clip, asset);
-      if (!el.paused) el.pause();
-      if (Math.abs(el.currentTime - clip.in) > 0.05 && !el.seeking) el.currentTime = clip.in;
+    // pré-carga: o próximo clipe ganha elemento próprio, pausado no ponto de entrada
+    if (playing) {
+      for (const { clip } of prerollPlan(p, t)) {
+        if (clip.type !== 'video' && clip.type !== 'audio') continue;
+        const asset = assets[clip.assetId];
+        if (!asset?.url || asset.kind === 'image' || keep.has(clip.id)) continue;
+        keep.add(clip.id);
+        const el = this.acquire(clip, asset);
+        el.muted = true;
+        const at = sourceTime(clip, clip.start);
+        const rate = Math.min(16, Math.max(0.0625, clipSpeed(clip, clip.start)));
+        const pos = warmPosition(at, clip.start - t, rate, !!clip.reverse);
+        if (pos.play) {
+          // partida a quente: já tocando (mudo) quando o corte chegar — sem a latência do play()
+          const dec = driftDecision({ drift: pos.at - el.currentTime, rate, sinceKickMs: now - (this.kicks.get(el) ?? -Infinity), lead: false });
+          if (dec.seek && !el.seeking) this.seek(el, pos.at, now);
+          if (Math.abs(el.playbackRate - dec.rate) > 0.004) el.playbackRate = dec.rate;
+          if (el.paused) this.play(el, now);
+        } else {
+          if (!el.paused) el.pause();
+          if (Math.abs(el.currentTime - pos.at) > 0.04 && !el.seeking) this.seek(el, pos.at, now);
+        }
+      }
     }
     for (const [id, el] of [...this.byClip]) if (!keep.has(id)) this.release(id, el);
+    return { lead, pending };
   }
 
   /**
