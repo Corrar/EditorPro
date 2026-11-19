@@ -85,6 +85,7 @@ export default function DevChat() {
               if (c) useEditor.getState().setChatContext({ label: `Clipe ${v.indexOf(c) + 1}`, clipIds: [c.id] });
             }}>Apontar clipe 2</button>
             <button className="ep-btn sec" data-testid="pt-point" onClick={() => useEditor.getState().setChatContext({ label: 'Ponto em 0:03', point: { x: 0.8, y: 0.2, t: 3 } })}>Apontar ponto</button>
+            <button className="ep-btn sec" data-testid="pt-comment" onClick={() => { const m = (useEditor.getState().project.markers ?? []).filter((x) => x.kind === 'comment' && !x.resolved).pop(); if (m) useEditor.getState().setChatContext({ markerId: m.id, range: { start: m.t, end: m.t }, label: `Comentário: “${m.label ?? ''}”` }); }}>Apontar comentário</button>
             <button className="ep-btn sec" data-testid="add-comment" onClick={() => useEditor.getState().dispatch({ op: 'add_marker', marker: { id: uid('cm'), t: 1, end: 3, kind: 'comment', label: 'coloca efeito VHS aqui' } })}>+ Comentário</button>
             <button className="ep-btn sec" onClick={undo}>Desfazer</button>
           </div>
