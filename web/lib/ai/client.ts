@@ -32,6 +32,8 @@ export interface EditResponse {
   ops: EditOp[]; // cada uma com `explain`
   /** respostas por comentário (modo 'comments') */
   comments?: { markerId: string; reply: string }[];
+  /** efeitos sonoros da biblioteca pedidos pela IA (o navegador gera e insere) */
+  sfx?: { sfxId: string; at: number; volume?: number; explain?: string }[];
 }
 
 /** erro com código vindo da rota (ex.: 'rate_limited', 'not_configured', 'refusal') */
@@ -96,8 +98,8 @@ export async function requestEdit(req: EditRequest): Promise<EditResponse> {
   let frames = req.frames ?? [];
   const baseLen = JSON.stringify(base).length;
   while (frames.length && baseLen + JSON.stringify(frames).length > MAX_BODY) frames = frames.length > 2 ? frames.filter((_, i) => i % 2 === 0) : [];
-  const { reply, ops, comments } = await postJson<EditResponse>('/api/ai/edit', { ...base, frames });
-  return { reply, ops, comments };
+  const { reply, ops, comments, sfx } = await postJson<EditResponse>('/api/ai/edit', { ...base, frames });
+  return { reply, ops, comments, sfx };
 }
 
 /** traduz legendas (Claude); devolve o texto novo por id de segmento */

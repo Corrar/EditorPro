@@ -451,3 +451,55 @@ describe('pop-up da IA', () => {
     if (!hadWindow) delete (globalThis as Record<string, unknown>).window;
   });
 });
+
+describe('biblioteca na IA', () => {
+  const twoClips = () => {
+    const p = createProject();
+    return applyOps(p, [
+      { op: 'add_clip', trackId: 'track_video_1', clip: { ...makeVideoClip(src, 0), id: 'c1', duration: 5, in: 0 } },
+      { op: 'add_clip', trackId: 'track_video_1', clip: { ...makeVideoClip(src, 5), id: 'c2', duration: 5, in: 10 } },
+    ]).project;
+  };
+
+  it('macro-ops viram ops reais e pedidos de sfx', () => {
+    const r = sanitizeOps([
+      { op: 'apply_caption_preset', presetId: 'caixa-por-palavra', style: { fontSize: 90 }, explain: 'Legenda creator' },
+      { op: 'set_caption_style', style: { preset: 'neon-vibrante' } },
+      { op: 'apply_template', templateId: 'lt-caixa', values: [{ key: 'nome', value: 'Bruno' }, { key: 'funcao', value: 'Confeiteiro' }], at: 1 },
+      { op: 'apply_look', lookId: 'teal-laranja', intensity: 0.8 },
+      { op: 'add_sfx', sfxId: 'whoosh', atCuts: true },
+      { op: 'add_sfx', sfxId: 'nao-existe', at: 1 },
+      { op: 'apply_template', templateId: 'inventado' },
+    ], twoClips(), assets);
+    expect(r.dropped).toHaveLength(2);
+    expect(r.project.captions.style.preset).toBe('neon-vibrante');
+    const texts = r.project.tracks.flatMap((t) => t.clips).filter((c) => c.type === 'text') as TextClip[];
+    expect(texts.map((c) => c.text)).toEqual(expect.arrayContaining(['Bruno', 'Confeiteiro']));
+    expect(new Set(texts.map((c) => c.groupId)).size).toBe(1);
+    expect(r.project.tracks.some((t) => t.kind === 'effect' && t.clips.some((c) => c.type === 'adjustment'))).toBe(true);
+    expect(r.sfx).toEqual([{ sfxId: 'whoosh', at: 4.85 }]);
+    expect(r.ops.every((o) => o.id && o.explain)).toBe(true);
+  });
+
+  it('demo entende os pedidos da biblioteca', () => {
+    const p = twoClips();
+    const run = (text: string) => {
+      const r = chatIntent(text, { project: p, assets });
+      return { r, s: sanitizeOps(r.ops, p, assets) };
+    };
+    const a = run('legenda estilo creator');
+    expect(a.s.project.captions.style.preset).toBe('impacto-amarelo');
+    const b = run('coloca um lower third com meu nome Bruno Silva');
+    const tb = b.s.project.tracks.flatMap((t) => t.clips).filter((c) => c.type === 'text') as TextClip[];
+    expect(tb.map((c) => c.text)).toContain('Bruno Silva');
+    const c = run('som de whoosh nas transições');
+    expect(c.s.sfx.map((x) => x.sfxId)).toEqual(['whoosh']);
+    expect(c.s.project.tracks.flatMap((t) => t.clips).some((cl) => 'transitionIn' in cl && cl.transitionIn)).toBe(false);
+    const d = run('look cinema');
+    expect(d.s.project.tracks.some((t) => t.clips.some((cl) => cl.type === 'adjustment' && cl.label?.includes('Azul e laranja')))).toBe(true);
+    const e = run('CTA siga no final');
+    const te = e.s.project.tracks.flatMap((t) => t.clips).filter((cl) => cl.type === 'text') as TextClip[];
+    expect(te.some((cl) => /siga/i.test(cl.text) && cl.start >= 6.9)).toBe(true);
+    expect(e.r.reply).toMatch(/CTA/);
+  });
+});

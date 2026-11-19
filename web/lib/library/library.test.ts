@@ -327,3 +327,41 @@ describe('busca única', () => {
     expect(Object.values(searchLibrary('zzzqqq')).every((n) => n === 0)).toBe(true);
   });
 });
+
+describe('modelos com campos vazios', () => {
+  const run = (id: string, values: Record<string, string>) => {
+    const p = createProject();
+    const ops = buildTemplate(id, values, { project: p, at: 0, groupId: 'g' });
+    const r = applyOps(p, ops);
+    expect(r.errors).toEqual([]);
+    return allClips(r.project).filter((c) => c.groupId === 'g');
+  };
+  it('lt-caixa sem função não desenha a faixa nem o texto da função', () => {
+    const full = run('lt-caixa', {});
+    const noRole = run('lt-caixa', { funcao: '  ' });
+    expect(full.filter((c) => c.type === 'shape').length).toBe(2);
+    expect(noRole.filter((c) => c.type === 'shape').length).toBe(1);
+    expect(noRole.filter((c) => c.type === 'text').map((c) => (c as TextClip).text)).toEqual(['Ana Souza']);
+  });
+  it('lt-glass sem função encolhe o cartão e centraliza o nome', () => {
+    const full = run('lt-glass', {}), noRole = run('lt-glass', { funcao: '' });
+    const box = (cs: typeof full) => cs.find((c) => c.type === 'shape' && (c as ShapeClip).shape === 'rounded-rect') as ShapeClip;
+    expect(box(noRole).aspect!).toBeGreaterThan(box(full).aspect!); // mais baixo => mais "largo"
+    const name = noRole.find((c) => c.type === 'text') as TextClip;
+    expect(name.position.y).toBeCloseTo(0.5 + box(noRole).transform.y, 5);
+  });
+  it('lt-barra sem função encurta a barra; citação sem autor omite o "—"', () => {
+    const bar = (cs: ReturnType<typeof run>) => (cs.find((c) => c.type === 'shape') as ShapeClip).transform.scale;
+    expect(bar(run('lt-barra', { funcao: '' }))).toBeLessThan(bar(run('lt-barra', {})));
+    expect(run('citacao', { autor: '' }).filter((c) => c.type === 'text').length).toBe(2);
+  });
+  it('selo/preço antigo/subtítulo vazios removem as formas ligadas', () => {
+    expect(run('preco-oferta', { selo: '' }).some((c) => c.type === 'shape')).toBe(false);
+    expect(run('preco-riscado', { antes: '' }).some((c) => c.type === 'shape')).toBe(false);
+    expect(run('titulo-elegante', { sub: '' }).some((c) => c.type === 'shape')).toBe(false);
+  });
+  it('modelo sem nenhum texto não gera nada', () => {
+    expect(buildTemplate('marca-dagua', { texto: '' }, { project: createProject() })).toEqual([]);
+    expect(buildTemplate('lt-minimal', { nome: '', funcao: '' }, { project: createProject() })).toEqual([]);
+  });
+});

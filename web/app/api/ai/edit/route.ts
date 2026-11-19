@@ -13,6 +13,7 @@ import { loadPrompt } from '@/lib/ai/server/prompts';
 import { EditResponseSchema } from '@/lib/ai/schemas';
 import { summarizeProject } from '@/lib/ai/summary';
 import { sanitizeOps } from '@/lib/ai/validate';
+import { libraryCatalogForAI } from '@/lib/library/catalog';
 import { isObj, num, str } from '@/lib/ai/sanitize';
 
 export const runtime = 'nodejs';
@@ -93,7 +94,7 @@ export async function POST(req: Request) {
     content.push({ type: 'text', text: `${task}\n\nPROJETO ATUAL (JSON):\n${JSON.stringify(summary)}${where ? `\n\nO USUÁRIO APONTOU PARA: ${where}` : ''}\n\nPEDIDO DO USUÁRIO:\n${userText}` });
 
     const raw = await generateStructured({
-      system: await loadPrompt('edit-system'),
+      system: `${await loadPrompt('edit-system')}\n\n## Catálogo da biblioteca (ids válidos)\n${libraryCatalogForAI()}`,
       content,
       schema: EditResponseSchema,
       effort: first || commentsMode ? 'high' : 'medium',
@@ -101,12 +102,12 @@ export async function POST(req: Request) {
     });
 
     const reply = (isObj(raw) && str(raw.reply, 800)) || 'Pronto, apliquei as mudanças.';
-    const { ops, dropped } = sanitizeOps(isObj(raw) ? raw.ops : raw, project, assets);
+    const { ops, dropped, sfx } = sanitizeOps(isObj(raw) ? raw.ops : raw, project, assets);
     if (dropped.length) console.warn('[ai/edit] ops descartadas:', dropped.map((d) => d.reason));
     const comments = isObj(raw) && Array.isArray(raw.comments)
       ? raw.comments.filter(isObj).map((c) => ({ markerId: str(c.markerId, 80) ?? '', reply: str(c.reply, 300) ?? '' })).filter((c) => c.markerId && c.reply)
       : [];
-    return ok({ reply, ops, dropped: dropped.length, comments });
+    return ok({ reply, ops, dropped: dropped.length, comments, sfx });
   } catch (e) {
     return fail(e);
   }

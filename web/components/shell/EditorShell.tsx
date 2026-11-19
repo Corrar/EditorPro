@@ -20,13 +20,7 @@ import type { AspectRatio } from '@/lib/types';
 import Home, { type WizardInput } from './Home';
 import MobileNav from './MobileNav';
 import MobileToolbar from './MobileToolbar';
-import AiPopupHost, { type AiPopupMode, type AiPopupBodyProps } from './AiPopupHost';
-import AiPopup from '@/components/chat/AiPopup';
-
-/* pop-up definitivo da IA (sessão de IA) no contêiner do shell */
-function AiPopupBody({ onMinimize, onOpenChat }: AiPopupBodyProps) {
-  return <AiPopup onMinimize={onMinimize} onExpand={onOpenChat} autoFocus />;
-}
+import AiPopupHost, { type AiPopupMode } from './AiPopupHost';
 import SettingsModal from './SettingsModal';
 import Sidebar from './Sidebar';
 import Toasts from './Toasts';
@@ -49,6 +43,8 @@ export default function EditorShell() {
   const [sideOpen, setSideOpen] = useState(true);
   const [chatOpen, setChatOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuSearch, setMenuSearch] = useState(false);
+  const [aiAutoMin, setAiAutoMin] = useState(false);
   const [aiMode, setAiModeRaw] = useState<AiPopupMode>('closed');
   const [aiPrompt, setAiPrompt] = useState<string | undefined>();
   const setAiMode = (m: AiPopupMode) => { if (m === 'open') setSideOpen(false); setAiModeRaw(m); };
@@ -211,7 +207,8 @@ export default function EditorShell() {
       st.dispatch([...sequenceOps(st.project, material), { op: 'set_project', patch: { brief, referenceAssetId } }], { history: false });
       pendingBrief.current = brief;
       setTool('media');
-      if (mq('(max-width: 1099px)')) { setSideOpen(false); setChatOpen(true); } // telas menores: abre o chat p/ acompanhar a IA
+      if (mq('(max-width: 899px)') && !mq('(max-height: 520px)')) { setSideOpen(false); setChatOpen(false); setAiAutoMin(true); setAiModeRaw('open'); } // celular: pop-up compacto, minimiza ao terminar
+      else if (mq('(max-width: 1099px)')) { setSideOpen(false); setChatOpen(true); } // tablet: chat em gaveta p/ acompanhar a IA
       setView('editor');
     } finally {
       setBusy(null);
@@ -270,13 +267,13 @@ export default function EditorShell() {
                 canResume={hasContent ? projectName : null} onResume={() => setView('editor')}
               />
             )}
-            {view === 'editor' && <Workspace tool={tool} sideOpen={sideOpen} onCloseSide={() => setSideOpen(false)} chatOpen={chatOpen} onChat={openChat} onHome={goHome} />}
+            {view === 'editor' && <Workspace tool={tool} sideOpen={sideOpen} onCloseSide={() => setSideOpen(false)} chatOpen={chatOpen} onChat={openChat} onHome={goHome} onSearch={() => { setMenuSearch(true); setMenuOpen(true); }} />}
           </div>
-          <MobileNav {...nav} chatOpen={chatOpen} onChat={openChat} menuOpen={menuOpen} onMenuOpen={setMenuOpen} />
+          <MobileNav {...nav} chatOpen={chatOpen} onChat={openChat} menuOpen={menuOpen} onMenuOpen={(o) => { setMenuOpen(o); if (!o) setMenuSearch(false); }} focusSearch={menuSearch} />
           {view === 'editor' && !chatOpen && (
             <>
               <MobileToolbar tool={tool} toolOpen={sideOpen} onTool={(t) => { if (aiMode === 'open') setAiModeRaw('min'); pickTool(t); }} onAi={() => setAiMode('open')} onMenu={() => setMenuOpen(true)} />
-              <AiPopupHost fabHidden={sideOpen} prompt={aiPrompt} mode={aiMode} setMode={setAiMode} onOpenChat={() => openChat(true)} Body={AiPopupBody} />
+              <AiPopupHost autoMinimize={aiAutoMin} onAutoMinimized={() => setAiAutoMin(false)} fabHidden={sideOpen} focus={!!aiPrompt} mode={aiMode} setMode={setAiMode} onOpenChat={() => openChat(true)} />
             </>
           )}
         </div>

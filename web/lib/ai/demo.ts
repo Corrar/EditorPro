@@ -15,6 +15,7 @@ import { DEFAULT_TEXT_STYLE } from '../defaults';
 import { formatTime, uid } from '../util';
 import { distributeWords, r3, splitSegment } from './sanitize';
 import { captionsMediaToTimeline, clipsOfAsset, mediaRangeToTimeline, mergeRanges } from './timemap';
+import { demoLibraryOps } from './library';
 
 export interface Range { start: Seconds; end: Seconds }
 export interface DemoResult { reply: string; ops: EditOp[]; undo?: boolean }
@@ -693,7 +694,7 @@ function parseNumber(s: string): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
-const HELP = 'No modo demonstração eu entendo comandos como: "legenda maior/menor/amarela/em cima", "legendas estilo TikTok", "legenda karaokê", "cortar silêncios", "cortar vícios", "melhores momentos em 30 s", "tira o zoom", "corta os primeiros 3 s", "acelera 1.2x", "câmera lenta", "curva herói", "coloca efeito VHS nos primeiros 3 s", "transição de giro", "voz de robô", "remove o fundo", "adiciona emoji de fogo", "sincroniza na batida", "marca as batidas", "cria capítulos", "gancho com zoom e flash", "música mais baixa", "deixa preto e branco", "formato 16:9" e "deixar mais dinâmico".';
+const HELP = 'No modo demonstração eu entendo comandos como: "legenda estilo creator", "lower third com meu nome Ana", "whoosh nas transições", "look cinema", "CTA siga no final", "legenda maior/menor/amarela/em cima", "legendas estilo TikTok", "legenda karaokê", "cortar silêncios", "cortar vícios", "melhores momentos em 30 s", "tira o zoom", "corta os primeiros 3 s", "acelera 1.2x", "câmera lenta", "curva herói", "coloca efeito VHS nos primeiros 3 s", "transição de giro", "voz de robô", "remove o fundo", "adiciona emoji de fogo", "sincroniza na batida", "marca as batidas", "cria capítulos", "gancho com zoom e flash", "música mais baixa", "deixa preto e branco", "formato 16:9" e "deixar mais dinâmico".';
 
 export function chatIntent(text: string, ctx: ChatContext): DemoResult {
   const t = norm(text);
@@ -714,6 +715,13 @@ export function chatIntent(text: string, ctx: ChatContext): DemoResult {
 
   if (/^(desfaz|desfazer|volta|voltar|undo)\b|desfaz (isso|a ultima)/.test(t)) return { reply: 'Desfiz a última edição.', ops: [], undo: true };
 
+  // --- biblioteca profissional: estilos de legenda, looks, modelos (lower third, CTA) e efeitos sonoros
+  const libRange = ctx.target?.range ?? (ctx.target?.point ? { start: ctx.target.point.t, end: ctx.target.point.t + 2 } : undefined);
+  const lib = demoLibraryOps(text, p, libRange);
+  push(lib.ops);
+  said.push(...lib.said);
+  const macros = lib.macros as unknown as EditOp[];
+
   // --- legendas: liga/desliga
   if (mentionsCaption && negate.test(t) && !/(maior|menor|cor|zoom)/.test(t)) {
     push([{ op: 'toggle_captions', enabled: false, explain: 'Escondendo as legendas' }], 'escondi as legendas');
@@ -728,7 +736,7 @@ export function chatIntent(text: string, ctx: ChatContext): DemoResult {
   }
 
   // --- legendas: tamanho / estilo / cor / posição
-  if (mentionsCaption || /tiktok|karaok|neon/.test(t)) {
+  if ((mentionsCaption || /tiktok|karaok|neon/.test(t)) && !lib.handled.captionPreset) {
     const st = p.captions.style;
     const style: Partial<CaptionStyle> = {};
     const parts: string[] = [];
@@ -818,8 +826,8 @@ export function chatIntent(text: string, ctx: ChatContext): DemoResult {
     push(videoClipsOf(p).map((c) => ({ op: 'update_clip' as const, clipId: c.id, patch: { volume: r3(Math.max(0, Math.min(2, c.volume * (up ? 1.3 : 0.75)))) }, explain: up ? 'Aumentando a voz' : 'Abaixando a voz' })), up ? 'aumentei a voz' : 'abaixei a voz');
   }
 
-  // --- transições
-  if (/transi/.test(t)) {
+  // --- transições ("whoosh nas transições" é só som)
+  if (/transi/.test(t) && !lib.handled.sfx) {
     if (/(sem transi|corte seco|tira(r)? (as |a )?transi|remove(r)? (as |a )?transi)/.test(t)) push(transitionOps(p, null, ''), 'deixei cortes secos');
     else {
       let tr = transitionFrom(t.slice(t.indexOf('transi')));
@@ -839,13 +847,13 @@ export function chatIntent(text: string, ctx: ChatContext): DemoResult {
   // --- cor (sem confundir com cor da legenda)
   const colorText = mentionsCaption ? t.replace(/(legenda|letra|texto)s?( [a-z]+){0,3}/, '') : t;
   const preset = colorPresetFrom(colorText);
-  if (preset && !/transi|efeito/.test(t)) push(colorOps(p, preset.preset, preset.name, only), preset.preset === 'none' ? 'voltei as cores originais' : `cores ${preset.name}`);
+  if (preset && !/transi|efeito/.test(t) && !lib.handled.look && !lib.handled.template) push(colorOps(p, preset.preset, preset.name, only), preset.preset === 'none' ? 'voltei as cores originais' : `cores ${preset.name}`);
 
   // --- título
   if (/gancho/.test(t) && p.captions.segments.length && !negate.test(t)) {
     const hook = hookFromBrief(text) ?? hookFromTranscript(p) ?? hookFromBrief(p.brief) ?? 'Assista até o final!';
     push(hookOps(p, hook), `gancho "${hook}" com zoom e flash`);
-  } else if (/(titulo|gancho|chamada|texto na tela|texto no inicio)/.test(t) && !mentionsCaption) {
+  } else if (/(titulo|gancho|chamada|texto na tela|texto no inicio)/.test(t) && !mentionsCaption && !lib.handled.template) {
     const hook = hookFromBrief(text) ?? hookFromBrief(p.brief) ?? 'Assista até o final!';
     const existing = p.tracks.flatMap((tr) => tr.clips).find((c) => c.type === 'text' && c.label === 'gancho');
     if (negate.test(t) && existing) push([{ op: 'remove_clip', clipId: existing.id, explain: 'Removendo o título' }], 'tirei o título');
@@ -1020,7 +1028,8 @@ export function chatIntent(text: string, ctx: ChatContext): DemoResult {
 
   if (!ops.length && !said.length) return { reply: `Não entendi esse pedido no modo demonstração. ${HELP}`, ops: [] };
   const msg = said.length ? said.join(', ') : 'pronto';
-  return { reply: ops.length ? `Feito: ${msg}.` : `${msg.charAt(0).toUpperCase()}${msg.slice(1)}.`, ops };
+  const all = [...ops, ...macros];
+  return { reply: all.length ? `Feito: ${msg}.` : `${msg.charAt(0).toUpperCase()}${msg.slice(1)}.`, ops: all };
 }
 
 export { HELP as DEMO_HELP };

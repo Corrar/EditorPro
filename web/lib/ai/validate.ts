@@ -18,6 +18,7 @@ import {
   sanitizeStyleProfile, sanitizeTextStyle, sanitizeTransform, sanitizeTransition, sanitizeTranscript, sanitizeVisualExtras, str,
 } from './sanitize';
 import { assignWordIds } from './features';
+import { expandLibraryOp, isLibraryMacro, type SfxRequest } from './library';
 
 export const OP_KINDS: EditOpKind[] = [
   'set_project', 'set_aspect', 'add_track', 'update_track', 'remove_track', 'move_track', 'add_clip', 'update_clip',
@@ -32,7 +33,7 @@ export const MAX_OPS = 80;
 const EPS = 1e-3;
 
 export interface Dropped { op: unknown; reason: string }
-export interface SanitizeResult { ops: EditOp[]; dropped: Dropped[]; project: Project }
+export interface SanitizeResult { ops: EditOp[]; dropped: Dropped[]; project: Project; sfx: SfxRequest[] }
 
 const DEFAULT_EXPLAIN: Record<EditOpKind, string> = {
   set_project: 'Ajustando o projeto',
@@ -542,9 +543,19 @@ export function sanitizeOps(raw: unknown, project: Project, assets: Record<Id, M
   const list = Array.isArray(raw) ? raw : isObj(raw) && Array.isArray(raw.ops) ? raw.ops : [];
   const ops: EditOp[] = [];
   const dropped: Dropped[] = [];
+  const sfx: SfxRequest[] = [];
   let p = project;
   for (const item of list.slice(0, MAX_OPS)) {
     try {
+      if (isLibraryMacro(item)) {
+        // macro da biblioteca (modelo, preset de legenda, look, efeito sonoro) -> ops reais
+        for (const raw of expandLibraryOp(item as Record<string, unknown>, p, sfx)) {
+          const op = { ...raw, id: raw.id ?? uid('op'), explain: raw.explain || DEFAULT_EXPLAIN[raw.op] } as EditOp;
+          p = applyOp(p, op);
+          ops.push(op);
+        }
+        continue;
+      }
       const op = sanitizeOp(item, p, assets);
       const next = applyOp(p, op);
       ops.push(op);
@@ -554,7 +565,7 @@ export function sanitizeOps(raw: unknown, project: Project, assets: Record<Id, M
     }
   }
   if (list.length > MAX_OPS) dropped.push({ op: null, reason: `limite de ${MAX_OPS} operações` });
-  return { ops, dropped, project: p };
+  return { ops, dropped, project: p, sfx };
 }
 
 export { EPS as VALIDATE_EPS };

@@ -2,6 +2,7 @@
    Sanitização de valores vindos da IA (JSON não confiável).
    Puro, sem dependências de navegador/servidor — testado em vitest.
    ===================================================================== */
+import { fontDef } from '../library/fonts';
 import type {
   AspectRatio, AudioEffect, AudioEffectKind, BlendMode, CaptionPreset, CaptionSegment, CaptionStyle, CaptionWord, ChromaKey,
   ClipAnimation, ColorPreset, Crop, Easing, Filter, FilterKind, FitMode, Keyframe, Mask, MaskShape, ShapeKind, SpeedPoint,
@@ -152,7 +153,7 @@ export function sanitizeTransition(v: unknown, clipDuration = Infinity): Transit
 export function sanitizeTextStyle(v: unknown): Partial<TextStyle> | undefined {
   if (!isObj(v)) return undefined;
   const out: Partial<TextStyle> = {};
-  const fontFamily = str(v.fontFamily, 60); if (fontFamily) out.fontFamily = fontFamily;
+  const fontFamily = str(v.fontFamily, 60); if (fontFamily) out.fontFamily = fontDef(fontFamily)?.family ?? fontFamily;
   const fontSize = clampNum(v.fontSize, 16, 260); if (fontSize !== undefined) out.fontSize = Math.round(fontSize);
   const fontWeight = clampNum(v.fontWeight, 100, 900); if (fontWeight !== undefined) out.fontWeight = Math.round(fontWeight / 100) * 100;
   const c = color(v.color); if (c) out.color = c;

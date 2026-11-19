@@ -10,8 +10,8 @@ import type { NavProps } from './Sidebar';
 import { logout } from './session';
 import { TOOLS, toolDef, type ToolId } from './tools';
 
-export default function MobileNav({ chatOpen, onChat, menuOpen, onMenuOpen, ...p }: NavProps & {
-  chatOpen: boolean; onChat: (open: boolean) => void; menuOpen?: boolean; onMenuOpen?: (open: boolean) => void;
+export default function MobileNav({ chatOpen, onChat, menuOpen, onMenuOpen, focusSearch, ...p }: NavProps & {
+  chatOpen: boolean; onChat: (open: boolean) => void; menuOpen?: boolean; onMenuOpen?: (open: boolean) => void; focusSearch?: boolean;
 }) {
   // estado do menu pode vir de fora (no editor, o item "Mais" da barra de ferramentas também abre)
   const [ownOpen, setOwnOpen] = useState(false);
@@ -70,7 +70,7 @@ export default function MobileNav({ chatOpen, onChat, menuOpen, onMenuOpen, ...p
             </div>
             <label className="ep-searchpill">
               <IconSearch size={18} />
-              <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar ferramenta" aria-label="Buscar ferramenta" />
+              <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar ferramenta" aria-label="Buscar ferramenta" autoFocus={!!focusSearch} />
             </label>
 
             {match('assistente ia chat') && (

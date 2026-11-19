@@ -37,7 +37,7 @@ export default function SheetHandle({ onClose, label }: { onClose: () => void; l
     <div ref={ref} className="ep-sheethandle" onPointerDown={start} role="button" aria-label={`Arraste para redimensionar ${label}; arraste para baixo para fechar`} tabIndex={0}
       onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }}>
       <i />
-      <button type="button" className="ep-sheetclose" onPointerDown={(e) => e.stopPropagation()} onClick={onClose} aria-label={`Fechar ${label}`}>✕</button>
+      <button type="button" className="ep-sheetclose" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onClose(); }} aria-label="Fechar" title={`Fechar ${label}`}>✕</button>
     </div>
   );
 }

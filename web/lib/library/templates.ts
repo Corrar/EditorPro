@@ -75,6 +75,8 @@ interface PieceBase {
   /** duração (s); padrão = até o fim do modelo */
   dur?: Seconds;
   label?: string;
+  /** parâmetros obrigatórios: se algum ficar vazio, a peça é omitida */
+  requires?: string[];
 }
 
 export interface TextPiece extends PieceBase {
@@ -263,8 +265,8 @@ export const TEMPLATES: TemplateDef[] = [
       const big = ts({ fontFamily: 'Playfair Display', fontWeight: 600, fontSize: 132, color: '#FFFFFF', italic: true, shadowColor: 'rgba(0,0,0,.45)', shadowBlur: 20 });
       const sub = ts({ fontFamily: 'Montserrat', fontWeight: 600, fontSize: 40, color: '#FFFFFF', letterSpacing: 14, uppercase: true });
       return [
-        { kind: 'text', text: v.titulo, style: big, x: 0.5, y: 0.46, animation: 'blur-in', animationOut: 'fade' },
-        { kind: 'shape', shape: 'line', fill: 'rgba(255,255,255,.85)', box: { cx: 0.5, cy: 0.46 + fy(132) * 0.75, w: 0.18, h: 0.003 }, t0: 0.4, animIn: 'zoom-in', animOut: 'fade' },
+        { kind: 'text', text: v.titulo, style: big, x: 0.5, y: v.sub?.trim() ? 0.46 : 0.5, animation: 'blur-in', animationOut: 'fade' },
+        { kind: 'shape', requires: ['sub'], shape: 'line', fill: 'rgba(255,255,255,.85)', box: { cx: 0.5, cy: 0.46 + fy(132) * 0.75, w: 0.18, h: 0.003 }, t0: 0.4, animIn: 'zoom-in', animOut: 'fade' },
         { kind: 'text', text: v.sub, style: sub, x: 0.5, y: 0.46 + fy(132) * 0.75 + 0.045, t0: 0.6, animation: 'char-fade', animationOut: 'fade' },
       ];
     },
@@ -338,8 +340,9 @@ export const TEMPLATES: TemplateDef[] = [
       const name = ts({ fontFamily: 'Montserrat', fontWeight: 900, fontSize: 64, color: '#FFFFFF', align: 'left', shadowColor: 'rgba(0,0,0,.55)', shadowBlur: 14 });
       const role = ts({ fontFamily: 'Montserrat', fontWeight: 600, fontSize: 40, color: 'rgba(255,255,255,.9)', align: 'left', shadowColor: 'rgba(0,0,0,.55)', shadowBlur: 12 });
       const y = ly(f);
+      const hasRole = !!v.funcao?.trim();
       return [
-        { kind: 'shape', shape: 'line', fill: f.brand.primary, box: { cx: mx(f), cy: y + 0.02, w: 0.012, h: fy(64 + 40) * 1.5 }, animIn: 'slide-up', animOut: 'fade', animInDur: 0.35 },
+        { kind: 'shape', shape: 'line', fill: f.brand.primary, box: { cx: mx(f), cy: hasRole ? y + 0.02 : y, w: 0.012, h: fy(hasRole ? 64 + 40 : 64) * 1.5 }, animIn: 'slide-up', animOut: 'fade', animInDur: 0.35 },
         { kind: 'text', text: v.nome, style: name, x: leftX(f, left, v.nome, name), y, t0: 0.15, animation: 'slide-right', animationOut: 'fade' },
         { kind: 'text', text: v.funcao, style: role, x: leftX(f, left, v.funcao, role), y: y + fy(64) * 1.05, t0: 0.3, animation: 'fade', animationOut: 'fade' },
       ];
@@ -360,7 +363,7 @@ export const TEMPLATES: TemplateDef[] = [
       const rh = fy(38) * 1.6;
       return [
         { kind: 'shape', shape: 'rounded-rect', fill: f.brand.primary, radiusPx: 14 * f.H / 1920, box: { cx: mx(f) + nw / 2, cy: y, w: nw, h: nh }, animIn: 'slide-right', animOut: 'slide-left' },
-        { kind: 'shape', shape: 'rounded-rect', fill: 'rgba(15,15,18,.88)', radiusPx: 12 * f.H / 1920, box: { cx: mx(f) + rw / 2, cy: y + nh / 2 + rh / 2 + 0.006, w: rw, h: rh }, t0: 0.15, animIn: 'slide-right', animOut: 'slide-left' },
+        { kind: 'shape', requires: ['funcao'], shape: 'rounded-rect', fill: 'rgba(15,15,18,.88)', radiusPx: 12 * f.H / 1920, box: { cx: mx(f) + rw / 2, cy: y + nh / 2 + rh / 2 + 0.006, w: rw, h: rh }, t0: 0.15, animIn: 'slide-right', animOut: 'slide-left' },
         { kind: 'text', text: v.nome, style: name, x: leftX(f, left, v.nome, name), y, t0: 0.2, animation: 'fade', animationOut: 'fade' },
         { kind: 'text', text: v.funcao, style: role, x: leftX(f, left, v.funcao, role), y: y + nh / 2 + rh / 2 + 0.006, t0: 0.35, animation: 'fade', animationOut: 'fade' },
       ];
@@ -375,7 +378,7 @@ export const TEMPLATES: TemplateDef[] = [
       const name = ts({ fontFamily: 'Outfit', fontWeight: 800, fontSize: 66, color: '#FFFFFF', align: 'left', shadowColor: 'rgba(0,0,0,.5)', shadowBlur: 14 });
       const role = ts({ fontFamily: 'Outfit', fontWeight: 500, fontSize: 40, color: '#FFFFFF', align: 'left', letterSpacing: 3, uppercase: true, shadowColor: 'rgba(0,0,0,.5)', shadowBlur: 12 });
       const y = ly(f);
-      const w = Math.max(f.textW(v.nome, name), f.textW(v.funcao, role)) + 0.02;
+      const w = Math.max(f.textW(v.nome, name), v.funcao?.trim() ? f.textW(v.funcao, role) : 0) + 0.02;
       return [
         { kind: 'text', text: v.nome, style: name, x: leftX(f, left, v.nome, name), y, animation: 'word-slide', animationOut: 'fade' },
         { kind: 'shape', shape: 'line', fill: f.brand.primary, box: { cx: left + w / 2, cy: y + fy(66) * 0.72, w, h: 0.006 }, t0: 0.25, animIn: 'slide-right', animOut: 'fade' },
@@ -393,12 +396,14 @@ export const TEMPLATES: TemplateDef[] = [
       const y = ly(f);
       const dot = fy(56) * 1.2 * f.H / f.W; // largura do ponto em fração de W
       const tl = mx(f) + 0.03 + dot + 0.025;
-      const w = Math.max(f.textW(v.nome, name), f.textW(v.funcao, role)) + (tl - mx(f)) + 0.04;
-      const h = fy(56 + 38) * 1.6;
+      const hasRole = !!v.funcao?.trim();
+      const w = Math.max(f.textW(v.nome, name), hasRole ? f.textW(v.funcao, role) : 0) + (tl - mx(f)) + 0.04;
+      const h = hasRole ? fy(56 + 38) * 1.6 : fy(56) * 1.9;
+      const cy = hasRole ? y + fy(20) : y;
       return [
-        { kind: 'shape', shape: 'rounded-rect', fill: 'rgba(255,255,255,.16)', stroke: 'rgba(255,255,255,.45)', strokeWidth: 3, radiusPx: 28 * f.H / 1920, box: { cx: mx(f) + w / 2, cy: y + fy(20), w, h }, animIn: 'zoom-in', animOut: 'fade' },
-        { kind: 'shape', shape: 'circle', fill: f.brand.primary, box: { cx: mx(f) + 0.03 + dot / 2, cy: y + fy(20), w: dot, h: fy(56) * 1.2 }, t0: 0.15, animIn: 'pop', animOut: 'fade' },
-        { kind: 'text', text: v.nome, style: name, x: leftX(f, tl, v.nome, name), y: y - fy(8), t0: 0.2, animation: 'fade', animationOut: 'fade' },
+        { kind: 'shape', shape: 'rounded-rect', fill: 'rgba(255,255,255,.16)', stroke: 'rgba(255,255,255,.45)', strokeWidth: 3, radiusPx: 28 * f.H / 1920, box: { cx: mx(f) + w / 2, cy, w, h }, animIn: 'zoom-in', animOut: 'fade' },
+        { kind: 'shape', shape: 'circle', fill: f.brand.primary, box: { cx: mx(f) + 0.03 + dot / 2, cy, w: dot, h: fy(56) * 1.2 }, t0: 0.15, animIn: 'pop', animOut: 'fade' },
+        { kind: 'text', text: v.nome, style: name, x: leftX(f, tl, v.nome, name), y: hasRole ? y - fy(8) : y, t0: 0.2, animation: 'fade', animationOut: 'fade' },
         { kind: 'text', text: v.funcao, style: role, x: leftX(f, tl, v.funcao, role), y: y + fy(56), t0: 0.3, animation: 'fade', animationOut: 'fade' },
       ];
     },
@@ -516,7 +521,7 @@ export const TEMPLATES: TemplateDef[] = [
       return [
         { kind: 'text', text: v.antes, style: old, x: 0.5, y: y - fy(170) * 0.75, animation: 'fade', animationOut: 'fade' },
         { kind: 'text', text: v.preco, style: price, x: 0.5, y, t0: 0.15, animation: 'stomp', animationOut: 'zoom', animationLoop: 'none' },
-        { kind: 'shape', shape: 'star', fill: f.brand.secondary, box: { cx: Math.min(0.88, 0.5 + pw / 2), cy: y - fy(170) * 0.7, w: seal / f.W, h: seal / f.H }, t0: 0.45, animIn: 'spin', animLoop: 'swing', animOut: 'zoom-out' },
+        { kind: 'shape', requires: ['selo'], shape: 'star', fill: f.brand.secondary, box: { cx: Math.min(0.88, 0.5 + pw / 2), cy: y - fy(170) * 0.7, w: seal / f.W, h: seal / f.H }, t0: 0.45, animIn: 'spin', animLoop: 'swing', animOut: 'zoom-out' },
         { kind: 'text', text: v.selo, style: ts({ fontFamily: 'Anton', fontWeight: 400, fontSize: 64, color: f.brand.dark }), x: Math.min(0.88, 0.5 + pw / 2), y: y - fy(170) * 0.7, t0: 0.55, rotation: -10, animation: 'pop', animationOut: 'fade' },
       ];
     },
@@ -703,7 +708,7 @@ export const TEMPLATES: TemplateDef[] = [
       const hw = f.textW(v.destaque, hl) + 0.05;
       return [
         { kind: 'text', text: v.antes, style: st, x: 0.5, y: y - fy(104) * 1.15, animation: 'slide-up', animationOut: 'fade' },
-        { kind: 'shape', shape: 'rect', fill: f.brand.secondary, box: { cx: 0.5, cy: y + fy(6), w: hw, h: fy(104) * 1.05 }, t0: 0.35, animIn: 'slide-right', animInDur: 0.35, animOut: 'fade', rotation: -2 },
+        { kind: 'shape', requires: ['destaque'], shape: 'rect', fill: f.brand.secondary, box: { cx: 0.5, cy: y + fy(6), w: hw, h: fy(104) * 1.05 }, t0: 0.35, animIn: 'slide-right', animInDur: 0.35, animOut: 'fade', rotation: -2 },
         { kind: 'text', text: v.destaque, style: hl, x: 0.5, y, t0: 0.45, animation: 'stomp', animationOut: 'fade' },
         { kind: 'text', text: v.depois, style: st, x: 0.5, y: y + fy(104) * 1.15, t0: 0.7, animation: 'slide-up', animationOut: 'fade' },
       ];
@@ -740,7 +745,7 @@ export const TEMPLATES: TemplateDef[] = [
       return [
         { kind: 'text', text: v.rotulo, x: 0.5, y: y - fy(86) * 2.1, style: ts({ fontFamily: 'Montserrat', fontWeight: 900, fontSize: 44, color: '#FFFFFF', background: '#E62E2E', backgroundRadius: 40, backgroundPadding: 12, letterSpacing: 3 }), animation: 'pop', animationOut: 'fade' },
         { kind: 'text', text: v.antes, style: old, x: 0.5, y: y - fy(86) * 0.9, t0: 0.1, animation: 'fade', animationOut: 'fade' },
-        { kind: 'shape', shape: 'line', fill: '#E62E2E', box: { cx: 0.5, cy: y - fy(86) * 0.9, w: ow, h: fy(10) }, t0: 0.6, rotation: -8, animIn: 'slide-right', animInDur: 0.3, animOut: 'fade' },
+        { kind: 'shape', requires: ['antes'], shape: 'line', fill: '#E62E2E', box: { cx: 0.5, cy: y - fy(86) * 0.9, w: ow, h: fy(10) }, t0: 0.6, rotation: -8, animIn: 'slide-right', animInDur: 0.3, animOut: 'fade' },
         { kind: 'text', text: v.preco, style: price, x: 0.5, y: y + fy(180) * 0.35, t0: 0.95, animation: 'stomp', animationOut: 'zoom' },
       ];
     },
@@ -887,7 +892,14 @@ export function buildTemplate(id: string, values: Record<string, string | number
   for (const [k, val] of Object.entries(values)) if (val !== undefined && val !== null) v[k] = String(val);
   const dur = def.fullLength ? Math.max(projectDuration(ctx.project), 5) : Math.max(0.5, ctx.duration ?? def.duration);
   const frame = makeFrame(ctx, dur);
-  return assembleTemplate(def, def.build(v, frame), ctx, frame);
+  const empty = (k: string) => !String(v[k] ?? '').trim();
+  // texto vazio (ou só travessão/pontuação) e peças que dependem de um parâmetro vazio são omitidos
+  const all = def.build(v, frame);
+  const pieces = all.filter((pc) =>
+    !(pc.kind === 'text' && !pc.text.replace(/[\s—–\-·.,:;!?]/g, '')) && !pc.requires?.some(empty));
+  // todos os textos sumiram (ex.: marca d'água vazia): não sobra nada útil para inserir
+  if (!pieces.length || (all.some((pc) => pc.kind === 'text') && !pieces.some((pc) => pc.kind === 'text'))) return [];
+  return assembleTemplate(def, pieces, ctx, frame);
 }
 
 /** famílias de fonte usadas por um modelo (p/ carregar antes da prévia) */
