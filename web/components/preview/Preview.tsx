@@ -14,7 +14,8 @@ import { formatTime } from '@/lib/util';
 import { LiveMediaPool } from './livePool';
 import { PlaybackClock, QualityGovernor, frameInterval, stillTime } from './syncPolicy';
 import { nativePlan } from './hybrid';
-import { shaderKindsIn, warmIdle, warmShader, isWarm } from './warm';
+import { shaderKindsIn, warmShader, isWarm } from './warm';
+import { prewarmIdle } from '@/lib/engine/prewarm';
 import { onLutsChanged, onCompareChanged } from '@/lib/color';
 import { hitTest, dragPatch, type Box } from './manipulate';
 import type { Clip, Project, TextClip } from '@/lib/types';
@@ -408,12 +409,15 @@ export default function Preview() {
   /* ---------- eventos / tela cheia ---------- */
   useEffect(() => on('ep:open-export', (d) => { setPlaying(false); setExportInit(d ?? {}); setExportOpen(true); }), [setPlaying]);
   useEffect(() => { requestStill(); }, [compare, split, requestStill]);
-  /* compila no ócio os shaders das transições do projeto (a 1ª compilação trava a página) */
+  /* compila no ócio os shaders (a 1ª compilação trava a página): os do projeto e, depois, o catálogo
+     inteiro de transições/efeitos — aplicar um item novo já encontra o shader pronto */
   const projForWarm = useEditor((s) => s.project);
   useEffect(() => {
     if (playing) return;
-    const id = window.setTimeout(() => { cancelWarm = warmIdle(shaderKindsIn(projForWarm)); }, 600);
     let cancelWarm = () => {};
+    const id = window.setTimeout(() => {
+      cancelWarm = prewarmIdle(projForWarm, { catalog: true, isBusy: () => useEditor.getState().playing });
+    }, 600);
     return () => { clearTimeout(id); cancelWarm(); };
   }, [projForWarm, playing]);
   /* fecha o popover "Visualização" ao tocar fora */

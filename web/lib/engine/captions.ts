@@ -192,3 +192,22 @@ export function isEmphasisWord(word: string): boolean {
   const n = normWord(raw);
   return n.length >= 3 && EMPHASIS_WORDS.has(n);
 }
+
+/* ---------- cor de destaque efetiva ---------- */
+
+const sameColor = (a?: string, b?: string) => !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/**
+ * Cor da palavra em destaque (ativa/falada/ênfase). A cor escolhida pelo usuário ganha do preset:
+ * se o preset NÃO tem destaque próprio (destaque = cor, ex.: "Karaokê acendendo" branco/branco)
+ * e o usuário não mexeu no destaque, o destaque acompanha a cor escolhida — senão trocar a cor
+ * "não fazia nada" (as palavras faladas ficavam na cor de destaque antiga).
+ */
+export function captionHighlight(style: { color?: string; highlightColor?: string }, presetDefaults?: { color?: string; highlightColor?: string } | null): string {
+  const hl = style.highlightColor || '#FFD23F';
+  const d = presetDefaults;
+  if (d && sameColor(d.highlightColor, d.color) && sameColor(style.highlightColor, d.highlightColor) && style.color && !sameColor(style.color, d.color)) {
+    return style.color;
+  }
+  return hl;
+}

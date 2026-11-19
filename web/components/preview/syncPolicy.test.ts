@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  driftDecision, staleIdle, warmPosition, WARM_START, PlaybackClock, QualityGovernor, prerollPlan, frameReady, frameInterval,
+  driftDecision, neighborPlan, staleIdle, warmPosition, WARM_START, PlaybackClock, QualityGovernor, prerollPlan, frameReady, frameInterval,
   SEEK_DRIFT, KICK_GRACE_MS, MAX_HOLD_MS, PREROLL,
 } from './syncPolicy';
 import { stillTime } from './syncPolicy';
@@ -223,5 +223,14 @@ describe('QualityGovernor: 3º degrau só com custo muito alto', () => {
     const changes: number[] = [];
     for (let i = 0; i < 1200; i++) { const q = g.push(80, i * 33); if (q !== null) changes.push(q); }
     expect(changes).toEqual([0.75, 0.5]);
+  });
+});
+
+describe('neighborPlan (vizinhos do corte com o vídeo parado)', () => {
+  it('pega o clipe que acabou e o que vai começar, não o ativo', () => {
+    const p = rippleProject();
+    expect(neighborPlan(p, 5.3).map((x) => x.clip.id)).toEqual(['c0']);
+    expect(neighborPlan(p, 4.6).map((x) => x.clip.id)).toEqual(['c1']);
+    expect(neighborPlan(p, 7.5)).toEqual([]);
   });
 });

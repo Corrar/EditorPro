@@ -16,7 +16,7 @@ import { clipGainAt } from '@/lib/engine/audio';
 import { hasVolumeKeyframes } from '@/lib/engine/animate';
 import { buildAudioChain, chainKey, needsAudioChain, type FxChain } from '@/lib/engine/audioFx';
 import { nativeGeometry, geometryTransform, geometryClip, layerFilter, type NativePlan } from './hybrid';
-import { driftDecision, staleIdle, frameReady, prerollPlan, warmPosition, type FrameProof, type LeadState } from './syncPolicy';
+import { driftDecision, neighborPlan, staleIdle, frameReady, prerollPlan, warmPosition, type FrameProof, type LeadState } from './syncPolicy';
 
 /** roteamento de um elemento pelo grafo WebAudio (efeitos de voz / tom) */
 interface Route { source: MediaElementAudioSourceNode; gain: GainNode; chain: FxChain | null; key: string }
@@ -259,6 +259,8 @@ export class LiveMediaPool implements MediaSources {
     const usable = (c: Clip) => (c.type === 'video' || c.type === 'audio') && !!assets[c.assetId]?.url && assets[c.assetId]?.kind !== 'image';
     for (const { clip } of active) if (usable(clip)) wanted.add(clip.id);
     if (playing) for (const { clip } of prerollPlan(p, t)) if (usable(clip)) wanted.add(clip.id);
+    const neighbors = playing ? [] : neighborPlan(p, t);
+    for (const { clip } of neighbors) if (usable(clip)) wanted.add(clip.id);
     for (const [id, el] of [...this.byClip]) if (!wanted.has(id)) this.release(id, el, false);
 
     const keep = new Set<string>();
@@ -331,6 +333,19 @@ export class LiveMediaPool implements MediaSources {
           if (Math.abs(el.currentTime - pos.at) > 0.04 && !el.seeking) this.seek(el, pos.at, now);
         }
       }
+    }
+    // pausado perto de um corte: vizinhos já no quadro do corte (transição aplicada aparece na hora)
+    for (const { clip } of neighbors) {
+      if (clip.type !== 'video' || keep.has(clip.id)) continue;
+      const asset = assets[clip.assetId];
+      if (!asset?.url || asset.kind === 'image') continue;
+      keep.add(clip.id);
+      const el = this.acquire(clip, asset);
+      el.muted = true;
+      if (!el.paused) el.pause();
+      const dur = Number.isFinite(el.duration) ? el.duration : Infinity;
+      const at = Math.max(0, Math.min(sourceTime(clip, t), dur - 0.05));
+      if (Math.abs(el.currentTime - at) > 0.5 / fps && !el.seeking) this.seek(el, at, now);
     }
     for (const [id, el] of [...this.byClip]) if (!keep.has(id)) this.release(id, el);
     // livres que não foram reaproveitados neste passo: pausa (sem pausar/retomar o reaproveitado)

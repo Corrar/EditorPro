@@ -252,3 +252,23 @@ export function stillTime(t: Seconds, duration: Seconds, fps: number | undefined
   if (duration > 0 && t >= duration - 1e-6) return Math.max(0, duration - 1 / (fps || 30));
   return t;
 }
+
+/**
+ * Pausado perto de um corte: clipes de vídeo VIZINHOS (o que acabou de terminar ou vai começar
+ * em até `win` s) que não estão ativos. Ficam com elemento próprio já no quadro do corte — aplicar
+ * uma transição ali mostra o resultado na hora (antes: criar <video> + seek ≈ 200 ms no celular).
+ */
+export function neighborPlan(p: Project, t: Seconds, win = 1): PlanItem[] {
+  const out: PlanItem[] = [];
+  for (const track of p.tracks) {
+    if (track.hidden || (track.kind !== 'video' && track.kind !== 'overlay')) continue;
+    for (const c of track.clips) {
+      if (c.type !== 'video') continue;
+      const end = c.start + c.duration;
+      const active = t >= c.start && t < end;
+      if (active) continue;
+      if ((t >= end && t - end <= win) || (c.start > t && c.start - t <= win)) out.push({ clip: c, track });
+    }
+  }
+  return out;
+}

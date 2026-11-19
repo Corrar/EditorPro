@@ -8,9 +8,9 @@ import { animateClip } from './animate';
 import type { CaptionStyle, Project, Seconds, TextClip, TextStyle } from '../types';
 import { interpolateTransform, easeOutBack, easeOutBounce, ease, clamp01 } from './easing';
 import { balanceLines, layoutWords, splitText, textAnimState, fontPx, type AnimState } from './text';
-import { captionLook, chunkAt, chunkCaptions, clampToSafeZone, isEmphasisWord, wordStates, type CaptionChunk } from './captions';
+import { captionHighlight, captionLook, chunkAt, chunkCaptions, clampToSafeZone, isEmphasisWord, wordStates, type CaptionChunk } from './captions';
 import { charOffsets, unitFx, unitKindOf, UNIT_NEUTRAL, type UnitFx, type UnitKind } from './textUnits';
-import { basePresetFor, emojiForWord, requestFont } from './fonts';
+import { basePresetFor, captionPresetColors, emojiForWord, requestFont } from './fonts';
 import { hash, makeCanvas, type AnyCanvas, type Ctx } from './surface';
 
 /* ---------- texto ---------- */
@@ -497,7 +497,8 @@ export function drawCaptions(ctx: Ctx, p: Project, t: Seconds, W: number, H: num
   const look = captionLook(basePresetFor(style.preset));
   const states = wordStates(chunk, t, look);
   const words = chunk.words.map((w) => (style.uppercase ? w.text.toLocaleUpperCase('pt-BR') : w.text));
-  const hl = style.highlightColor || '#FFD23F';
+  // a cor escolhida pelo usuário ganha do preset (ver captionHighlight)
+  const hl = captionHighlight(style, captionPresetColors(style.preset));
   const local = t - chunk.start;
   const anim = captionAnim(style, local, chunk.end - chunk.start, words.join(' ').length);
   if (style.animation === 'typewriter') {

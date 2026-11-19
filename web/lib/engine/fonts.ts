@@ -9,7 +9,8 @@ import type { Project } from '../types';
 /** chamado quando uma fonte/emoji fica disponível (o preview redesenha) */
 export const assetEvents = { onReady: () => {} };
 
-type Lib = { ensureFont?: (family: string, weights?: number[]) => Promise<unknown>; emojiFor?: (word: string) => string | undefined | null; captionBasePreset?: (id: string) => string };
+type Lib = { ensureFont?: (family: string, weights?: number[]) => Promise<unknown>; emojiFor?: (word: string) => string | undefined | null; captionBasePreset?: (id: string) => string;
+  captionPresetDef?: (id: string) => { style?: { color?: string; highlightColor?: string } } | undefined };
 let libPromise: Promise<Lib> | null = null;
 let lib: Lib | null = null;
 
@@ -113,4 +114,14 @@ export function basePresetFor(id: string | undefined): string {
     if (b && NATIVE.has(b)) return b;
   } catch { /* usa a heurística */ }
   return guessBasePreset(id);
+}
+
+/** cores-padrão do preset de legenda da biblioteca (p/ saber se o usuário mexeu no destaque) */
+export function captionPresetColors(id: string | undefined): { color?: string; highlightColor?: string } | null {
+  if (!id || NATIVE.has(id)) return null;
+  if (!lib) { void loadLib().then(() => assetEvents.onReady()); return null; }
+  try {
+    const st = lib.captionPresetDef?.(id)?.style;
+    return st ? { color: st.color, highlightColor: st.highlightColor } : null;
+  } catch { return null; }
 }
