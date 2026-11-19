@@ -20,7 +20,13 @@ import type { AspectRatio } from '@/lib/types';
 import Home, { type WizardInput } from './Home';
 import MobileNav from './MobileNav';
 import MobileToolbar from './MobileToolbar';
-import AiPopupHost, { type AiPopupMode } from './AiPopupHost';
+import AiPopupHost, { type AiPopupMode, type AiPopupBodyProps } from './AiPopupHost';
+import AiPopup from '@/components/chat/AiPopup';
+
+/* pop-up definitivo da IA (sessão de IA) no contêiner do shell */
+function AiPopupBody({ onMinimize, onOpenChat }: AiPopupBodyProps) {
+  return <AiPopup onMinimize={onMinimize} onExpand={onOpenChat} autoFocus />;
+}
 import SettingsModal from './SettingsModal';
 import Sidebar from './Sidebar';
 import Toasts from './Toasts';
@@ -270,7 +276,7 @@ export default function EditorShell() {
           {view === 'editor' && !chatOpen && (
             <>
               <MobileToolbar tool={tool} toolOpen={sideOpen} onTool={(t) => { if (aiMode === 'open') setAiModeRaw('min'); pickTool(t); }} onAi={() => setAiMode('open')} onMenu={() => setMenuOpen(true)} />
-              <AiPopupHost fabHidden={sideOpen} prompt={aiPrompt} mode={aiMode} setMode={setAiMode} onOpenChat={() => openChat(true)} />
+              <AiPopupHost fabHidden={sideOpen} prompt={aiPrompt} mode={aiMode} setMode={setAiMode} onOpenChat={() => openChat(true)} Body={AiPopupBody} />
             </>
           )}
         </div>
