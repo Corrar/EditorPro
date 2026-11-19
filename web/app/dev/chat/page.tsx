@@ -6,6 +6,7 @@
    ===================================================================== */
 import { useEffect, useState } from 'react';
 import ChatPanel from '@/components/chat/ChatPanel';
+import AiPopup, { AiLiveBadge } from '@/components/chat/AiPopup';
 import { useEditor } from '@/lib/store';
 import { emit, on } from '@/lib/events';
 import { clipEnd, projectDuration } from '@/lib/ops';
@@ -51,6 +52,9 @@ const COLORS: Record<string, string> = { video: '#D9641E', text: '#8B5CF6', audi
 export default function DevChat() {
   const [dark, setDark] = useState(true);
   useEffect(() => { if (new URLSearchParams(location.search).get('theme') === 'light') setDark(false); }, []);
+  // ?popup=1 monta o pop-up compacto "Editar com IA" no lugar do chat completo
+  const [popup, setPopup] = useState<'off' | 'open' | 'min'>('off');
+  useEffect(() => { if (new URLSearchParams(location.search).get('popup')) setPopup('open'); }, []);
   const project = useEditor((s) => s.project);
   const assets = useEditor((s) => s.assets);
   const playhead = useEditor((s) => s.playhead);
@@ -136,8 +140,13 @@ export default function DevChat() {
         {toasts.length ? <div className="ep-meta" data-testid="toasts">{toasts.join(' | ')}</div> : null}
       </main>
       <section className="ep-chat" style={{ borderLeft: '1px solid var(--line)', background: 'var(--cardBg)', minHeight: 0 }}>
-        <ChatPanel />
+        {popup === 'off' ? <ChatPanel /> : popup === 'open' ? <AiPopup onMinimize={() => setPopup('min')} onExpand={() => setPopup('off')} /> : null}
       </section>
+      {popup === 'min' ? (
+        <div style={{ position: 'fixed', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 50 }} data-testid="livebadge">
+          <AiLiveBadge showIdle onClick={() => setPopup('open')} />
+        </div>
+      ) : null}
     </div>
   );
 }
