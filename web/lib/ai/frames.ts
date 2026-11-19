@@ -21,7 +21,8 @@ export function deviceProfile(): DeviceProfile {
   const mobile = !!nav.userAgentData?.mobile || /Android|iPhone|iPad|iPod|Mobile/i.test(ua) || touchMac;
   const memoryGB = nav.deviceMemory;
   const cores = nav.hardwareConcurrency;
-  const weak = (memoryGB !== undefined && memoryGB <= 3) || (cores !== undefined && cores <= 4 && mobile);
+  // (plano §1.4) Pixel 7 (8 núcleos, 8 GB) era "fraco" pela regra antiga e ganhava a pergunta "Pular legendas"
+  const weak = (memoryGB !== undefined && memoryGB <= 3) || (cores !== undefined && cores <= 2);
   return { mobile, weak, memoryGB, cores };
 }
 

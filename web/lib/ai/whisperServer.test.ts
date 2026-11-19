@@ -15,3 +15,57 @@ describe('encodeWav', () => {
     expect(Math.abs(v.getInt16(44 + 2 * 15, true) - Math.sin(1.5) * 0x7fff)).toBeLessThanOrEqual(1);
   });
 });
+
+/* ---------- caminho do servidor: retry por trecho e queda só do trecho que falhou (plano §1.5) ---------- */
+import { serverChunks, type ServerDeps } from './whisper';
+
+function fakeFetch(plan: Record<number, (number | 'ok')[]>, calls: Record<number, number>, onRetryAfter = 0): ServerDeps['fetch'] {
+  return (async (_url: RequestInfo | URL, init?: RequestInit) => {
+    // descobre o trecho pelo tamanho do WAV (cada trecho do teste tem duração diferente)
+    const bytes = (init!.body as ArrayBuffer).byteLength;
+    const secs = Math.round((bytes - 44) / 32000);
+    calls[secs] = (calls[secs] ?? 0) + 1;
+    const step = plan[secs][Math.min(calls[secs] - 1, plan[secs].length - 1)];
+    if (step === 'ok') {
+      return new Response(JSON.stringify({ provider: 'groq', model: 'whisper-large-v3-turbo', words: [{ word: 'oi', start: 0.5, end: 0.8 }, { word: 'fim', start: secs - 0.2, end: secs + 5 }, { word: 'antes', start: -1, end: 0.1 }] }), { status: 200 });
+    }
+    const headers: Record<string, string> = step === 429 && onRetryAfter ? { 'Retry-After': String(onRetryAfter) } : {};
+    return new Response(JSON.stringify({ error: `falha ${step}` }), { status: step, headers });
+  }) as ServerDeps['fetch'];
+}
+
+describe('serverChunks', () => {
+  const audio = new Float32Array(16000 * 20);
+  const jobs = [{ a: 0, b: 3 }, { a: 3, b: 7 }, { a: 7, b: 12 }, { a: 12, b: 18 }];
+
+  it('tenta de novo em 429/5xx (respeitando Retry-After) e prende as palavras ao trecho', async () => {
+    const calls: Record<number, number> = {};
+    const waits: number[] = [];
+    const res = await serverChunks(audio, jobs, {}, { fetch: fakeFetch({ 3: [429, 'ok'], 4: [503, 502 as never, 'ok'], 5: ['ok'], 6: ['ok'] }, calls, 2), sleep: async (ms) => { waits.push(ms); } });
+    expect(res.failed).toEqual([{ a: 3, b: 7 }]); // 502 = não repete (erro do provedor que não melhora)
+    expect(calls[3]).toBe(2);
+    expect(waits).toContain(2000);
+    expect(res.label).toBe('Groq whisper-large-v3-turbo');
+    // tempos dentro de cada trecho e em ordem
+    for (const c of res.chunks) expect(c.timestamp[0]).toBeGreaterThanOrEqual(0);
+    const t = res.chunks.map((c) => c.timestamp[0]);
+    expect([...t].sort((x, y) => x - y)).toEqual(t);
+    const fim = res.chunks.filter((c) => c.text.trim() === 'fim');
+    expect(fim.map((c) => c.timestamp[1])).toEqual([3, 12, 18]);
+  });
+
+  it('um trecho que sempre falha volta sozinho em `failed` (o resto não é refeito)', async () => {
+    const calls: Record<number, number> = {};
+    const res = await serverChunks(audio, jobs, {}, { fetch: fakeFetch({ 3: ['ok'], 4: ['ok'], 5: [500, 500, 500], 6: ['ok'] }, calls), sleep: async () => {} });
+    expect(res.failed).toEqual([{ a: 7, b: 12 }]);
+    expect(calls[5]).toBe(3); // 1 + 2 tentativas
+    expect(calls[3]).toBe(1);
+    expect(res.chunks.length).toBe(9);
+  });
+
+  it('cancelamento interrompe', async () => {
+    const ctrl = new AbortController();
+    ctrl.abort();
+    await expect(serverChunks(audio, jobs, { signal: ctrl.signal }, { fetch: fakeFetch({ 3: ['ok'], 4: ['ok'], 5: ['ok'], 6: ['ok'] }, {}), sleep: async () => {} })).rejects.toThrow(/cancelada/);
+  });
+});

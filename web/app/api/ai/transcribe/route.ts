@@ -22,6 +22,8 @@ export async function POST(req: Request) {
     return NextResponse.json(out, { headers: { 'Cache-Control': 'no-store' } });
   } catch (e) {
     const err = e instanceof TranscribeError ? e : new TranscribeError(e instanceof Error ? e.message : String(e));
-    return NextResponse.json({ error: err.message }, { status: err.status, headers: { 'Cache-Control': 'no-store' } });
+    const headers: Record<string, string> = { 'Cache-Control': 'no-store' };
+    if (err.retryAfter) headers['Retry-After'] = String(Math.ceil(err.retryAfter));
+    return NextResponse.json({ error: err.message, ...(err.retryAfter ? { retryAfter: err.retryAfter } : {}) }, { status: err.status, headers });
   }
 }
