@@ -15,12 +15,13 @@ import { DEFAULT_TRANSFORM } from '@/lib/types';
 import { uid } from '@/lib/util';
 import { IconCopy, IconTrash, IconZoom } from '@/components/shell/icons';
 import Icon from '@/components/ui/Icon';
+import { useCatalogs } from './catalog';
 import { ColorField, Section, Seg, Slider, Toggle } from './controls';
 import { clearPropKfs, propAnimated, propKfAt, removePropKf, setPropKf, type KfProp } from './kf';
 import { interpolateTransform } from '@/lib/engine/easing';
 import { pct, secs, signed, useClipPatch } from './hooks';
 import {
-  ADJUST_DEFS, AUDIO_EFFECTS, BLEND_MODES, CLIP_ANIMATIONS, COLOR_PRESETS, MASK_SHAPES, SPEED_PRESETS, VISUAL_EFFECTS,
+  ADJUST_DEFS, AUDIO_EFFECTS, COLOR_PRESETS, SPEED_PRESETS,
   cropForRatio, filterValue, filtersToCss, punchInKeyframes, retimeForCurve, retimeForSpeed, setFilter,
 } from './presets';
 import type { FilterableClip, SoundClip, VisualClip } from './clipkit';
@@ -229,6 +230,7 @@ export function VolumeSection({ clip }: { clip: SoundClip }) {
 
 /* ---------- Animação: entrada / saída / loop ---------- */
 export function AnimationSection({ clip }: { clip: VisualClip }) {
+  const clipAnimations = useCatalogs((c) => c.clipAnimations);
   const patch = useClipPatch(clip.id);
   const [slot, setSlot] = useState<'animationIn' | 'animationOut' | 'animationLoop'>('animationIn');
   const cur = clip[slot];
@@ -238,7 +240,7 @@ export function AnimationSection({ clip }: { clip: VisualClip }) {
       <Seg value={slot} onChange={setSlot} options={[{ id: 'animationIn', label: 'Entrada' }, { id: 'animationOut', label: 'Saída' }, { id: 'animationLoop', label: 'Loop' }]} />
       <div className="ep-animgrid">
         <button type="button" className={`ep-anim${!cur ? ' on' : ''}`} onClick={() => patch({ [slot]: undefined })}><i className="a-none" />Nenhuma</button>
-        {CLIP_ANIMATIONS.map((a) => (
+        {clipAnimations.map((a) => (
           <button key={a.id} type="button" className={`ep-anim${cur?.kind === a.id ? ' on' : ''}`} onClick={() => patch({ [slot]: { kind: a.id as ClipAnimation, duration: cur?.duration ?? Math.min(0.5, maxD) } })}>
             <i className={`a-${a.id}`} />{a.label}
           </button>
@@ -288,6 +290,7 @@ export function CropSection({ clip }: { clip: VideoClip | ImageClip | VisualClip
 
 /* ---------- Máscara ---------- */
 export function MaskSection({ clip }: { clip: VisualClip }) {
+  const masks = useCatalogs((c) => c.masks);
   const patch = useClipPatch(clip.id);
   const m = clip.mask;
   const set = (p: Partial<Mask>, h = true) => m && patch({ mask: { ...m, ...p } }, h);
@@ -295,7 +298,7 @@ export function MaskSection({ clip }: { clip: VisualClip }) {
     <Section title="Máscara" onReset={m ? () => patch({ mask: undefined }) : undefined}>
       <div className="ep-chips">
         <button type="button" className={`ep-chipbtn${!m ? ' on' : ''}`} onClick={() => patch({ mask: undefined })}>Nenhuma</button>
-        {MASK_SHAPES.map((s) => (
+        {masks.map((s) => (
           <button key={s.id} type="button" className={`ep-chipbtn${m?.shape === s.id ? ' on' : ''}`} onClick={() => patch({ mask: { x: 0.5, y: 0.5, w: 0.6, h: 0.6, rotation: 0, feather: 0.1, ...m, shape: s.id } })}>{s.label}</button>
         ))}
       </div>
@@ -377,13 +380,14 @@ export function BackgroundSection({ clip }: { clip: VisualClip }) {
 }
 
 export function BlendSection({ clip }: { clip: VisualClip }) {
+  const blends = useCatalogs((c) => c.blends);
   const patch = useClipPatch(clip.id);
   const tfc = useTransformControls(clip);
   return (
     <Section title="Composição" onReset={() => { patch({ blendMode: 'normal', keyframes: clearPropKfs(clip.keyframes, 'opacity') }, true); tfc.setBase('opacity', 1); }}>
       <Slider label="Opacidade" min={0} max={1} format={pct} reset={1} {...tfc.slider('opacity')} />
       <div className="ep-chips">
-        {BLEND_MODES.map((b) => (
+        {blends.map((b) => (
           <button key={b.id} type="button" className={`ep-chipbtn${(clip.blendMode ?? 'normal') === b.id ? ' on' : ''}`} onClick={() => patch({ blendMode: b.id as BlendMode })}>{b.label}</button>
         ))}
       </div>
@@ -499,6 +503,7 @@ export function AdjustSection({ clip }: { clip: FilterableClip }) {
 
 /* ---------- Efeitos visuais ---------- */
 export function EffectsSection({ clip }: { clip: VisualClip | FilterableClip }) {
+  const effects = useCatalogs((c) => c.effects);
   const patch = useClipPatch(clip.id);
   const thumb = useClipThumb(clip);
   const fx: VisualEffect[] = clip.effects ?? [];
@@ -506,7 +511,7 @@ export function EffectsSection({ clip }: { clip: VisualClip | FilterableClip }) 
   return (
     <Section title="Efeitos" onReset={fx.length ? () => patch({ effects: [] }) : undefined}>
       <div className="ep-fxgrid">
-        {VISUAL_EFFECTS.map((e) => {
+        {effects.map((e) => {
           const on = fx.some((x) => x.kind === e.id);
           return (
             <button key={e.id} type="button" className={`ep-fx${on ? ' on' : ''} fx-${e.id}`} onClick={() => toggle(e.id)} aria-pressed={on}>
@@ -518,7 +523,7 @@ export function EffectsSection({ clip }: { clip: VisualClip | FilterableClip }) 
       </div>
       {fx.map((e, i) => (
         <div key={e.kind} className="ep-fxctl">
-          <b>{VISUAL_EFFECTS.find((v) => v.id === e.kind)?.label}</b>
+          <b>{effects.find((v) => v.id === e.kind)?.label ?? e.kind}</b>
           <Slider label="Intensidade" value={e.intensity} min={0} max={1} onChange={(v, h) => patch({ effects: fx.map((x, j) => (j === i ? { ...x, intensity: v } : x)) }, h)} format={pct} />
           <Slider label="Velocidade" value={e.speed ?? 1} min={0} max={2} onChange={(v, h) => patch({ effects: fx.map((x, j) => (j === i ? { ...x, speed: v } : x)) }, h)} format={(v) => `${v.toFixed(1)}×`} reset={1} />
         </div>

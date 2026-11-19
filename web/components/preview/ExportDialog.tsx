@@ -8,6 +8,7 @@ import { projectDuration } from '@/lib/ops';
 import {
   canExportM4A, canShareFiles, shareFiles, captionCues, detectExportPath, downloadBlob, exportAudio, exportFrame, exportSize,
   exportVideo, safeFileName, toFCPXML, toSRT, toVTT, type ExportOptions,
+  SPEED_LABELS, estimateProjectExport, type ExportSpeed,
 } from '@/lib/export';
 import { formatTime } from '@/lib/util';
 import Icon from '@/components/ui/Icon';
@@ -56,6 +57,8 @@ export default function ExportDialog({ onClose, initial }: { onClose: () => void
   const [result, setResult] = useState<{ url: string; blob: Blob; name: string; size: number; type: string; secs: number; cover?: { blob: Blob; name: string } } | null>(null);
   const [path, setPath] = useState<Awaited<ReturnType<typeof detectExportPath>> | null>(null);
   const [smallDevice, setSmallDevice] = useState(false);
+  /* rapidez × qualidade do encoder */
+  const [speed, setSpeed] = useState<ExportSpeed>('equilibrado');
   const abortRef = useRef<AbortController | null>(null);
   const startedRef = useRef(0);
 
@@ -119,7 +122,7 @@ export default function ExportDialog({ onClose, initial }: { onClose: () => void
   };
 
   const onProgress = (f: number, s: string) => { setProgress(f); setStage(s); };
-  const start = () => run('video', (signal) => exportVideo(project, assets, { format, quality, fps, signal, onProgress }));
+  const start = () => run('video', (signal) => exportVideo(project, assets, { format, quality, fps, speed, signal, onProgress }));
   const startAudio = (fmt: 'wav' | 'm4a') => run('audio', (signal) => exportAudio(project, assets, { format: fmt, signal, onProgress }));
   const [frameBusy, setFrameBusy] = useState(false);
   /** tempo da capa: Project.coverTime (escolhida na timeline) ou o 1º quadro */
@@ -188,7 +191,15 @@ export default function ExportDialog({ onClose, initial }: { onClose: () => void
             ))}
           </div>
         </div>
-        <div className="ep-ex-info mono">{size.width}×{size.height} · {fps} fps · {fmtLabel}</div>
+        <div className="ep-ex-sect">
+          <span className="ep-ex-h">Velocidade</span>
+          <div className="ep-ex-seg" role="radiogroup" aria-label="Velocidade da exportação">
+            {(Object.keys(SPEED_LABELS) as ExportSpeed[]).map((k) => (
+              <button key={k} role="radio" aria-checked={speed === k} className={speed === k ? 'on' : ''} onClick={() => setSpeed(k)} disabled={busy}>{SPEED_LABELS[k]}</button>
+            ))}
+          </div>
+        </div>
+        <div className="ep-ex-info mono">{size.width}×{size.height} · {fps} fps · {fmtLabel} · ≈ {formatTime(estimateProjectExport(project, duration, { quality, fps, speed, mobile: smallDevice }))}</div>
 
         {path?.path === 'mediarecorder' && (
           <div className="ep-ex-note">Modo compatível: o vídeo é gravado em tempo real ({formatTime(duration)}) e sai em {path.container?.toUpperCase()}. Deixe esta aba aberta até terminar.</div>
@@ -205,7 +216,8 @@ export default function ExportDialog({ onClose, initial }: { onClose: () => void
 
         {busy && (
           <div className="ep-ex-prog" aria-live="polite">
-            <div className="row"><span>{stage || 'Preparando…'}</span><b className="mono">{Math.round(progress * 100)}%</b></div>
+            <div className="row"><span>{(stage || 'Preparando…').split(' · ')[0]}</span><b className="mono">{Math.round(progress * 100)}%</b></div>
+            {stage.includes(' · ') && <div className="warn">{stage.split(' · ').slice(1).join(' · ')}</div>}
             <div className="bar"><div className="fill" style={{ width: `${(progress * 100).toFixed(1)}%` }} /></div>
           </div>
         )}

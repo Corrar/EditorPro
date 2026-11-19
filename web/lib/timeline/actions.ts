@@ -18,6 +18,8 @@ import { useTimelineUi } from './ui';
 import { captureFrame } from '../media/tools';
 import { freezeFrameOps as placeFreezeFrameOps } from '../media/place';
 import { keyframeToggleOps } from './keyframes';
+import { expandLinks, linkOps, splitAllOps, unlinkOps } from './trim';
+import { nudgeOps } from './nav';
 
 const toast = (text: string, kind: 'info' | 'ok' | 'error' = 'info') => emit('ep:toast', { text, kind });
 
@@ -247,4 +249,40 @@ export function useSelectedClip(): SelectedClipInfo | null {
   const clip = useEditor((s) => (s.selection[0] ? findClip(s.project, s.selection[0])?.clip ?? null : null));
   const track = useEditor((s) => (s.selection[0] ? findClip(s.project, s.selection[0])?.track ?? null : null));
   return useMemo(() => (clip && track ? { clip, track, kind: clip.type, ids, count: ids.length } : null), [clip, track, ids]);
+}
+
+/* ---------------- estilo DaVinci ---------------- */
+
+/** corta TODAS as trilhas (não travadas) no playhead, ignorando a seleção (Ctrl+Shift+B) */
+export function splitAll() {
+  const st = useEditor.getState();
+  const fps = st.project.fps || 30;
+  const t = Math.round(st.playhead * fps) / fps;
+  const ops = splitAllOps(st.project, t, () => uid('clip'));
+  if (!ops.length) return toast('Nada cruza o cursor para cortar');
+  commit(ops);
+}
+
+/** vincula/desvincula áudio e vídeo da seleção (Ctrl+Alt+L) */
+export function toggleLink(ids?: Id[]) {
+  const st = useEditor.getState();
+  const sel = ids ?? st.selection;
+  if (!sel.length) return toast('Selecione os clipes para vincular');
+  const p = st.project;
+  const anyLinked = sel.some((id) => !!findClip(p, id)?.clip.linkId);
+  if (anyLinked) {
+    st.dispatch(unlinkOps(p, sel));
+    return toast('Clipes desvinculados', 'ok');
+  }
+  if (sel.length < 2) return toast('Selecione 2 ou mais clipes (ex.: vídeo + áudio) para vincular');
+  st.dispatch(linkOps(p, sel, uid('link')));
+  st.select(expandLinks(useEditor.getState().project, sel));
+  toast('Clipes vinculados: movem e aparam juntos (Alt = só um)', 'ok');
+}
+
+/** empurra a seleção quadro a quadro (, e . · Shift = 5 quadros) */
+export function nudgeSelection(frames: number) {
+  const st = useEditor.getState();
+  const ops = nudgeOps(st.project, st.selection, frames);
+  if (ops.length) commit(ops);
 }
