@@ -14,8 +14,16 @@ import { useEditor } from '@/lib/store';
 import type { MediaAsset, MediaKind, MediaRole } from '@/lib/types';
 import { formatTime } from '@/lib/util';
 import { IconImage, IconMusic, IconPlus, IconTrash, IconUpload, IconVideo } from '@/components/shell/icons';
+import UiIcon from '@/components/ui/Icon';
 import Waveform from './Waveform';
 import GenerateSection from './GenerateSection';
+
+/** vídeo "Modelo": vira a referência de estilo do projeto e pede a análise à IA (pop-up/chat) */
+function useAsModel(a: MediaAsset) {
+  const st = useEditor.getState();
+  if (st.project.referenceAssetId !== a.id) st.dispatch({ op: 'set_project', patch: { referenceAssetId: a.id } }, { history: false });
+  emit('ep:open-ai-popup', { prompt: 'Analise este vídeo modelo e aplique o estilo' });
+}
 
 export const ASSET_MIME = 'application/x-ep-asset';
 const ACCEPT = 'video/*,audio/*,image/*';
@@ -101,6 +109,11 @@ function AssetCard({ asset, onAdd }: { asset: MediaAsset; onAdd: (a: MediaAsset)
           </select>
           <span className="ep-asset-size">{formatBytes(asset.size)}</span>
         </span>
+        {asset.role === 'reference' && asset.kind === 'video' && (
+          <button type="button" className="ep-asset-usemodel" onClick={() => useAsModel(asset)}>
+            <UiIcon name="ai" size={14} /> Usar como modelo da IA
+          </button>
+        )}
       </div>
     </div>
   );

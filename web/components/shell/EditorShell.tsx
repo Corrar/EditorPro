@@ -48,6 +48,7 @@ export default function EditorShell() {
   const [aiAutoMin, setAiAutoMin] = useState(false);
   const [aiMode, setAiModeRaw] = useState<AiPopupMode>('closed');
   const [aiPrompt, setAiPrompt] = useState<string | undefined>();
+  useEffect(() => { if (aiMode !== 'open') setAiPrompt(undefined); }, [aiMode]); // o texto sugerido vale só para essa abertura
   const setAiMode = (m: AiPopupMode) => { if (m === 'open') setSideOpen(false); setAiModeRaw(m); };
   const [sbMin, setSbMin] = useState(false);
   const [settings, setSettings] = useState(false);
@@ -275,7 +276,7 @@ export default function EditorShell() {
           {view === 'editor' && !chatOpen && (
             <>
               <MobileToolbar tool={tool} toolOpen={sideOpen} onTool={(t) => { if (aiMode === 'open') setAiModeRaw('min'); pickTool(t); }} onAi={() => setAiMode('open')} onMenu={() => setMenuOpen(true)} />
-              <AiPopupHost autoMinimize={aiAutoMin} onAutoMinimized={() => setAiAutoMin(false)} fabHidden={sideOpen} focus={!!aiPrompt} mode={aiMode} setMode={setAiMode} onOpenChat={() => openChat(true)} />
+              <AiPopupHost autoMinimize={aiAutoMin} onAutoMinimized={() => setAiAutoMin(false)} fabHidden={sideOpen} focus={!!aiPrompt} prompt={aiPrompt} mode={aiMode} setMode={setAiMode} onOpenChat={() => openChat(true)} />
             </>
           )}
         </div>

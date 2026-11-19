@@ -27,7 +27,7 @@ export function defaultRoleFor(kind: MediaKind, requested?: MediaRole): MediaRol
 
 export const ROLE_LABEL: Record<MediaRole, string> = {
   source: 'Material',
-  reference: 'Exemplo',
+  reference: 'Modelo',
   music: 'Música',
   broll: 'B-roll',
 };
