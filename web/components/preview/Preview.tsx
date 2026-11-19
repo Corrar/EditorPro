@@ -13,7 +13,7 @@ import { formatTime } from '@/lib/util';
 import { LiveMediaPool } from './livePool';
 import { PlaybackClock, QualityGovernor, frameInterval } from './syncPolicy';
 import { nativePlan } from './hybrid';
-import { PLAY_RATES, rateLabel, loopRange, wrapLoop, stepFrame, zoomScale, VIEW_ZOOMS, zoomLabel, SAFE_ZONES, SAFE_LABELS, type ViewZoom, type SafePlatform } from './viewing';
+import { stripLooks, PLAY_RATES, rateLabel, loopRange, wrapLoop, stepFrame, zoomScale, VIEW_ZOOMS, zoomLabel, SAFE_ZONES, SAFE_LABELS, type ViewZoom, type SafePlatform } from './viewing';
 import PerfHud, { type PreviewStats } from './PerfHud';
 import ExportDialog from './ExportDialog';
 import Icon from '@/components/ui/Icon';
@@ -84,8 +84,12 @@ export default function Preview() {
   const [grid, setGrid] = useState(false);
   const [platform, setPlatform] = useState<SafePlatform>('tiktok');
   const [viewOpen, setViewOpen] = useState(false);
-  const viewRef = useRef({ playRate: 1, loop: false });
-  viewRef.current = { playRate, loop };
+  const [compare, setCompare] = useState(false);
+  const [split, setSplit] = useState(0.5);
+  const viewRef = useRef({ playRate: 1, loop: false, compare: false, split: 0.5 });
+  viewRef.current = { playRate, loop, compare, split };
+  /** projeto "antes" (sem looks) por versão do projeto */
+  const beforeRef = useRef<{ src: unknown; out: ReturnType<typeof stripLooks> | null }>({ src: null, out: null });
   /* "Mostrar desempenho" (lembrado no aparelho) */
   const [perf, setPerfState] = useState(false);
   useEffect(() => { try { setPerfState(localStorage.getItem('ep:pv-perf') === '1'); } catch { /* sem storage */ } }, []);
@@ -112,6 +116,7 @@ export default function Preview() {
   /** tamanho-base do canvas interno e fator de qualidade dinâmico (cai se a reprodução não aguentar) */
   const baseRef = useRef({ w: 0, h: 0 });
   const govRef = useRef(new QualityGovernor());
+  const scratchRef = useRef<HTMLCanvasElement | null>(null);
   /** fator de qualidade a aplicar no próximo quadro desenhado (troca + desenho no mesmo quadro: sem piscar) */
   const wantQRef = useRef(1);
   const qualityRef = useRef(1);
@@ -157,7 +162,9 @@ export default function Preview() {
     if (!cv || !pool) return true;
     const st = useEditor.getState();
     // modo híbrido: <video> nativo como base + canvas transparente por cima (ou composição total)
-    const plan = nativeAllowed() ? nativePlan(st.project, t) : ({ native: false, reason: 'desligado' } as const);
+    const cmp = viewRef.current.compare;
+    const plan = cmp ? ({ native: false, reason: 'antes/depois' } as const)
+      : nativeAllowed() ? nativePlan(st.project, t) : ({ native: false, reason: 'desligado' } as const);
     const { w: fw, h: fh } = fitRef.current;
     if (!pool.present(plan, t, fw, fh)) return false;
     // troca de qualidade pendente: redimensiona e desenha no MESMO quadro
@@ -167,6 +174,21 @@ export default function Preview() {
     const t0 = performance.now();
     try {
       renderFrame(ctx, st.project, t, pool, plan.native ? { overlayOnly: { skipTrackId: plan.track.id } } : {});
+      if (cmp) {
+        // antes/depois: o lado esquerdo da divisória mostra o quadro sem looks/efeitos/cor
+        const b = beforeRef.current;
+        if (b.src !== st.project) { b.src = st.project; b.out = stripLooks(st.project); }
+        const W = cv.width, H = cv.height;
+        let sc = scratchRef.current;
+        if (!sc) sc = scratchRef.current = document.createElement('canvas');
+        if (sc.width !== W || sc.height !== H) { sc.width = W; sc.height = H; }
+        const sx = sc.getContext('2d');
+        if (sx && b.out) {
+          renderFrame(sx, b.out, t, pool);
+          const cut = Math.round(W * Math.min(1, Math.max(0, viewRef.current.split)));
+          if (cut > 0) ctx.drawImage(sc, 0, 0, cut, H, 0, 0, cut, H);
+        }
+      }
     } catch (e) {
       console.error('[preview] falha ao desenhar', e);
     }
@@ -356,6 +378,7 @@ export default function Preview() {
 
   /* ---------- eventos / tela cheia ---------- */
   useEffect(() => on('ep:open-export', (d) => { setPlaying(false); setExportInit(d ?? {}); setExportOpen(true); }), [setPlaying]);
+  useEffect(() => { requestStill(); }, [compare, split, requestStill]);
   /* fecha o popover "Visualização" ao tocar fora */
   useEffect(() => {
     if (!viewOpen) return;
@@ -514,6 +537,9 @@ export default function Preview() {
       <button role="menuitemcheckbox" aria-checked={loop} className={`tog${loop ? ' on' : ''}`} onClick={() => setLoop(!loop)}>
         <Icon name="loop" size={18} /> Repetir <small>{loopLabel}</small>
       </button>
+      <button role="menuitemcheckbox" aria-checked={compare} className={`tog${compare ? ' on' : ''}`} onClick={() => setCompare(!compare)}>
+        <Icon name="flip" size={18} /> Antes / depois <small>arraste a divisória</small>
+      </button>
       <button role="menuitemcheckbox" aria-checked={grid} className={`tog${grid ? ' on' : ''}`} onClick={() => setGrid(!grid)}>
         <Icon name="grid" size={18} /> Grade de terços
       </button>
@@ -553,6 +579,20 @@ export default function Preview() {
             </div>
           )}
           {pointMode && <div className="ep-pv-pointhint" role="status">Toque no ponto do vídeo para perguntar à IA · Esc cancela</div>}
+          {compare && !empty && (
+            <div className="ep-pv-split" style={{ left: `${split * 100}%` }}
+              onPointerDown={(e) => { e.stopPropagation(); e.currentTarget.setPointerCapture(e.pointerId); }}
+              onPointerMove={(e) => {
+                if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+                const r = frameRef.current?.getBoundingClientRect();
+                if (r) setSplit(Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)));
+              }}
+              role="slider" aria-label="Divisória antes/depois" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(split * 100)} tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'ArrowLeft') setSplit((v) => Math.max(0, v - 0.05)); if (e.key === 'ArrowRight') setSplit((v) => Math.min(1, v + 0.05)); }}>
+              <i /><b><Icon name="prev" size={13} /><Icon name="next" size={13} /></b>
+              <span className="l">Antes</span><span className="r">Depois</span>
+            </div>
+          )}
           {grid && !empty && <div className="ep-pv-grid" aria-hidden="true"><i /><i /><i /><i /></div>}
           {safe && !empty && (
             <div className={`ep-pv-safe${isVertical ? ' vertical' : ''}`} aria-hidden="true">
@@ -605,7 +645,7 @@ export default function Preview() {
           <div className="side">
             <button className="ep-pv-mbtn" onClick={toggleFull} aria-label="Tela cheia" title="Tela cheia"><Icon name="fullscreen" size={22} /></button>
             <div className="ep-pv-more">
-              <button className={`ep-pv-mbtn${moreOpen || pointMode || safe || grid || loop || zoom !== 'fit' || playRate !== 1 ? ' on' : ''}`} onClick={() => setMoreOpen(!moreOpen)} aria-label="Mais opções" aria-expanded={moreOpen}><Icon name="more" size={22} /></button>
+              <button className={`ep-pv-mbtn${moreOpen || pointMode || safe || grid || loop || compare || zoom !== 'fit' || playRate !== 1 ? ' on' : ''}`} onClick={() => setMoreOpen(!moreOpen)} aria-label="Mais opções" aria-expanded={moreOpen}><Icon name="more" size={22} /></button>
               {moreOpen && (
                 <div className="ep-pv-menu" role="menu">
                   <button role="menuitemcheckbox" aria-checked={pointMode} className={pointMode ? 'on' : ''} onClick={() => { setPointMode(!pointMode); setMoreOpen(false); }}>
@@ -646,7 +686,7 @@ export default function Preview() {
             <Icon name="point" size={17}/>
           </button>
           <div className="ep-pv-viewwrap">
-            <button className={`ep-circle sm ep-pv-c${viewOpen || safe || grid || loop || zoom !== 'fit' || playRate !== 1 ? ' on' : ''}`} onClick={() => setViewOpen(!viewOpen)} disabled={empty}
+            <button className={`ep-circle sm ep-pv-c${viewOpen || safe || grid || loop || compare || zoom !== 'fit' || playRate !== 1 ? ' on' : ''}`} onClick={() => setViewOpen(!viewOpen)} disabled={empty}
               title="Visualização: velocidade, repetir, zoom, grade, zonas seguras" aria-label="Visualização" aria-expanded={viewOpen}>
               <Icon name="layers" size={17}/>
             </button>

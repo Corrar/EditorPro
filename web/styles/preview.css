@@ -261,3 +261,12 @@
 @media (max-width: 899px) {
   .ep-pv-menu { max-height:min(70vh, 560px); overflow:auto; }
 }
+
+/* antes/depois */
+.ep-pv-split { position:absolute; top:0; bottom:0; width:44px; margin-left:-22px; z-index:4; cursor:ew-resize; touch-action:none; display:flex; justify-content:center; }
+.ep-pv-split i { width:2px; height:100%; background:#fff; box-shadow:0 0 0 1px rgba(0,0,0,.35); }
+.ep-pv-split b { position:absolute; top:50%; transform:translateY(-50%); width:34px; height:34px; border-radius:50%; background:#fff; color:#141414;
+  display:flex; align-items:center; justify-content:center; gap:0; box-shadow:0 4px 14px rgba(0,0,0,.35); }
+.ep-pv-split span { position:absolute; top:10px; font-size:11px; font-weight:800; color:#fff; background:rgba(0,0,0,.55); padding:3px 9px; border-radius:999px; white-space:nowrap; pointer-events:none; }
+.ep-pv-split .l { right:calc(50% + 8px); }
+.ep-pv-split .r { left:calc(50% + 8px); }
