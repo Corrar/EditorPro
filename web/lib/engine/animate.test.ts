@@ -110,3 +110,4 @@ describe('donos de scratch por clip.id (r2 #6: histórico não prende canvases)'
     expect(scratchOwnerCount()).toBeLessThanOrEqual(24);
   });
 });
+

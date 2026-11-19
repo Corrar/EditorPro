@@ -110,8 +110,11 @@ export function drawLayer(ctx: Ctx, layer: LayerItem, t: Seconds, el: MediaEleme
   let sw = 0, sh = 0;
   let natural = true; // fonte "natural" (vídeo/imagem) usa encaixe; sticker/forma usa tamanho relativo
   if (clip.type === 'shape') {
-    const sizePx = short * Math.max(0.01, tf.scale) * 1.2;
-    const c = shapeCanvas(clip, sizePx);
+    // resolução pela ALTURA DESENHADA (mesma conta da geometria abaixo) — antes short×escala×1,2 ignorava o
+    // aspecto: formas largas eram rasterizadas grandes demais e as altas, pequenas (r2 fx #5)
+    const asp = clipShapeAspect(clip);
+    const drawnH = (asp >= 1 ? (short * 0.95) / asp : short * 0.95) * Math.max(0.01, tf.scale);
+    const c = shapeCanvas(clip, drawnH * 1.1);
     src = c as CanvasImageSource; sw = c.width; sh = c.height; natural = false;
   } else if (clip.type === 'sticker' && clip.emoji && !el) {
     const c = emojiCanvas(clip.emoji, short * Math.max(0.01, tf.scale) * 1.4);

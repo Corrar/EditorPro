@@ -6,59 +6,65 @@
      - no ócio, depois da carga: primeiro o que o projeto usa, depois o catálogo;
      - ao passar o dedo/mouse num item do catálogo (prewarmTransition/prewarmEffect);
      - tocando, a próxima transição ~1,5 s antes (components/preview).
-   Desenhar 4×4 px basta para o driver compilar e linkar.
+   A compilação é feita em etapas pela API de lib/fx/warm (sem desenhar nada e sem travar).
    ===================================================================== */
 import type { Project, TransitionKind, VisualEffectKind } from '../types';
-import { isShaderTransition, runShaderTransition, shaderTransitionsAvailable } from './shaderTransitions';
-import { applySurfaceEffects } from './effects';
-import { makeCanvas, type Ctx } from './surface';
+import { isShaderTransition } from './shaderTransitions';
 import { EFFECT_CATALOG, TRANSITION_CATALOG } from '../fx/catalog';
-import { warmCustomShader } from '../fx/customRender';
+import { warmupCustom, warmupEffect, warmupTransition, type WarmState } from '../fx/warm';
 
 const warmedTr = new Set<string>();
 const warmedFx = new Set<string>();
 const warmedCustom = new Set<string>();
-let tiny: ReturnType<typeof makeCanvas> | null = null;
-let fxCv: ReturnType<typeof makeCanvas> | null = null;
 
 function disabled(): boolean {
   try { return typeof localStorage !== 'undefined' && localStorage.getItem('ep:pv-warm') === '0'; } catch { return false; }
 }
 
-function tinySrc() {
-  // dimensões NÃO potência de 2 (como os quadros reais): alguns drivers (SwiftShader/ANGLE) recompilam
-  // o shader por estado de textura — aquecer com 4×4 não evitava a trava no 1º uso real
-  if (!tiny) { tiny = makeCanvas(18, 30); const c = tiny.getContext('2d') as Ctx | null; if (c) { c.fillStyle = '#888'; c.fillRect(0, 0, 18, 30); } }
-  return tiny;
+type RIC = (cb: (d?: { timeRemaining(): number }) => void, o?: { timeout: number }) => number;
+function ric(cb: () => void, timeout: number) {
+  const r = typeof window !== 'undefined' ? (window as unknown as { requestIdleCallback?: RIC }).requestIdleCallback : undefined;
+  if (r) r(cb, { timeout }); else setTimeout(cb, 60);
+}
+
+/**
+ * Compilação em etapas (lib/fx/warm, KHR_parallel_shader_compile): cada chamada só DISPARA ou CONSULTA
+ * a compilação — nunca trava a thread. Enquanto der 'pending', tenta de novo na próxima fatia ociosa.
+ * Sem a extensão, a 1ª chamada dispara e a 2ª finaliza (bloqueando só o que faltar): uma por fatia.
+ */
+const inflight = new Set<string>();
+function pump(key: string, step: () => WarmState, done: () => void) {
+  if (inflight.has(key)) return;
+  inflight.add(key);
+  const run = () => {
+    let st: WarmState;
+    try { st = step(); } catch { st = 'failed'; }
+    if (st === 'pending') { ric(run, 1000); return; }
+    inflight.delete(key);
+    done();
+  };
+  run();
 }
 
 export function isTransitionWarm(kind: TransitionKind): boolean {
   return warmedTr.has(kind);
 }
 
-/** compila o shader da transição (se for de shader); true se já estava pronto */
+/** compila o shader da transição (se for de shader), sem travar; true se já estava pronto */
 export function prewarmTransition(kind: TransitionKind): boolean {
   if (warmedTr.has(kind)) return true;
   if (typeof document === 'undefined' || disabled()) return false;
-  warmedTr.add(kind);
-  if (!isShaderTransition(kind) || !shaderTransitionsAvailable()) return false;
-  try { runShaderTransition(kind, tinySrc() as TexImageSource, tinySrc() as TexImageSource, 0.5, 18, 30); } catch { /* fallback na hora */ }
-  return false;
+  if (!isShaderTransition(kind)) { warmedTr.add(kind); return true; }
+  pump('tr:' + kind, () => warmupTransition(kind), () => warmedTr.add(kind));
+  return warmedTr.has(kind);
 }
 
-/** compila o(s) programa(s) do efeito por pixel (gl/2d) desenhando 4×4 */
+/** compila o(s) programa(s) do efeito por pixel; 2D/geometria ficam prontos na hora */
 export function prewarmEffect(kind: VisualEffectKind): boolean {
   if (warmedFx.has(kind)) return true;
   if (typeof document === 'undefined' || disabled()) return false;
-  warmedFx.add(kind);
-  try {
-    if (!fxCv) fxCv = makeCanvas(18, 30);
-    const c = fxCv.getContext('2d') as Ctx | null;
-    if (!c) return false;
-    c.fillStyle = '#888'; c.fillRect(0, 0, 18, 30);
-    applySurfaceEffects(c, 18, 30, [{ kind, intensity: 0.5 } as never], 0.5, { local: 0.5, duration: 2 });
-  } catch { /* só aquecimento */ }
-  return false;
+  pump('fx:' + kind, () => warmupEffect(kind), () => warmedFx.add(kind));
+  return warmedFx.has(kind);
 }
 
 /** compila um shader 'custom' escrito pela IA (efeito ou transição); idempotente por código */
@@ -67,9 +73,8 @@ export function prewarmCustom(code: string | undefined, stage: 'effect' | 'trans
   const k = stage + '|' + code;
   if (warmedCustom.has(k)) return true;
   if (typeof document === 'undefined' || disabled()) return false;
-  warmedCustom.add(k);
-  try { warmCustomShader(code, stage); } catch { /* fallback na hora */ }
-  return false;
+  pump('c:' + k, () => warmupCustom(code, stage), () => warmedCustom.add(k));
+  return warmedCustom.has(k);
 }
 
 /** shaders 'custom' (código GLSL da IA) usados entre `from` e `until` (tempo de timeline) */
