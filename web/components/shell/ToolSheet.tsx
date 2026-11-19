@@ -4,6 +4,7 @@
 import { useEffect, useRef } from 'react';
 import Icon from '@/components/ui/Icon';
 import { useEditor } from '@/lib/store';
+import { sheetConfirm, sheetReset } from './sheetHistory';
 import type { Clip } from '@/lib/types';
 import {
   AdjustSection, AnimationSection, BackgroundSection, BlendSection, ChromaSection, CropSection, EditSection, EffectsSection,
@@ -20,18 +21,20 @@ const TITLE: Record<SheetKind, string> = {
 };
 
 export default function ToolSheet({ kind, clip, onClose }: { kind: SheetKind; clip: Clip; onClose: () => void }) {
-  const start = useRef(useEditor.getState().past.length);
-  useEffect(() => { start.current = useEditor.getState().past.length; }, [kind, clip.id]);
+  // referência do projeto na abertura (o índice de `past` não serve: ele satura em 100 passos)
+  const before = useRef(useEditor.getState().project);
+  useEffect(() => { before.current = useEditor.getState().project; }, [kind, clip.id]);
 
   const reset = () => {
     const st = useEditor.getState();
-    while (useEditor.getState().past.length > start.current) st.undo();
-    useEditor.setState({ future: [] });
+    if (st.live.running) st.cancelLive?.();
+    const patch = sheetReset(useEditor.getState(), before.current);
+    if (patch) useEditor.setState(patch);
   };
   const confirm = () => {
-    const { past } = useEditor.getState();
     // junta tudo o que foi feito no sheet em um único passo de desfazer
-    if (past.length > start.current + 1) useEditor.setState({ past: past.slice(0, start.current + 1) });
+    const patch = sheetConfirm(useEditor.getState(), before.current);
+    if (patch) useEditor.setState(patch);
     onClose();
   };
 
@@ -66,7 +69,7 @@ export default function ToolSheet({ kind, clip, onClose }: { kind: SheetKind; cl
         <span className="ep-h-sheet">{TITLE[kind]}</span>
         <button type="button" className="ep-circle sm ep-toolsheet-ok" onClick={confirm} aria-label="Confirmar" title="Confirmar"><Icon name="check" size={20} /></button>
       </div>
-      <div className="ep-toolsheet-body ep-insp">{body ?? <p className="ep-pnote">Não disponível para este clipe.</p>}</div>
+      <div key={clip.id} className="ep-toolsheet-body ep-insp">{body ?? <p className="ep-pnote">Não disponível para este clipe.</p>}</div>
     </div>
   );
 }

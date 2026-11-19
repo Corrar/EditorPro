@@ -405,6 +405,8 @@ export function detachAudioOps(p: Project, clipId: Id): EditOp[] {
     ...(v.fadeIn ? { fadeIn: v.fadeIn } : {}),
     ...(v.fadeOut ? { fadeOut: v.fadeOut } : {}),
     ...(v.reverse ? { reverse: true } : {}),
+    ...(v.speedCurve?.length ? { speedCurve: v.speedCurve } : {}),
+    ...(v.speedPreset ? { speedPreset: v.speedPreset } : {}),
     label: v.label,
   };
   const pl = placeClip(p, 'audio', v.duration, v.start);
