@@ -14,7 +14,7 @@ import { uid } from './util';
 type ClipPatch = Partial<Omit<Clip, 'id' | 'type'>> & Record<string, unknown>;
 
 export type EditOp = (
-  | { op: 'set_project'; patch: Partial<Pick<Project, 'name' | 'fps' | 'background' | 'brief' | 'style' | 'referenceAssetId' | 'canvas'>> }
+  | { op: 'set_project'; patch: Partial<Pick<Project, 'name' | 'fps' | 'background' | 'brief' | 'style' | 'referenceAssetId' | 'canvas' | 'coverTime'>> }
   | { op: 'set_aspect'; aspect: AspectRatio }
   | { op: 'add_track'; track: Omit<Track, 'clips'> & { clips?: Clip[] }; index?: number }
   | { op: 'update_track'; trackId: Id; patch: Partial<Omit<Track, 'id' | 'clips' | 'kind'>> }

@@ -67,6 +67,9 @@ export default function Preview() {
   const [cssFull, setCssFull] = useState(false);
   /* "apontar para qualquer coisa": marca um ponto do quadro como contexto do chat */
   const [pointMode, setPointMode] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const canUndo = useEditor((s) => s.past.length > 0);
+  const canRedo = useEditor((s) => s.future.length > 0);
   const chatPoint = useEditor((s) => s.chatContext?.point);
   const [markerAt, setMarkerAt] = useState(0);
   const pressRef = useRef<{ x: number; y: number; timer: number; fired: boolean } | null>(null);
@@ -413,6 +416,34 @@ export default function Preview() {
       </div>
 
       {/* controles: pílula flutuante (play em círculo laranja, demais em círculos) */}
+      {/* celular (≤899px): faixa simples sob o vídeo — tela cheia/⋯ · play · desfazer/refazer */}
+      {!empty && (
+        <div className="ep-pv-mbar" role="toolbar" aria-label="Reprodução">
+          <div className="side">
+            <button className="ep-pv-mbtn" onClick={toggleFull} aria-label="Tela cheia" title="Tela cheia"><Icon name="fullscreen" size={22} /></button>
+            <div className="ep-pv-more">
+              <button className={`ep-pv-mbtn${moreOpen || pointMode || safe ? ' on' : ''}`} onClick={() => setMoreOpen(!moreOpen)} aria-label="Mais opções" aria-expanded={moreOpen}><Icon name="more" size={22} /></button>
+              {moreOpen && (
+                <div className="ep-pv-menu" role="menu">
+                  <button role="menuitemcheckbox" aria-checked={pointMode} className={pointMode ? 'on' : ''} onClick={() => { setPointMode(!pointMode); setMoreOpen(false); }}>
+                    <Icon name="point" size={18} /> Apontar no vídeo <small>ou toque longo</small>
+                  </button>
+                  <button role="menuitemcheckbox" aria-checked={safe} className={safe ? 'on' : ''} onClick={() => { setSafe(!safe); setMoreOpen(false); }}>
+                    <Icon name="safearea" size={18} /> Área segura
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+          <button className="ep-pv-mplay" onClick={togglePlay} aria-label={playing ? 'Pausar' : 'Reproduzir'}>
+            <Icon name={playing ? 'pause' : 'play'} size={26} />
+          </button>
+          <div className="side right">
+            <button className="ep-pv-mbtn" onClick={() => useEditor.getState().undo()} disabled={!canUndo} aria-label="Desfazer" title="Desfazer"><Icon name="undo" size={22} /></button>
+            <button className="ep-pv-mbtn" onClick={() => useEditor.getState().redo()} disabled={!canRedo} aria-label="Refazer" title="Refazer"><Icon name="redo" size={22} /></button>
+          </div>
+        </div>
+      )}
       {!empty && (
       <div className="ep-pv-controls" role="toolbar" aria-label="Reprodução">
         <button className="ep-circle sm ep-pv-c ep-pv-rew" onClick={toStart} title="Voltar ao início" aria-label="Voltar ao início" disabled={empty}><Icon name="back" size={16}/></button>
