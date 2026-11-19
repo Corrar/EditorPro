@@ -226,16 +226,21 @@ function rhythmChunks(segments: CaptionSegment[], o: RhythmOpts, cuts: Seconds[]
   const sorted = [...segments].sort((a, b) => a.start - b.start);
   // lista ÚNICA de palavras (o limite entre frases do Whisper às vezes cai no meio da fala: "até a | massa")
   const words: (ChunkWord & { seg: number })[] = [];
+  // legenda encurtada/movida pelo usuário (palavras reescaladas p/ dentro dela): o bloco não sai de [início, fim]
+  const trimmed = new Set<number>();
   sorted.forEach((seg, si) => {
     const emph = new Set((seg.emphasis ?? []).map(normWord).filter(Boolean));
-    for (const w of fitWordsToSegment(segmentWords(seg), seg)) words.push({ ...w, emphasis: emph.has(normWord(w.text)), seg: si });
+    const raw = segmentWords(seg);
+    const fit = fitWordsToSegment(raw, seg);
+    if (fit !== raw) trimmed.add(si);
+    for (const w of fit) words.push({ ...w, emphasis: emph.has(normWord(w.text)), seg: si });
   });
   const out: CaptionChunk[] = [];
-  const segOf: { first: CaptionSegment; last: CaptionSegment; lastIdx: number }[] = [];
+  const segOf: { first: CaptionSegment; last: CaptionSegment; lastIdx: number; firstIdx: number }[] = [];
   for (const g of rhythmGroups(words, o, cuts) as (ChunkWord & { seg: number })[][]) {
     const first = sorted[g[0].seg], lastW = g[g.length - 1];
     out.push({ segmentId: first.id, start: g[0].start, end: lastW.end, words: g.map(({ seg: _s, ...w }) => w) });
-    segOf.push({ first, last: sorted[lastW.seg], lastIdx: lastW.seg });
+    segOf.push({ first, last: sorted[lastW.seg], lastIdx: lastW.seg, firstIdx: g[0].seg });
   }
   for (let k = 0; k < out.length; k++) {
     const c = out[k], nx = out[k + 1], pv = out[k - 1], sg = segOf[k];
@@ -252,6 +257,8 @@ function rhythmChunks(segments: CaptionSegment[], o: RhythmOpts, cuts: Seconds[]
       const ns = Math.max(floor, c.end - o.minOn);
       if (ns < c.start) { c.start = ns; if (pv) pv.end = Math.min(pv.end, ns); }
     }
+    if (trimmed.has(sg.firstIdx)) c.start = Math.max(c.start, sg.first.start);
+    if (trimmed.has(sg.lastIdx)) c.end = Math.min(c.end, sg.last.end);
     if (c.end <= c.start) c.end = c.start + 0.04;
   }
   return out;

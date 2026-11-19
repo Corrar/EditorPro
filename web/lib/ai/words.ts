@@ -11,9 +11,10 @@ export interface WhisperChunk { text: string; timestamp: [number, number | null]
 
 /** palavras do Whisper -> CaptionSegment[] (frases de até ~maxWords / ~maxDur s, quebrando em pausas e pontuação) */
 export function wordsToSegments(chunks: WhisperChunk[], opts: { duration: number; maxWords?: number; maxDur?: number; pauseGap?: number } = { duration: 0 }): CaptionSegment[] {
-  const maxWords = opts.maxWords ?? 7;
-  const maxDur = opts.maxDur ?? 3.6;
-  const gap = opts.pauseGap ?? 0.6;
+  // (plano §2.6) frases (SRT e IA); o bloco da tela é montado no ritmo depois
+  const maxWords = opts.maxWords ?? 12;
+  const maxDur = opts.maxDur ?? 6;
+  const gap = opts.pauseGap ?? 0.45;
   const words: CaptionWord[] = [];
   for (const c of chunks) {
     const text = (c.text ?? '').trim();
@@ -30,21 +31,46 @@ export function wordsToSegments(chunks: WhisperChunk[], opts: { duration: number
   }
   words.sort((a, b) => a.start - b.start);
 
-  const segs: { start: number; end: number; text: string; words: CaptionWord[] }[] = [];
+  // 1) frases: quebra obrigatória em pausa longa e fim de frase
+  const phrases: CaptionWord[][] = [];
   let cur: CaptionWord[] = [];
-  const flush = () => {
-    if (!cur.length) return;
-    segs.push({ start: cur[0].start, end: cur[cur.length - 1].end, text: cur.map((w) => w.text).join(' '), words: cur });
-    cur = [];
-  };
   for (const w of words) {
     const last = cur[cur.length - 1];
-    if (last && (w.start - last.end > gap || cur.length >= maxWords || w.end - cur[0].start > maxDur)) flush();
+    if (last && w.start - last.end > gap) { phrases.push(cur); cur = []; }
     cur.push(w);
-    if (/[.!?…]$/.test(w.text)) flush();
+    if (/[.!?…]$/.test(w.text)) { phrases.push(cur); cur = []; }
   }
-  flush();
+  if (cur.length) phrases.push(cur);
+  // 2) frase longa: divide em partes equilibradas no melhor ponto (pausa, vírgula), nunca deixando 1–2 palavras sozinhas
+  const segs = phrases.flatMap((ph) => splitBalanced(ph, maxWords, maxDur)).map((ws) => ({ start: ws[0].start, end: ws[ws.length - 1].end, text: ws.map((w) => w.text).join(' '), words: ws }));
   return sanitizeTranscript({ segments: segs }, { duration: opts.duration, maxSegment: maxDur + 2, maxWordsPerSegment: maxWords + 3 });
+}
+
+const GLUE = new Set('o a os as um uma uns umas de do da dos das no na nos nas num numa em ao aos pelo pela por pra pro para com sem e ou que se me te meu minha seu sua mas'.split(' '));
+const plain = (t: string) => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\p{L}\p{N}]+/gu, '');
+
+/**
+ * Divide uma frase longa em partes equilibradas. Cabe em maxWords+2 palavras e maxDur+1 s → fica inteira
+ * (melhor que deixar "receitas." sozinha); senão quebra no ponto de maior pausa/vírgula perto do meio,
+ * com pelo menos 3 palavras de cada lado, e repete em cada metade.
+ */
+export function splitBalanced(ws: CaptionWord[], maxWords: number, maxDur: number): CaptionWord[][] {
+  const n = ws.length;
+  const dur = n ? ws[n - 1].end - ws[0].start : 0;
+  if (n <= maxWords + 2 && dur <= maxDur + 1) return [ws];
+  if (n < 6) return [ws];
+  let best = -1, bestScore = -Infinity;
+  for (let k = 3; k <= n - 3; k++) {
+    const a = ws[k - 1], b = ws[k];
+    let sc = Math.min(1, Math.max(0, b.start - a.end)) * 12; // pausa
+    if (/[,;:—–]$/.test(a.text)) sc += 4;
+    if (GLUE.has(plain(a.text))) sc -= 5;
+    if (/\d/.test(a.text) && /^(por|reais|mil|%|anos|dias|minutos|horas|vezes)$/i.test(plain(b.text))) sc -= 6;
+    sc -= 6 * Math.abs(k / n - 0.5); // equilíbrio
+    if (sc > bestScore) { bestScore = sc; best = k; }
+  }
+  if (best < 0) return [ws];
+  return [...splitBalanced(ws.slice(0, best), maxWords, maxDur), ...splitBalanced(ws.slice(best), maxWords, maxDur)];
 }
 
 /** pedaços de ~`target` s, cortando no ponto mais silencioso dos últimos `search` s de cada janela */

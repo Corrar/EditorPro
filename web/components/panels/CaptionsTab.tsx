@@ -43,7 +43,8 @@ export default function CaptionsTab() {
   const addSeg = () => {
     const start = Math.round(playhead * 10) / 10;
     const seg: CaptionSegment = { id: uid('cap'), start, end: start + 2, text: 'Nova legenda' };
-    dispatch({ op: 'set_captions', segments: [...captions.segments, seg] });
+    // legenda escrita à mão: num projeto sem legenda ela vira a origem ('manual'); numa transcrição, a origem não muda
+    dispatch({ op: 'set_captions', segments: [...captions.segments, seg], ...(captions.segments.length ? {} : { source: 'manual' as const }) });
     setPlayhead(start + 0.5); // depois da entrada: a legenda já aparece no preview
   };
 
