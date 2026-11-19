@@ -16,12 +16,10 @@ import { liveLabel, liveSummary } from '@/lib/ai/live';
 import { FastButton } from './FastButton';
 import AttachMenu, { filesFromTransfer } from './AttachMenu';
 import { ModelActions, ModelAttachment, ModelChip } from './ModelBits';
+import { ChangesButton } from './RunExtras';
+import { suggestionsFor } from '@/lib/ai/suggest';
 import { emit } from '@/lib/events';
 
-const QUICK = [
-  'Cortar silêncios', 'Legendas estilo TikTok', 'Deixar mais dinâmico', 'Gancho com zoom e flash',
-  'Cores cinematográficas', 'Cortar vícios de linguagem', 'Sincronizar cortes na batida', 'Melhores momentos em 30 s',
-];
 
 function MiniSteps({ run }: { run: RunState }) {
   const total = run.steps.length;
@@ -102,12 +100,18 @@ export default function AiPopup({ onMinimize, onExpand, autoFocus = false, initi
   }, [text]);
 
   const live = useMemo(() => liveSummary(messages, runs), [messages, runs]);
-  const lastAssistant = live.msgId ? messages.find((m) => m.id === live.msgId) : undefined;
+  const assets = useEditor((s) => s.assets);
+  const suggestions = useMemo(() => suggestionsFor(project, assets, 6), [project, assets]);
+  // última resposta da IA (com ou sem edição: ajuda, "o que mudou?", erros)
+  const lastAssistant = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) if (messages[i].role === 'assistant') return messages[i];
+    return undefined;
+  }, [messages]);
   const lastUser = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) if (messages[i].role === 'user') return messages[i];
     return undefined;
   }, [messages]);
-  const run = live.msgId ? runs[live.msgId] : undefined;
+  const run = lastAssistant ? runs[lastAssistant.id] : undefined;
   const canUndo = !!run?.after && !busy && project === run.after;
 
   useEffect(() => {
@@ -175,6 +179,7 @@ export default function AiPopup({ onMinimize, onExpand, autoFocus = false, initi
                 {run ? <MiniSteps run={run} /> : null}
                 {lastAssistant.text ? <p className="ep-aip-text">{lastAssistant.text}</p> : null}
                 {run?.model && run.done && !run.error ? <ModelActions assetId={run.model.assetId} /> : null}
+                <ChangesButton run={run} />
                 {canUndo ? (
                   <button className="ep-ch-undo" onClick={() => undoRun(lastAssistant.id)}>
                     <Icon name="undo" size={13} /> Desfazer
@@ -187,7 +192,7 @@ export default function AiPopup({ onMinimize, onExpand, autoFocus = false, initi
       </div>
 
       <div className="ep-aip-chips" role="list">
-        {QUICK.map((s) => (
+        {suggestions.map((s) => (
           <button key={s} role="listitem" className="ep-pill2 ep-ch-chip" disabled={busy} onClick={() => submit(s)}>{s}</button>
         ))}
       </div>

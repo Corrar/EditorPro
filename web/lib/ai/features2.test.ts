@@ -97,3 +97,38 @@ describe('catálogo derivado dos donos', () => {
     expect(JSON.stringify(z.toJSONSchema(EditOpSchema))).toContain('cinematic-zoom');
   });
 });
+
+describe('usabilidade: sugestões e "o que mudou?"', () => {
+  it('sugestões mudam com o estado do projeto', async () => {
+    const { suggestionsFor, isExplainRequest, isHelpRequest } = await import('./suggest');
+    expect(suggestionsFor(createProject(), {})).toEqual(['Como funciona?']);
+    const p = base();
+    const s1 = suggestionsFor(p, { a1: src });
+    expect(s1).toContain('Gerar legendas');
+    expect(s1).not.toContain('Cortar vícios de linguagem');
+    const withCaps = applyOps(p, [{ op: 'set_captions', segments: [{ id: 's1', start: 0, end: 2, text: 'oi' }], language: 'pt-BR' } as EditOp]).project;
+    const s2 = suggestionsFor(withCaps, { a1: src });
+    expect(s2).toContain('Cortar vícios de linguagem');
+    expect(s2).not.toContain('Gerar legendas');
+    expect(isExplainRequest('o que você mudou?')).toBe(true);
+    expect(isExplainRequest('Explica o que mudou')).toBe(true);
+    expect(isExplainRequest('muda a cor')).toBe(false);
+    expect(isHelpRequest('Como funciona?')).toBe(true);
+  });
+  it('explainChanges descreve cortes, textos, cor e legenda', async () => {
+    const { explainChanges } = await import('./suggest');
+    const p = base();
+    const r = sanitizeOps([
+      { op: 'ripple_delete', start: 2, end: 4 },
+      { op: 'update_clip', clipId: 'c1', patch: { colorPreset: 'warm' } },
+      { op: 'add_clip', clip: { type: 'text', text: 'Oferta!', start: 0, duration: 2 } },
+      { op: 'set_caption_style', style: { fontSize: 99 } },
+    ], p, { a1: src });
+    const e = explainChanges(p, r.project);
+    expect(e).toMatch(/Duração: 20,0 s → 18,0 s \(2,0 s a menos\)/);
+    expect(e).toMatch(/\+1 texto: “Oferta!”/);
+    expect(e).toMatch(/Cor ajustada em/);
+    expect(e).toMatch(/Estilo da legenda/);
+    expect(explainChanges(p, p)).toBe('Nada mudou no projeto nessa edição.');
+  });
+});
