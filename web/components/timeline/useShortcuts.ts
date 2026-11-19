@@ -17,6 +17,17 @@ export interface ShortcutActions {
   keyframe: () => void;
 }
 
+const NAV_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown']);
+
+/** controles que usam as teclas de navegação (sliders, selects, listas): as setas pertencem a eles */
+export function isNavControl(el: EventTarget | null): boolean {
+  if (!(el instanceof HTMLElement)) return false;
+  if (el.tagName === 'SELECT') return true;
+  if (el.tagName === 'INPUT' && (el as HTMLInputElement).type === 'range') return true;
+  const role = el.getAttribute('role');
+  return role === 'slider' || role === 'spinbutton' || role === 'listbox' || role === 'option' || role === 'tab' || role === 'radio' || role === 'menuitem' || role === 'menuitemcheckbox';
+}
+
 export function isTypingTarget(el: EventTarget | null): boolean {
   if (!(el instanceof HTMLElement)) return false;
   if (el.isContentEditable) return true;
@@ -36,6 +47,7 @@ export function useShortcuts(actions: ShortcutActions) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || isTypingTarget(e.target)) return;
+      if (NAV_KEYS.has(e.key) && isNavControl(e.target)) return; // setas num slider/select mudam o valor dele
       const st = useEditor.getState();
       const mod = e.ctrlKey || e.metaKey;
       const k = e.key;
