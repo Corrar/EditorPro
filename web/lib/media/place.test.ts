@@ -61,3 +61,20 @@ describe('freezeFrameOps', () => {
     expect(freezeFrameOps(p, p.tracks[0].clips[0].id, 0, mk('f', 'image', 0))).toEqual([]);
   });
 });
+
+describe('musicPlacementOps', () => {
+  it('timeline vazia → em 0; senão no cursor; várias em sequência na mesma trilha', async () => {
+    const { musicPlacementOps } = await import('./place');
+    const { createProject, makeVideoClip } = await import('../defaults');
+    const mus = (id: string, d: number) => ({ id, kind: 'audio', role: 'music', name: id, mime: 'audio/mpeg', size: 1, duration: d, url: 'blob:' }) as never;
+    const empty = createProject();
+    const a = musicPlacementOps(empty, [mus('m1', 10), mus('m2', 5)], 3);
+    expect(a.map((o) => (o as { clip: { start: number } }).clip.start)).toEqual([0, 10]);
+    expect(new Set(a.map((o) => (o as { trackId: string }).trackId)).size).toBe(1);
+    const p = createProject();
+    const vid = { id: 'v', kind: 'video', role: 'source', name: 'v', mime: 'video/mp4', size: 1, duration: 8, url: 'blob:' } as never;
+    p.tracks[0].clips.push(makeVideoClip(vid, 0) as never);
+    const b = musicPlacementOps(p, [mus('m1', 10)], 2.5);
+    expect((b[0] as { clip: { start: number } }).clip.start).toBe(2.5);
+  });
+});

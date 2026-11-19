@@ -84,3 +84,17 @@ export function freezeFrameOps(p: Project, clipId: string, at: number, frame: Me
     { op: 'add_clip', trackId: track.id, clip: makeImageClip(frame, at, dur, { label: 'quadro congelado' }), explain: 'Congelando quadro' },
   ];
 }
+
+/** música importada: entra na trilha de áudio no cursor (ou em 0 com a timeline vazia), uma após a outra */
+export function musicPlacementOps(p: Project, assets: MediaAsset[], playhead: number): EditOp[] {
+  const audio = assets.filter((a) => a.kind === 'audio');
+  if (!audio.length) return [];
+  const empty = p.tracks.every((t) => t.clips.length === 0);
+  const trackId = targetTrackId(p, 'audio');
+  let at = empty ? 0 : Math.max(0, Math.round(playhead * 100) / 100);
+  return audio.map((a) => {
+    const op = placeAssetOp(p, a, { at, trackId });
+    at += a.duration || 0;
+    return op;
+  });
+}

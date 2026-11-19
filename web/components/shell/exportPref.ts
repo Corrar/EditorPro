@@ -14,11 +14,11 @@ function read(): ExportPref {
     const v = JSON.parse(localStorage.getItem(EXPORT_PREF_KEY) || 'null');
     if (v && ['hd', 'fhd', '4k'].includes(v.quality) && [24, 30, 60].includes(v.fps)) return v;
   } catch { /* sem armazenamento */ }
-  return { quality: 'fhd', fps: 30 };
+  return { quality: 'hd', fps: 30 }; // celular: 720p é o recomendado (o export avisa 1080p/4K)
 }
 
 export const useExportPref = create<ExportPref & { set: (p: Partial<ExportPref>) => void }>((set, get) => ({
-  ...(typeof window === 'undefined' ? { quality: 'fhd' as const, fps: 30 as const } : read()),
+  ...(typeof window === 'undefined' ? { quality: 'hd' as const, fps: 30 as const } : read()),
   set: (p) => {
     set(p);
     const { quality, fps } = get();

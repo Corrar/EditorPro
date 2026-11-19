@@ -5,7 +5,7 @@ import { SfxList } from '@/components/library';
 import { useEffect, useRef, useState } from 'react';
 import { emit } from '@/lib/events';
 import { ingestFiles } from '@/lib/media/ingest';
-import { placeAssetOp } from '@/lib/media/place';
+import { musicPlacementOps, placeAssetOp } from '@/lib/media/place';
 import { startRecording, type Recorder } from '@/lib/media/tools';
 import { useEditor } from '@/lib/store';
 import { useShallow } from 'zustand/react/shallow';
@@ -108,7 +108,13 @@ export default function AudioTab() {
   const input = useRef<HTMLInputElement>(null);
   const importMusic = async (files: File[]) => {
     const done = await ingestFiles(files, 'music');
-    if (done.length) emit('ep:toast', { text: `${done.length} áudio(s) importado(s)`, kind: 'ok' });
+    if (!done.length) return;
+    // importou → já entra na trilha de áudio no cursor (ou em 0 com a timeline vazia); 1 desfazer
+    const st = useEditor.getState();
+    const ops = musicPlacementOps(st.project, done, st.playhead);
+    if (!ops.length) return;
+    st.dispatch(ops);
+    emit('ep:toast', { text: done.length === 1 ? 'Música adicionada' : `${done.length} músicas adicionadas`, kind: 'ok', action: { label: 'Desfazer', run: () => useEditor.getState().undo() } });
   };
   const view = useAudioView((s) => s.view);
   if (view === 'sfx') return (
