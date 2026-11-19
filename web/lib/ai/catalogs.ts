@@ -17,6 +17,7 @@ import { AUDIO_EFFECT_LABELS } from '../engine/audioFx';
 import { SPEED_PRESET_LABELS } from '../engine/speed';
 import { SHAPE_LABELS } from '../engine/shapes';
 import { MASK_LABELS } from '../engine/masks';
+import { BUILTIN_LOOKS } from '../color/luts';
 // catálogo da sessão FX (fonte da verdade p/ efeitos, transições, blend, máscaras e animações de clipe)
 import {
   ALL_BLEND_MODES, ALL_CLIP_ANIMATIONS, ALL_EFFECT_KINDS, ALL_MASK_SHAPES, ALL_TRANSITION_KINDS,
@@ -63,11 +64,15 @@ const TITLES: Record<keyof typeof CATALOG, string> = {
   blendModes: 'Modos de mesclagem (blendMode)',
 };
 
+/** looks de cor estilo DaVinci (sessão "cor"): usados em colorGrade.lut {id, intensity} */
+export const COLOR_LOOKS = (BUILTIN_LOOKS ?? []).map((l) => ({ id: l.id, name: l.name }));
+
 /** texto do catálogo vivo para o prompt (id = rótulo PT-BR, para mapear o que o usuário fala) */
 export function engineCatalogForAI(): string {
-  return (Object.keys(CATALOG) as (keyof typeof CATALOG)[])
-    .map((k) => `${TITLES[k]}: ${CATALOG[k].map((id) => (LABELS[k]?.[id] ? `${id} (${LABELS[k][id]})` : id)).join(', ')}`)
-    .join('\n');
+  const lines = (Object.keys(CATALOG) as (keyof typeof CATALOG)[])
+    .map((k) => `${TITLES[k]}: ${CATALOG[k].map((id) => (LABELS[k]?.[id] ? `${id} (${LABELS[k][id]})` : id)).join(', ')}`);
+  if (COLOR_LOOKS.length) lines.push(`Looks de cor (colorGrade.lut.id, intensity 0–1): ${COLOR_LOOKS.map((l) => `${l.id} (${l.name})`).join(', ')}`);
+  return lines.join('\n');
 }
 
 export type { BlendMode };
