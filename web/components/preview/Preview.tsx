@@ -15,7 +15,7 @@ import { LiveMediaPool } from './livePool';
 import { PlaybackClock, QualityGovernor, frameInterval, stillTime } from './syncPolicy';
 import { nativePlan } from './hybrid';
 import { shaderKindsIn, warmShader, isWarm } from './warm';
-import { prewarmIdle } from '@/lib/engine/prewarm';
+import { prewarmIdle, prewarmCustom, customShadersIn } from '@/lib/engine/prewarm';
 import { onLutsChanged, onCompareChanged } from '@/lib/color';
 import { hitTest, dragPatch, type Box } from './manipulate';
 import type { Clip, Project, TextClip } from '@/lib/types';
@@ -395,6 +395,8 @@ export default function Preview() {
       lastDraw = now;
       // a próxima transição em shader (até 1,5 s): compila agora, não no meio dela
       for (const k of shaderKindsIn(st.project, t, t + 1.5)) if (!isWarm(k)) { warmShader(k); break; }
+      // shaders 'custom' (GLSL da IA) dos próximos 1,5 s também
+      for (const x of customShadersIn(st.project, t, t + 1.5)) if (!prewarmCustom(x.code, x.stage)) break;
       const s = pool.sync(st.project, st.assets, t, true, st.project.fps, viewRef.current.playRate);
       lead = s.lead;
       // falta o quadro do vídeo (corte/seek ainda decodificando): mantém o último quadro bom

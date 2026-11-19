@@ -13,9 +13,11 @@ import { isShaderTransition, runShaderTransition, shaderTransitionsAvailable } f
 import { applySurfaceEffects } from './effects';
 import { makeCanvas, type Ctx } from './surface';
 import { EFFECT_CATALOG, TRANSITION_CATALOG } from '../fx/catalog';
+import { warmCustomShader } from '../fx/customRender';
 
 const warmedTr = new Set<string>();
 const warmedFx = new Set<string>();
+const warmedCustom = new Set<string>();
 let tiny: ReturnType<typeof makeCanvas> | null = null;
 let fxCv: ReturnType<typeof makeCanvas> | null = null;
 
@@ -59,6 +61,29 @@ export function prewarmEffect(kind: VisualEffectKind): boolean {
   return false;
 }
 
+/** compila um shader 'custom' escrito pela IA (efeito ou transição); idempotente por código */
+export function prewarmCustom(code: string | undefined, stage: 'effect' | 'transition'): boolean {
+  if (!code) return true;
+  const k = stage + '|' + code;
+  if (warmedCustom.has(k)) return true;
+  if (typeof document === 'undefined' || disabled()) return false;
+  warmedCustom.add(k);
+  try { warmCustomShader(code, stage); } catch { /* fallback na hora */ }
+  return false;
+}
+
+/** shaders 'custom' (código GLSL da IA) usados entre `from` e `until` (tempo de timeline) */
+export function customShadersIn(p: Project, from = 0, until = Infinity): { code: string; stage: 'effect' | 'transition' }[] {
+  const out: { code: string; stage: 'effect' | 'transition' }[] = [];
+  for (const track of p.tracks) for (const c of track.clips) {
+    if (c.start > until || c.start + c.duration < from) continue;
+    const ti = (c as { transitionIn?: { kind: string; code?: string } }).transitionIn;
+    if (ti?.kind === 'custom' && ti.code) out.push({ code: ti.code, stage: 'transition' });
+    for (const e of (c as { effects?: { kind: string; code?: string }[] }).effects ?? []) if (e.kind === 'custom' && e.code) out.push({ code: e.code, stage: 'effect' });
+  }
+  return out;
+}
+
 /** transições/efeitos que o projeto usa (na ordem do tempo), p/ aquecer primeiro */
 export function projectWarmList(p: Project): { transitions: TransitionKind[]; effects: VisualEffectKind[] } {
   const tr: { t: number; k: TransitionKind }[] = [];
@@ -80,6 +105,7 @@ export function prewarmIdle(p: Project | null, opts: { catalog?: boolean; isBusy
     const w = projectWarmList(p);
     w.transitions.forEach((k) => add(() => prewarmTransition(k)));
     w.effects.forEach((k) => add(() => prewarmEffect(k)));
+    customShadersIn(p).forEach((x) => add(() => prewarmCustom(x.code, x.stage)));
   }
   if (opts.catalog) {
     for (const e of TRANSITION_CATALOG) if (e.render === 'shader' && !warmedTr.has(e.kind)) add(() => prewarmTransition(e.kind));
