@@ -19,6 +19,15 @@ export async function exportAudio(p: Project, assets: Record<string, MediaAsset>
 export async function canExportM4A(): Promise<boolean> {
   return (await import('./extras')).canExportM4A();
 }
+/**
+ * Proxy de preview (540p/720p, H.264, GOP curto) p/ o preview fluido no celular.
+ * null se o navegador/arquivo não suportar — aí o preview usa a original.
+ * O shell guarda o resultado em MediaAsset.proxyUrl (a original segue no export).
+ */
+export async function makePreviewProxy(file: Blob, opts?: import('./proxy').ProxyOptions): Promise<Blob | null> {
+  return (await import('./proxy')).makePreviewProxy(file, opts);
+}
+export type { ProxyOptions } from './proxy';
 /** quadro atual como imagem PNG */
 export async function exportFrame(p: Project, assets: Record<string, MediaAsset>, t: number, quality?: import('./options').ExportQuality): Promise<Blob> {
   return (await import('./extras')).exportFrame(p, assets, t, quality);

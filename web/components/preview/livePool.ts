@@ -31,6 +31,11 @@ const MAX_IDLE_PER_ASSET = 3;
 
 type AV = HTMLVideoElement | HTMLAudioElement;
 
+/** URL usada no PREVIEW: o proxy leve (MediaAsset.proxyUrl) quando existe; o export usa a original */
+export function mediaUrl(asset: MediaAsset): string {
+  return (asset as MediaAsset & { proxyUrl?: string }).proxyUrl || asset.url || '';
+}
+
 export class LiveMediaPool implements MediaSources {
   private images = new Map<string, HTMLImageElement>();
   private byClip = new Map<string, AV>();
@@ -74,8 +79,8 @@ export class LiveMediaPool implements MediaSources {
     }
     (el as HTMLMediaElement & { preservesPitch?: boolean }).preservesPitch = true;
     el.dataset.asset = asset.id;
-    el.dataset.url = asset.url ?? '';
-    el.src = asset.url ?? '';
+    el.dataset.url = mediaUrl(asset);
+    el.src = mediaUrl(asset);
     const ping = () => this.onFrame();
     el.addEventListener('seeked', ping);
     el.addEventListener('loadeddata', ping);
@@ -86,7 +91,7 @@ export class LiveMediaPool implements MediaSources {
   private acquire(clip: Clip, asset: MediaAsset): AV {
     const kind: 'video' | 'audio' = clip.type === 'video' && asset.kind !== 'audio' ? 'video' : 'audio';
     let el = this.byClip.get(clip.id);
-    if (el && (el.dataset.url !== (asset.url ?? '') || el.tagName.toLowerCase() !== kind)) {
+    if (el && (el.dataset.url !== mediaUrl(asset) || el.tagName.toLowerCase() !== kind)) {
       this.destroy(el);
       this.byClip.delete(clip.id);
       el = undefined;
@@ -98,7 +103,7 @@ export class LiveMediaPool implements MediaSources {
       let best = -1;
       let bestD = Infinity;
       list.forEach((e, i) => {
-        if (e.tagName.toLowerCase() !== kind || e.dataset.url !== (asset.url ?? '')) return;
+        if (e.tagName.toLowerCase() !== kind || e.dataset.url !== mediaUrl(asset)) return;
         const d = Math.abs(e.currentTime - want);
         if (d < bestD) { bestD = d; best = i; }
       });
