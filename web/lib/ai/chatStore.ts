@@ -31,6 +31,8 @@ export interface RunState {
   after?: Project;
   error?: string;
   done: boolean;
+  /** tamanho do histórico (past) no início da execução: desfazer volta TODOS os lotes dela */
+  pastLen?: number;
   /** projeto ao terminar (p/ "o que mudou?", mesmo depois de outras edições) */
   final?: Project;
   /** resposta da análise de um vídeo modelo (mostra "Aplicar este estilo" + chips) */
@@ -118,7 +120,7 @@ export const useAIChat = create<AIChatState>((set, get) => {
     }
     set({ busy: true });
     const msgId = editor().pushMessage({ role: 'assistant', text: '', status: 'pending' });
-    patchRun(msgId, { phase: intro, log: [], steps: [], done: false, before: editor().project });
+    patchRun(msgId, { phase: intro, log: [], steps: [], done: false, before: editor().project, pastLen: editor().past.length });
 
     const apply: PipelineOptions['apply'] = async (ops: EditOp[], o) => {
       const base = get().runs[msgId]?.steps.length ?? 0;
@@ -305,7 +307,10 @@ export const useAIChat = create<AIChatState>((set, get) => {
         emit('ep:toast', { text: 'Já houve outras mudanças depois desta edição — use o Desfazer do editor.', kind: 'info' });
         return;
       }
-      editor().undo();
+      // a execução pode ter aplicado vários lotes (pré, estilo, legendas, principal): desfaz todos
+      const steps = Math.max(1, editor().past.length - (r.pastLen ?? editor().past.length - 1));
+      // (histórico pode estar no limite: segue até voltar ao projeto de antes, com teto)
+      for (let i = 0; i < Math.max(steps, 8) && editor().project !== r.before && editor().past.length; i++) editor().undo();
       patchRun(msgId, { after: undefined });
       editor().pushMessage({ role: 'system', text: 'Edição desfeita.', status: 'done' });
     },
