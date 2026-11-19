@@ -12,7 +12,8 @@ import { visualLayers, sourceTime } from '../engine/timing';
 import { ensureProjectFonts } from '../engine/fonts';
 import { mixProjectAudio, MIX_RATE } from './audioMix';
 import { OfflineMediaPool } from './mediaPool';
-import { exportFps, exportSize, hasWebCodecs, QUALITY_ORDER, videoBitrate, type ExportOptions } from './options';
+import { DecodedMediaPool } from './decodePool';
+import { exportFps, exportSize, hasWebCodecs, QUALITY_ORDER, SPEED_PROFILE, videoBitrate, type ExportOptions, type ExportSpeed } from './options';
 
 const abortErr = () => new DOMException('Exportação cancelada', 'AbortError');
 
@@ -29,16 +30,21 @@ const WEBM_VIDEO: VideoCodecChoice[] = [
 const MP4_AUDIO: AudioCodecChoice[] = [{ codec: 'mp4a.40.2', mux: 'aac' }, { codec: 'opus', mux: 'opus' }];
 const WEBM_AUDIO: AudioCodecChoice[] = [{ codec: 'opus', mux: 'opus' }];
 
-async function pickVideo(list: VideoCodecChoice[], w: number, h: number, fps: number, bitrate: number) {
+async function pickVideo(list: VideoCodecChoice[], w: number, h: number, fps: number, bitrate: number, speed: ExportSpeed = 'equilibrado') {
+  const hw = SPEED_PROFILE[speed].hardware;
   for (const c of list) {
-    const config: VideoEncoderConfig = {
+    const base: VideoEncoderConfig = {
       codec: c.codec, width: w, height: h, bitrate, framerate: fps,
+      bitrateMode: 'variable', latencyMode: 'quality', alpha: 'discard',
       ...(c.mux === 'avc' ? { avc: { format: 'avc' } } : {}),
     } as VideoEncoderConfig;
-    try {
-      const s = await VideoEncoder.isConfigSupported(config);
-      if (s.supported) return { choice: c, config };
-    } catch { /* tenta o próximo */ }
+    // tenta com aceleração de hardware; se não houver, sem preferência
+    for (const config of hw === 'prefer-hardware' ? [{ ...base, hardwareAcceleration: hw }, base] : [base]) {
+      try {
+        const s = await VideoEncoder.isConfigSupported(config as VideoEncoderConfig);
+        if (s.supported) return { choice: c, config: config as VideoEncoderConfig };
+      } catch { /* tenta o próximo */ }
+    }
   }
   return null;
 }
@@ -63,6 +69,11 @@ function framePlan(p: Project, t: number) {
     .map((l) => ({ clip: l.clip, time: sourceTime(l.clip, t) }));
 }
 
+/** localStorage 'ep:export-decoder' = '0' volta ao pool de <video> (comparação/diagnóstico) */
+function decoderDisabled(): boolean {
+  try { return typeof localStorage !== 'undefined' && localStorage.getItem('ep:export-decoder') === '0'; } catch { return false; }
+}
+
 async function waitFonts() {
   try {
     if (typeof document !== 'undefined' && document.fonts) {
@@ -79,7 +90,9 @@ export async function exportVideo(p: Project, assets: Record<string, MediaAsset>
   report(0, 'Preparando mídia');
   await Promise.race([ensureProjectFonts(p), new Promise((r) => setTimeout(r, 8000))]);
   await waitFonts();
-  const pool = new OfflineMediaPool(assets);
+  // WebCodecs: decodificação sequencial (sem seek por quadro); MediaRecorder: pool de <video>
+  const fast = hasWebCodecs() && typeof VideoDecoder !== 'undefined' && !decoderDisabled();
+  const pool = fast ? new DecodedMediaPool(assets) : new OfflineMediaPool(assets);
   try {
     await pool.preloadImages();
     if (signal?.aborted) throw abortErr();
@@ -112,7 +125,7 @@ export async function exportVideo(p: Project, assets: Record<string, MediaAsset>
 }
 
 async function encodeWithWebCodecs(
-  p: Project, pool: OfflineMediaPool, audio: AudioBuffer | null, opts: ExportOptions,
+  p: Project, pool: OfflineMediaPool | DecodedMediaPool, audio: AudioBuffer | null, opts: ExportOptions,
   report: (f: number, s: string) => void,
 ): Promise<Blob | null> {
   const { signal } = opts;
@@ -125,7 +138,7 @@ async function encodeWithWebCodecs(
   const ladder = QUALITY_ORDER.slice(Math.max(0, QUALITY_ORDER.indexOf(opts.quality)));
   for (const q of ladder) {
     ({ width: W, height: H } = exportSize(p, q));
-    v = await pickVideo(format === 'mp4' ? MP4_VIDEO : WEBM_VIDEO, W, H, fps, videoBitrate(W, H, fps));
+    v = await pickVideo(format === 'mp4' ? MP4_VIDEO : WEBM_VIDEO, W, H, fps, videoBitrate(W, H, fps, opts.speed), opts.speed);
     if (v) { if (q !== opts.quality) report(0.08, `Resolução reduzida para ${W}×${H} (limite do aparelho)`); break; }
   }
   if (!v) return null;
@@ -188,20 +201,26 @@ async function encodeWithWebCodecs(
     }
   };
 
+  const keyEvery = Math.max(1, Math.round(fps * SPEED_PROFILE[opts.speed ?? 'equilibrado'].keyEvery));
+  const progressEvery = Math.max(1, Math.round(fps / 4)); // ~0,25 s de vídeo
+  const t0 = performance.now();
   try {
     for (let i = 0; i < total; i++) {
       if (signal?.aborted) throw abortErr();
       if (failure) throw failure;
       const t = i / fps;
+      // (o encode do quadro anterior roda em paralelo enquanto este é decodificado/desenhado)
       await pool.prepare(framePlan(p, t));
       renderFrame(ctx, p, t, pool);
-      const frame = new VideoFrame(canvas, { timestamp: Math.round(i * frameUs), duration: Math.round(frameUs) });
-      venc.encode(frame, { keyFrame: i % Math.round(fps * 2) === 0 });
+      const frame = new VideoFrame(canvas, { timestamp: Math.round(i * frameUs), duration: Math.round(frameUs), alpha: 'discard' });
+      venc.encode(frame, { keyFrame: i % keyEvery === 0 });
       frame.close();
       pushAudioUntil((i + 1) / fps);
-      while (venc.encodeQueueSize > 6) await new Promise((r) => setTimeout(r, 2));
-      if (i % 3 === 0 || i === total - 1) report(0.08 + 0.9 * ((i + 1) / total), `Renderizando quadro ${i + 1} de ${total}`);
+      while (venc.encodeQueueSize > 24) await new Promise((r) => setTimeout(r, 1));
+      if (i % progressEvery === 0 || i === total - 1) report(0.08 + 0.9 * ((i + 1) / total), `Renderizando quadro ${i + 1} de ${total}`);
     }
+    const st = (pool as Partial<DecodedMediaPool>).stats;
+    (globalThis as { __epExportStats?: unknown }).__epExportStats = { secs: (performance.now() - t0) / 1000, frames: total, encoder: v.config.codec, hardware: v.config.hardwareAcceleration ?? 'auto', decode: st ?? 'pool <video>' };
     pushAudioUntil(duration);
     report(0.985, 'Finalizando arquivo');
     await venc.flush();
@@ -241,7 +260,7 @@ export async function detectExportPath(format: ExportOptions['format']): Promise
 
 /** fallback: grava o canvas + áudio mixado em tempo real (MP4 no Safari, WebM no Firefox/Chrome) */
 async function encodeWithMediaRecorder(
-  p: Project, pool: OfflineMediaPool, audio: AudioBuffer | null, opts: ExportOptions,
+  p: Project, pool: OfflineMediaPool | DecodedMediaPool, audio: AudioBuffer | null, opts: ExportOptions,
   report: (f: number, s: string) => void, mime: string,
 ): Promise<Blob> {
   const fps = exportFps(p, opts.fps);

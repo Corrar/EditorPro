@@ -11,7 +11,7 @@ import { emit } from '@/lib/events';
 import type { EditOp } from '@/lib/ops';
 import type { CaptionPreset, MediaAsset, TransitionKind } from '@/lib/types';
 import { DEFAULT_CAPTION_STYLE, makeAdjustmentClip, makeAudioClip, makeImageClip, makeShapeClip, makeStickerClip, makeTextClip, makeVideoClip } from '@/lib/defaults';
-import { exportVideo, exportAudio, exportFrame, toFCPXML, toSRT, toVTT, hasWebCodecs } from '@/lib/export';
+import { exportVideo, exportAudio, exportFrame, toFCPXML, toSRT, toVTT, hasWebCodecs, makePreviewProxy, probeVideoInfo } from '@/lib/export';
 import { uid } from '@/lib/util';
 
 async function probe(file: File): Promise<MediaAsset> {
@@ -143,7 +143,7 @@ export default function DevPreviewPage() {
 
   useEffect(() => {
     window.__ep = {
-      useEditor, exportVideo, exportAudio, exportFrame, toFCPXML, toSRT, toVTT, hasWebCodecs, buildDemo, buildCapcutDemo, emit, assetsList: () => Object.values(useEditor.getState().assets),
+      useEditor, exportVideo, exportAudio, exportFrame, toFCPXML, toSRT, toVTT, hasWebCodecs, makePreviewProxy, probeVideoInfo, buildDemo, buildCapcutDemo, emit, assetsList: () => Object.values(useEditor.getState().assets),
       blobToBase64: async (b: Blob) => {
         const buf = new Uint8Array(await b.arrayBuffer());
         let s = '';
