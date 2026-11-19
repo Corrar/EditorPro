@@ -41,6 +41,9 @@
 - IA/Chat: `app/api/**`, `lib/ai/**`, `components/chat/**`, `styles/chat.css`, `prompts/**`
 - Shell/Mídia/Painéis/Persistência: `components/{shell,media,panels}/**`, `lib/{media,persist}/**`,
   `app/page.tsx`, `styles/{shell,media,panels}.css`
+- Biblioteca profissional (fontes, legendas, animações, modelos, looks, sons): `lib/library/**`, `components/library/**`,
+  `styles/library.css` — spec `docs/superpowers/specs/2026-11-19-biblioteca-profissional.md`
+- Ícones: só `components/ui/Icon.tsx` (lucide, dono: principal)
 - Classes CSS: `.ep-*` compartilhadas em `app/globals.css` (tokens em `.ep-root`, `--green` = laranja).
 
 ## Deploy (Vercel)
