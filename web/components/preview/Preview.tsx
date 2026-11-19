@@ -110,6 +110,13 @@ export default function Preview() {
   /* "apontar para qualquer coisa": marca um ponto do quadro como contexto do chat */
   const [pointMode, setPointMode] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  // com o menu ⋯ aberto, a pílula flutuante da IA (position:fixed, z alto) não pode ficar por cima dele
+  useEffect(() => {
+    const root = document.documentElement;
+    if (moreOpen) root.dataset.pvMenu = '1';
+    else delete root.dataset.pvMenu;
+    return () => { delete root.dataset.pvMenu; };
+  }, [moreOpen]);
   const canUndo = useEditor((s) => s.past.length > 0);
   const canRedo = useEditor((s) => s.future.length > 0);
   const chatPoint = useEditor((s) => s.chatContext?.point);
@@ -549,6 +556,7 @@ export default function Preview() {
   const fitMenu = useCallback((el: HTMLDivElement | null) => {
     if (!el) return;
     el.style.marginLeft = '';
+    el.style.maxHeight = '';
     const r = el.getBoundingClientRect();
     const vw = document.documentElement.clientWidth;
     let dx = 0;
@@ -556,6 +564,12 @@ export default function Preview() {
     if (r.left + dx < 8) dx = 8 - r.left;
     // (margin, não transform: a animação de entrada usa transform)
     if (dx) el.style.marginLeft = `${Math.round(dx)}px`;
+    // o menu cresce para CIMA a partir do botão: se passar do topo da tela, limita a altura e rola por dentro
+    if (r.top < 8) {
+      el.style.maxHeight = `${Math.max(160, Math.floor(r.bottom - 8))}px`;
+      el.style.overflowY = 'auto';
+      el.style.overscrollBehavior = 'contain';
+    }
   }, []);
   const step = (dir: 1 | -1) => {
     const st = useEditor.getState();

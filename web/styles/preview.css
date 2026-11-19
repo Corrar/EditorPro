@@ -282,3 +282,6 @@
 .ep-pv-box.zoomed .ep-pv-canvas { touch-action:pan-x pan-y pinch-zoom; }
 .ep-ex-prog .warn { margin:-6px 0 10px; font-size:12px; font-weight:600; color:var(--amberInk, #8a5a00); }
 .ep-ex-seg { flex-wrap:wrap; max-width:100%; }
+
+/* menu ⋯ do preview aberto: esconde a pílula flutuante da IA que ficaria por cima dele */
+html[data-pv-menu] .ep-aibadge-slot { visibility:hidden; }
