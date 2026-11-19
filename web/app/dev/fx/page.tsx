@@ -10,6 +10,8 @@ import { applySurfaceEffects, effectGeometry } from '@/lib/engine/effects';
 import { isShaderTransition, runShaderTransition } from '@/lib/engine/shaderTransitions';
 import { transitionVisual } from '@/lib/engine/transitions';
 import { glStats } from '@/lib/fx/glcore';
+import { checkShader, SHADER_EXAMPLES } from '@/lib/fx/customShader';
+import { applyCustomEffect, runCustomTransition } from '@/lib/fx/customRender';
 import type { Ctx } from '@/lib/engine/surface';
 
 /** cena de teste: gradiente, formas e texto que se movem (dá p/ ver distorção/cor/borda) */
@@ -34,7 +36,8 @@ function scene(ctx: Ctx, W: number, H: number, t: number, hue = 20) {
 }
 
 function drawEffect(ctx: Ctx, W: number, H: number, e: EffectEntry, t: number) {
-  const fx = [{ kind: e.kind, intensity: 0.8, speed: 1, ...(e.defaultColor ? { color: e.defaultColor } : {}) }];
+  const fx = [{ kind: e.kind, intensity: 0.8, speed: 1, ...(e.defaultColor ? { color: e.defaultColor } : {}),
+    ...(e.kind === 'custom' ? { code: SHADER_EXAMPLES.find((x) => x.id === 'particles')!.code, color: '#FFD23F' } : {}) }];
   const geo = effectGeometry(fx, t);
   ctx.save();
   ctx.clearRect(0, 0, W, H);
@@ -62,7 +65,8 @@ function drawTransition(ctx: Ctx, W: number, H: number, tr: TransitionEntry, p: 
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, W, H);
   if (isShaderTransition(tr.kind)) {
-    const out = runShaderTransition(tr.kind, a, b, p, W, H);
+    const out = runShaderTransition(tr.kind, a, b, p, W, H, tr.kind === 'custom'
+      ? { kind: 'custom', duration: 0.6, code: SHADER_EXAMPLES.find((x) => x.id === 'spiral')!.code } : undefined);
     ctx.drawImage((out ?? b) as CanvasImageSource, 0, 0, W, H);
     return;
   }
@@ -194,7 +198,50 @@ export default function FxHarness() {
         if (tr) drawTransition(cv.getContext('2d')!, cv.width, cv.height, tr, p, 0.5);
       });
     };
-    (window as unknown as { __epFx: unknown }).__epFx = { benchEffects, benchTransitions, compileAll, drawAllAt };
+    /** compila todos os SHADER_EXAMPLES na GPU + casos de erro (linha relativa ao código) */
+    const checkExamples = () => ({
+      examples: SHADER_EXAMPLES.map((x) => ({ id: x.id, ...checkShader(x.code, x.stage) })),
+      undeclared: checkShader('vec4 effect(vec2 uv){\n  vec4 c = tex(uv);\n  return c * foo;\n}', 'effect'),
+      typeError: checkShader('vec4 transition(vec2 uv){\n  float x = getToColor(uv);\n  return vec4(x);\n}', 'transition'),
+      intLiteral: checkShader('vec4 effect(vec2 uv){\n  float k = 1;\n  return tex(uv) * k;\n}', 'effect'),
+    });
+    /** os pixels mudam com cada exemplo? (diferença média 0..255 vs. o quadro original, 160×284) */
+    const exampleDiffs = () => {
+      const W = 160, H = 284;
+      const base = offscreen('ex-base', W, H); scene(base.getContext('2d')!, W, H, 0.5);
+      const ref = base.getContext('2d')!.getImageData(0, 0, W, H).data;
+      const b2 = offscreen('ex-b2', W, H); scene(b2.getContext('2d')!, W, H, 0.5, 200);
+      return SHADER_EXAMPLES.map((x) => {
+        const c = offscreen('ex-out', W, H); const ctx = c.getContext('2d')!;
+        if (x.stage === 'effect') {
+          ctx.globalCompositeOperation = 'copy'; ctx.drawImage(base, 0, 0); ctx.globalCompositeOperation = 'source-over';
+          applyCustomEffect(ctx, W, H, { kind: 'custom', intensity: 1, speed: 1, code: x.code, color: '#22E6FF', params: [120, 1] }, 0.37, { local: 0.37, duration: 3 });
+        } else {
+          const out = runCustomTransition({ kind: 'custom', duration: 0.6, code: x.code }, base, b2, 0.5, W, H);
+          ctx.globalCompositeOperation = 'copy'; ctx.drawImage(out as CanvasImageSource, 0, 0); ctx.globalCompositeOperation = 'source-over';
+        }
+        const d = ctx.getImageData(0, 0, W, H).data; let s = 0;
+        for (let i = 0; i < d.length; i += 4) s += (Math.abs(d[i] - ref[i]) + Math.abs(d[i + 1] - ref[i + 1]) + Math.abs(d[i + 2] - ref[i + 2])) / 3;
+        return { id: x.id, diff: +(s / (W * H)).toFixed(2) };
+      });
+    };
+    /** ms/quadro do efeito custom (simples: ondas; pesado: partículas com laço de 40) */
+    const benchCustom = (W = 1280, H = 720, n = 20) => {
+      const c = offscreen('bench', W, H); const ctx = c.getContext('2d')!;
+      const base = offscreen('bench-base', W, H); scene(base.getContext('2d')!, W, H, 0.5);
+      const out: Record<string, number> = {};
+      for (const id of ['waves', 'neon-scanline', 'gradient-bg', 'rain', 'particles']) {
+        const code = SHADER_EXAMPLES.find((x) => x.id === id)!.code;
+        const run = (i: number) => { ctx.globalCompositeOperation = 'copy'; ctx.drawImage(base, 0, 0); ctx.globalCompositeOperation = 'source-over'; applyCustomEffect(ctx, W, H, { kind: 'custom', intensity: 1, code }, i / 30, { local: i / 30, duration: 5 }); };
+        run(0); ctx.getImageData(0, 0, 1, 1);
+        const t0 = performance.now();
+        for (let i = 0; i < n; i++) run(i);
+        ctx.getImageData(0, 0, 1, 1);
+        out[id] = +((performance.now() - t0) / n).toFixed(2);
+      }
+      return out;
+    };
+    (window as unknown as { __epFx: unknown }).__epFx = { benchEffects, benchTransitions, compileAll, drawAllAt, checkExamples, exampleDiffs, benchCustom };
   }, []);
 
   const cats = tab === 'efeitos' ? ['Todos', ...EFFECT_CATEGORIES] : ['Todos', ...new Set(TRANSITION_CATALOG.map((t) => t.category))];

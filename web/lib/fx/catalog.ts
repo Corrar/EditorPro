@@ -26,7 +26,7 @@ export type FxNative = 'css' | 'overlay' | 'canvas';
 
 export type EffectCategory =
   | 'Básico' | 'Lente' | 'Desfoque' | 'Distorção' | 'Glitch' | 'Retrô' | 'Luz' | 'Estilizar'
-  | 'Split/Clone' | 'Estrobo' | 'Partículas' | 'Moldura' | 'Festa';
+  | 'Split/Clone' | 'Estrobo' | 'Partículas' | 'Moldura' | 'Festa' | 'IA';
 
 export interface EffectEntry {
   kind: VisualEffectKind;
@@ -156,6 +156,8 @@ const EFFECTS: E[] = [
   /* festa */
   ['disco', 'Discoteca', 'Festa', 'saturate(1.6) hue-rotate(280deg)', 1, '2d', 'canvas', ['s']],
   ['countdown', 'Contagem regressiva', 'Festa', 'brightness(.8)', 1, '2d', 'overlay', ['s', 'c'], '#F2681F'],
+  /* escrito pela IA em GLSL (VisualEffect.code) — nome exibido: effectDisplayName() */
+  ['custom', 'IA: personalizado', 'IA', 'saturate(1.3) hue-rotate(15deg)', 2, 'gl', 'canvas', ['s', 'c']],
 ];
 
 export const EFFECT_CATALOG: readonly EffectEntry[] = EFFECTS.map(([kind, label, category, cssThumb, cost, render, native, extra, color, angle]) => {
@@ -169,12 +171,12 @@ export const EFFECT_CATALOG: readonly EffectEntry[] = EFFECTS.map(([kind, label,
 });
 
 export const EFFECT_CATEGORIES: readonly EffectCategory[] = [
-  'Básico', 'Lente', 'Desfoque', 'Distorção', 'Glitch', 'Retrô', 'Luz', 'Estilizar', 'Split/Clone', 'Estrobo', 'Partículas', 'Moldura', 'Festa',
+  'Básico', 'Lente', 'Desfoque', 'Distorção', 'Glitch', 'Retrô', 'Luz', 'Estilizar', 'Split/Clone', 'Estrobo', 'Partículas', 'Moldura', 'Festa', 'IA',
 ];
 
 /* ============================ transições ============================ */
 
-export type TransitionCategory = 'Básicas' | 'Câmera' | 'Slide' | 'Máscara' | '3D' | 'Efeitos' | 'Luz' | 'Glitch' | 'Distorção';
+export type TransitionCategory = 'Básicas' | 'Câmera' | 'Slide' | 'Máscara' | '3D' | 'Efeitos' | 'Luz' | 'Glitch' | 'Distorção' | 'IA';
 
 export interface TransitionEntry {
   kind: TransitionKind;
@@ -296,13 +298,15 @@ const TR: T[] = [
   ['swirl-vortex', 'Redemoinho', 'Distorção', 'shader', 0.7, 'hue-rotate(30deg)', 2],
   ['gravitational-lens', 'Lente gravitacional', 'Distorção', 'shader', 0.7, 'contrast(1.2)', 1],
   ['thermal-distortion', 'Distorção térmica', 'Distorção', 'shader', 0.7, 'sepia(.3) saturate(1.5)', 2],
+  /* escrita pela IA em GLSL (Transition.code); se não compilar, vira dissolver */
+  ['custom', 'IA: personalizada', 'IA', 'shader', 0.6, 'saturate(1.3) hue-rotate(15deg)', 2],
 ];
 
 export const TRANSITION_CATALOG: readonly TransitionEntry[] = TR.map(([kind, label, category, render, duration, cssThumb, cost]) => ({
   kind, label, category, render, duration, cssThumb, cost, native: render === 'css' ? 'css' : 'canvas',
 }));
 
-export const TRANSITION_CATEGORIES: readonly TransitionCategory[] = ['Básicas', 'Câmera', 'Slide', 'Máscara', '3D', 'Efeitos', 'Luz', 'Glitch', 'Distorção'];
+export const TRANSITION_CATEGORIES: readonly TransitionCategory[] = ['Básicas', 'Câmera', 'Slide', 'Máscara', '3D', 'Efeitos', 'Luz', 'Glitch', 'Distorção', 'IA'];
 
 /* ============================ mesclagem ============================ */
 
@@ -417,6 +421,18 @@ export const FX_TRANSITION_LABELS = labels(TRANSITION_CATALOG);
 export const FX_BLEND_LABELS = labels(BLEND_CATALOG);
 export const FX_MASK_LABELS = labels(MASK_CATALOG);
 export const FX_CLIP_ANIMATION_LABELS = labels(CLIP_ANIMATION_CATALOG);
+
+/** nome p/ a UI de um efeito aplicado ('custom' → "IA: <name>"; kind desconhecido não derruba a UI) */
+export function effectDisplayName(e: { kind: VisualEffectKind | string; name?: string }): string {
+  if (e.kind === 'custom') return `IA: ${(e.name ?? '').trim() || 'efeito personalizado'}`;
+  return EFFECT_MAP.get(e.kind as VisualEffectKind)?.label ?? String(e.kind);
+}
+
+/** nome p/ a UI de uma transição aplicada ('custom' → "IA: <name>") */
+export function transitionDisplayName(t: { kind: TransitionKind | string; name?: string }): string {
+  if (t.kind === 'custom') return `IA: ${(t.name ?? '').trim() || 'transição personalizada'}`;
+  return TRANSITION_MAP.get(t.kind as TransitionKind)?.label ?? String(t.kind);
+}
 
 /** listas de kinds (p/ validação da IA: sanitize.ts) */
 export const ALL_EFFECT_KINDS = EFFECT_CATALOG.map((e) => e.kind);

@@ -34,3 +34,21 @@ Média de todos os efeitos em 1280×720: **25 ms/quadro**. Mais caros: desfoque 
 bloom (145), pixel sort (136), neon (128), tilt-shift (125), desfoques giratório/direcional/zoom (98–120), cartoon (57).
 Os demais (partículas, molduras, cor, distorção) ficam em 1–15 ms. Em GPU real os shaders custam uma fração disso.
 Transições mais caras: zoom cinemático, giro/zoom com desfoque e chicotes (amostragem múltipla).
+
+## Efeitos e transições escritos pela IA (kind 'custom') — rodada "IA sem limites"
+
+- `VisualEffect { kind: 'custom', code, name, params }` → código define `vec4 effect(vec2 uv)`.
+- `Transition { kind: 'custom', code, name, params }` → código define `vec4 transition(vec2 uv)`.
+- API p/ a IA (`web/lib/fx/customShader.ts`): `checkShader(code, stage)` (compila na GPU; linha relativa ao código;
+  sem WebGL só checagens estáticas), `wrapShader`, `SHADER_PRELUDE_DOC` (≤ 1.200 caracteres, vai no prompt),
+  `SHADER_EXAMPLES` (10 exemplos testados: ondas, scanline neon, chuva, gradiente de fundo, partículas,
+  pulso na batida via uParams, glitch RGB, espiral, pixels em diagonal, zoom com flash).
+- Uniforms do efeito: uTex, uResolution, uTime (s no clipe), uDuration, uProgress, uIntensity, uSpeed, uColor, uParams[8];
+  da transição: uFrom/uTo (getFromColor/getToColor), uProgress (com easing), uResolution, uTime, uParams[8].
+  Helpers: rand, noise, fbm, luma, rgb2hsv, hsv2rgb, rot2, sdCircle, sdBox, aspect, tex, PI, TAU.
+  uv com (0,0) no canto superior esquerdo; cor com alfa reto.
+- Motor (`web/lib/fx/customRender.ts`): programa em cache por hash (FNV-1a) com LRU de 24; código > 16 KB ou que
+  não compila = passagem direta (efeito) / dissolver (transição); shader que derruba o contexto WebGL vai p/ lista negra;
+  vale em vídeo, imagem, sticker, forma e camada de ajuste (uTex = tudo abaixo; ignorar uTex = gerador de fundo).
+- Medições (SwiftShader, 1280×720, ms/quadro): ondas 24, scanline 19, chuva 18, gradiente (fbm) 36, partículas (laço de 40) 154.
+  Export MP4 de 5 s (540p, WebCodecs) com efeito + transição + camada de ajuste custom: ~5,3 s.

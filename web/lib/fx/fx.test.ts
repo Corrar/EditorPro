@@ -38,7 +38,7 @@ describe('catálogo fx', () => {
 describe('implementação', () => {
   it('todo efeito do catálogo tem implementação', () => {
     const legacy = new Set(['glitch', 'rgb-split', 'vhs', 'film-grain', 'light-leak', 'pixelate', 'mirror', 'kaleidoscope', 'blur-motion',
-      'flash-strobe', 'old-film', 'vignette-pulse', 'sparkle', 'neon-edge', 'black-bars']);
+      'flash-strobe', 'old-film', 'vignette-pulse', 'sparkle', 'neon-edge', 'black-bars', 'custom']);
     for (const e of EFFECT_CATALOG) {
       const ok = legacy.has(e.kind) || isGLEffect(e.kind) || PAINT_2D_EFFECTS.has(e.kind) || isGeometryEffect(e.kind);
       expect(ok, e.kind).toBe(true);
