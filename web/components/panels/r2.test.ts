@@ -18,7 +18,7 @@ describe('B7: congelar/extrair respeitam reverso e curva', () => {
     const c = { ...makeVideoClip(vid, 0), duration: 5, reverse: true, speedCurve: [{ t: 0, speed: 1 }, { t: 1, speed: 2 }], speedPreset: 'hero', fadeIn: 0.3 } as VideoClip;
     p.tracks.find((t) => t.kind === 'video')!.clips.push(c);
     const ops = detachAudioOps(p, c.id);
-    const add = ops.find((o) => o.op === 'add_clip') as { clip: Record<string, unknown> };
+    const add = ops.find((o) => o.op === 'add_clip') as unknown as { clip: Record<string, unknown> };
     expect(add.clip.reverse).toBe(true);
     expect(add.clip.speedCurve).toEqual(c.speedCurve);
     expect(add.clip.speedPreset).toBe('hero');
