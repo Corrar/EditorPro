@@ -11,7 +11,7 @@ import { assetEvents, renderFrame, segEvents } from '@/lib/engine';
 import { emit, on } from '@/lib/events';
 import { formatTime } from '@/lib/util';
 import { LiveMediaPool } from './livePool';
-import { PlaybackClock, QualityGovernor, frameInterval } from './syncPolicy';
+import { PlaybackClock, QualityGovernor, frameInterval, stillTime } from './syncPolicy';
 import { nativePlan } from './hybrid';
 import { onLutsChanged, onCompareChanged } from '@/lib/color';
 import { hitTest, dragPatch, type Box } from './manipulate';
@@ -218,7 +218,9 @@ export default function Preview() {
       pendingRef.current = 0;
       const st = useEditor.getState();
       if (st.playing) return;
-      const s = poolRef.current?.sync(st.project, st.assets, st.playhead, false, st.project.fps);
+      // no fim da timeline mostra o último quadro (não tela preta)
+      const tv = stillTime(st.playhead, projectDuration(st.project), st.project.fps);
+      const s = poolRef.current?.sync(st.project, st.assets, tv, false, st.project.fps);
       // vídeo ainda buscando o quadro: mantém o último quadro (o 'seeked' pede outro desenho);
       // se demorar demais (mídia quebrada; 2,5 s: seek de 4K/HEVC no celular passa de 1 s), desenha assim mesmo p/ não travar a edição
       const now = performance.now();
@@ -226,12 +228,13 @@ export default function Preview() {
         if (!waitSinceRef.current) waitSinceRef.current = now;
         if (now - waitSinceRef.current < 2500) { showTime(st.playhead); window.setTimeout(requestStill, 120); return; }
       }
-      if (!draw(st.playhead) && now - (waitSinceRef.current || now) < 2500) {
+      if (!draw(tv) && now - (waitSinceRef.current || now) < 2500) {
         if (!waitSinceRef.current) waitSinceRef.current = now;
         window.setTimeout(requestStill, 120);
         return;
       }
       waitSinceRef.current = 0;
+      if (tv !== st.playhead) showTime(st.playhead); // o relógio mostra o fim de verdade
     });
   }, [draw, showTime]);
 

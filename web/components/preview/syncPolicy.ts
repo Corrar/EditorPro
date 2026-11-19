@@ -241,3 +241,12 @@ export function staleIdle<T extends { url: string }>(list: T[], currentUrl: stri
   if (currentUrl === null) return list.slice();
   return list.filter((e) => e.url !== currentUrl);
 }
+
+/**
+ * Tempo a MOSTRAR com o vídeo parado: no fim da timeline (playhead = duração) nenhum clipe
+ * está ativo (intervalos [início, fim)), então mostra o último quadro em vez de tela preta.
+ */
+export function stillTime(t: Seconds, duration: Seconds, fps: number | undefined): Seconds {
+  if (duration > 0 && t >= duration - 1e-6) return Math.max(0, duration - 1 / (fps || 30));
+  return t;
+}
