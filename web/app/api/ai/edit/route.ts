@@ -13,7 +13,8 @@ import { fail, ok, readJson } from '@/lib/ai/server/http';
 import { loadPrompt } from '@/lib/ai/server/prompts';
 import { EditResponseSchema } from '@/lib/ai/schemas';
 import { summarizeProject } from '@/lib/ai/summary';
-import { sanitizeOps } from '@/lib/ai/validate';
+import { guardCaptionText, sanitizeOps } from '@/lib/ai/validate';
+import { captionsNeedTranscription } from '@/lib/ai/legacyCaptions';
 import { libraryCatalogForAI } from '@/lib/library/catalog';
 import { engineCatalogForAI } from '@/lib/ai/catalogs';
 import { COLOR_GRADE_LIVE } from '@/lib/ai/colormatch';
@@ -141,8 +142,11 @@ export async function POST(req: Request) {
     const san = sanitizeOps(isObj(raw) ? raw.ops : raw, project, assets, MAX_AI_OPS);
     const { dropped, sfx } = san;
     let { ops, deferred } = san;
-    // legenda é SÓ a fala transcrita: sem transcrição no projeto, set_captions do Claude (texto inventado) vira transcrição real
-    if (!project.captions.segments.length && ops.some((o) => o.op === 'set_captions')) {
+    // o texto da legenda é a fala: a IA só corrige palavra quando o usuário pede/aponta (lib/ai/validate guardCaptionText)
+    const ctx = isObj(body.context) ? body.context : undefined;
+    ops = guardCaptionText(ops, { mode: body.mode ?? 'chat', userText, segmentId: ctx && typeof ctx.segmentId === 'string' ? ctx.segmentId : undefined });
+    // legenda é SÓ a fala transcrita: sem transcrição no projeto (ou só a legenda antiga de exemplo), set_captions do Claude vira transcrição real
+    if (captionsNeedTranscription(project) && ops.some((o) => o.op === 'set_captions')) {
       ops = ops.filter((o) => o.op !== 'set_captions');
       if (!(deferred ?? []).some((d) => d.kind === 'captions')) deferred = [...(deferred ?? []), { kind: 'captions' as const }];
     }

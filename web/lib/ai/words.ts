@@ -95,3 +95,65 @@ export function speechLikely(samples: Float32Array, sampleRate: number): boolean
   jitter /= (loud.length - 1) * mean;
   return sd / mean > 0.25 && jitter > 0.08;
 }
+
+const normTok = (t: string) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\p{L}\p{N}]+/gu, '');
+
+/** distância de edição normalizada entre duas palavras (0 = iguais, 1 = nada em comum) */
+function wordDist(a: string, b: string): number {
+  if (a === b) return 0;
+  if (!a || !b) return 1;
+  const m = a.length, n = b.length;
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[n] / Math.max(m, n);
+}
+
+/**
+ * Correção do TEXTO de uma legenda mantendo os tempos reais da fala (plano §1.6): alinha as palavras
+ * novas às antigas (Levenshtein por palavra); palavra mantida/corrigida herda tempo e id da antiga,
+ * palavra inserida divide o tempo com a vizinha, palavra removida some sem mexer nas outras.
+ */
+export function alignWordTimes(old: CaptionWord[], tokens: string[], newId: () => string): CaptionWord[] {
+  const A = old.map((w) => normTok(w.text)), B = tokens.map(normTok);
+  const m = A.length, n = B.length;
+  if (!m) return [];
+  // DP: custo de substituição = distância entre as palavras (corrigir grafia é barato)
+  const D: number[][] = Array.from({ length: m + 1 }, (_, i) => Array.from({ length: n + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)));
+  for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++) {
+    D[i][j] = Math.min(D[i - 1][j] + 1, D[i][j - 1] + 1, D[i - 1][j - 1] + wordDist(A[i - 1], B[j - 1]) * 1.2);
+  }
+  const link: (number | null)[] = new Array(n).fill(null);
+  for (let i = m, j = n; i > 0 || j > 0;) {
+    if (i > 0 && j > 0 && Math.abs(D[i][j] - (D[i - 1][j - 1] + wordDist(A[i - 1], B[j - 1]) * 1.2)) < 1e-9) { link[j - 1] = i - 1; i--; j--; }
+    else if (j > 0 && (i === 0 || Math.abs(D[i][j] - (D[i][j - 1] + 1)) < 1e-9)) j--;
+    else i--;
+  }
+  const out: CaptionWord[] = tokens.map((t, j) => {
+    const k = link[j];
+    return k !== null ? { ...old[k], text: t } : { id: newId(), text: t, start: NaN, end: NaN };
+  });
+  // inseridas: dividem o tempo da palavra âncora anterior (ou da seguinte, no começo)
+  for (let j = 0; j < n;) {
+    if (!Number.isNaN(out[j].start)) { j++; continue; }
+    let k = j;
+    while (k < n && Number.isNaN(out[k].start)) k++;
+    const anchor = j > 0 ? j - 1 : k < n ? k : -1;
+    const group = anchor < j ? [anchor, ...range(j, k)] : [...range(j, k), anchor];
+    const a = anchor >= 0 ? out[anchor] : { start: old[0].start, end: old[m - 1].end };
+    const weights = group.map((g) => Math.max(2, tokens[g].length));
+    const total = weights.reduce((x, y) => x + y, 0);
+    let t = a.start;
+    group.forEach((g, gi) => {
+      const d = ((a.end - a.start) * weights[gi]) / total;
+      out[g] = { ...out[g], start: Math.round(t * 1000) / 1000, end: Math.round((t + d) * 1000) / 1000 };
+      t += d;
+    });
+    j = k;
+  }
+  return out;
+}
+function range(a: number, b: number): number[] { const r: number[] = []; for (let i = a; i < b; i++) r.push(i); return r; }

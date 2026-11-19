@@ -204,3 +204,24 @@ describe('contrato aditivo: StyleProfile.template / motion (sessão modelo)', ()
     expect(old.style?.template).toBeUndefined();
   });
 });
+
+describe('ops — legendas: origem do texto e ritmo (aditivo, sessão legendas)', () => {
+  const seg = { id: 's1', start: 1, end: 2, text: 'oi gente', words: [{ start: 1, end: 1.4, text: 'oi' }, { start: 1.5, end: 2, text: 'gente' }] };
+  it('set_captions grava source/model; sem source mantém a origem; lista vazia limpa', () => {
+    let p = applyOp(createProject(), { op: 'set_captions', segments: [seg], source: 'transcription', model: 'Whisper base' });
+    expect(p.captions.source).toBe('transcription');
+    expect(p.captions.model).toBe('Whisper base');
+    // edição manual (ex.: apagar uma linha na timeline) não muda a origem
+    p = applyOp(p, { op: 'set_captions', segments: [{ ...seg, id: 's2' }] });
+    expect(p.captions.source).toBe('transcription');
+    p = applyOp(p, { op: 'set_captions', segments: [seg], source: 'translation' });
+    expect(p.captions.source).toBe('translation');
+    expect(p.captions.model).toBeUndefined();
+    p = applyOp(p, { op: 'set_captions', segments: [] });
+    expect(p.captions.source).toBeUndefined();
+  });
+  it('set_caption_style aceita rhythm', () => {
+    const p = applyOp(createProject(), { op: 'set_caption_style', style: { rhythm: 'phrase' } });
+    expect(p.captions.style.rhythm).toBe('phrase');
+  });
+});

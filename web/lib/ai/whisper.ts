@@ -9,6 +9,8 @@ import type { CaptionSegment, MediaAsset } from '../types';
 import { decodeAudio, toMono16k } from './analysis';
 import { deviceProfile } from './frames';
 import { speechLikely, splitPoints, wordsToSegments, type WhisperChunk } from './words';
+import { energyRuns, refineWordTimes, speechSeconds, type Range } from './vad';
+import { filterAsr } from './asrFilter';
 import { getStatus } from './client';
 
 export interface WhisperChoice {
@@ -41,7 +43,8 @@ async function webgpuF16(): Promise<boolean> {
 export async function chooseWhisper(): Promise<WhisperChoice> {
   const dev = deviceProfile();
   // tiny erra muito em português (testado: troca o começo da fala por palavras sem sentido) → só em aparelho muito fraco
-  const small = dev.memoryGB !== undefined && dev.memoryGB <= 2;
+  // (plano §1.4) base q8 até em celular de 2 GB; tiny só abaixo disso
+  const small = dev.memoryGB !== undefined && dev.memoryGB <= 1;
   const name = small ? 'tiny' : 'base';
   const model = `onnx-community/whisper-${name}_timestamped`;
   // celular: só WASM — WebGPU em fp16 nas GPUs de celular trava ("0%") ou devolve texto que não é a fala
@@ -104,8 +107,18 @@ function request<T>(w: Worker, msg: Record<string, unknown>, onProgress: ((loade
   });
 }
 
+/** de onde veio a transcrição (o chat conta ao usuário) */
+export interface TranscribeInfo {
+  mode: 'server' | 'local' | 'mixed';
+  /** "Groq whisper-large-v3-turbo", "Whisper base"… (vai para Captions.model) */
+  label: string;
+  /** trechos que o servidor não conseguiu e foram feitos no aparelho */
+  localPieces?: number;
+}
+
 export interface TranscribeOptions {
   language?: string;
+  onInfo?: (info: TranscribeInfo) => void;
   choice?: WhisperChoice;
   onStatus?: (text: string, progress?: number) => void;
   signal?: AbortSignal;
@@ -133,11 +146,6 @@ export async function loadWhisper(choice: WhisperChoice, opts: TranscribeOptions
   workerKey = key;
 }
 
-/** frases que o Whisper "inventa" em silêncio/música (não são fala) */
-const HALLUCINATION = /amara\.org|legendas pela comunidade|legenda(s|do)? por|obrigad[oa] por assistir|inscreva-se|ative o sininho|transcri[cç][aã]o (feita )?por|subtitles by|thanks for watching/i;
-function dropHallucinations(segs: CaptionSegment[]): CaptionSegment[] {
-  return segs.filter((s) => !HALLUCINATION.test(s.text));
-}
 
 /** Float32 16 kHz mono -> WAV PCM 16 bits */
 export function encodeWav(samples: Float32Array, rate = 16000): ArrayBuffer {
@@ -161,65 +169,125 @@ function ticker(onStatus: TranscribeOptions['onStatus'], label: string, from: nu
   return () => clearInterval(id);
 }
 
-/** Whisper large no SERVIDOR: trechos de até ~100 s (WAV ≤ ~3,3 MB), 2 de cada vez */
-async function transcribeOnServer(audio: Float32Array, opts: TranscribeOptions): Promise<WhisperChunk[]> {
-  const total = audio.length / 16000;
-  const cuts = splitPoints(audio, 16000, 100, 8);
-  const jobs: { a: number; b: number }[] = [];
-  for (let i = 0; i < cuts.length - 1; i++) {
-    const a = cuts[i], b = cuts[i + 1];
-    if (speechLikely(audio.subarray(Math.floor(a * 16000), Math.floor(b * 16000)), 16000)) jobs.push({ a, b });
-  }
+export interface Job { a: number; b: number }
+
+/** trechos com voz dentro de [a,b] */
+function runsIn(runs: Range[], a: number, b: number): Range[] {
+  return runs.filter((r) => r.end > a && r.start < b).map((r) => ({ start: Math.max(a, r.start), end: Math.min(b, r.end) }));
+}
+
+/**
+ * (plano §1.3) o pedaço vai ao Whisper se tem ≥ 0,4 s de voz (antes: 8% da janela, que perdia
+ * 2 s de fala num minuto). speechLikely só desempata som CONTÍNUO (tom/zumbido sem pausas).
+ */
+export function pieceHasSpeech(samples: Float32Array, rate: number, runs: Range[], a: number, b: number): boolean {
+  const sec = speechSeconds(runsIn(runs, a, b));
+  if (sec < 0.4) return false;
+  const continuous = sec >= 0.85 * (b - a);
+  if (continuous && !speechLikely(samples.subarray(Math.floor(a * rate), Math.floor(b * rate)), rate)) return false;
+  return true;
+}
+
+function abortError() { return new DOMException('Transcrição cancelada', 'AbortError'); }
+
+export interface ServerDeps {
+  fetch: typeof fetch;
+  sleep: (ms: number) => Promise<void>;
+}
+const defaultDeps: ServerDeps = {
+  fetch: (...a) => fetch(...a),
+  sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+};
+
+class HttpFail extends Error {
+  constructor(message: string, public status: number, public retryAfter?: number) { super(message); }
+}
+
+/**
+ * Whisper large no SERVIDOR (plano §1.5): 3 trechos ao mesmo tempo; cada trecho tenta de novo até 2×
+ * (429/5xx/rede, respeitando Retry-After); o que ainda falhar volta em `failed` para o aparelho fazer
+ * SÓ aquele trecho. Palavras presas a [0, duração do trecho] e com inícios não decrescentes.
+ */
+export async function serverChunks(audio: Float32Array, jobs: Job[], opts: TranscribeOptions, deps: ServerDeps = defaultDeps, rate = 16000): Promise<{ chunks: WhisperChunk[]; failed: Job[]; label?: string; errors: string[] }> {
   const chunks: WhisperChunk[] = [];
-  let done = 0;
-  const label = 'Transcrevendo a fala (alta precisão)…';
-  const stop = ticker(opts.onStatus, label, 0, 1, Math.max(2500, total * 120));
-  try {
-    const run = async (j: { a: number; b: number }) => {
-      if (opts.signal?.aborted) throw new DOMException('Transcrição cancelada', 'AbortError');
-      const wav = encodeWav(audio.subarray(Math.floor(j.a * 16000), Math.floor(j.b * 16000)));
+  const failed: Job[] = [];
+  const errors: string[] = [];
+  let label: string | undefined;
+  const one = async (j: Job) => {
+    const wav = encodeWav(audio.subarray(Math.floor(j.a * rate), Math.floor(j.b * rate)), rate);
+    const len = j.b - j.a;
+    for (let attempt = 0; ; attempt++) {
+      if (opts.signal?.aborted) throw abortError();
       const ctrl = new AbortController();
       const onAbort = () => ctrl.abort();
       opts.signal?.addEventListener('abort', onAbort);
       const timer = setTimeout(() => ctrl.abort(), 70_000);
       try {
-        const res = await fetch(`/api/ai/transcribe?lang=${encodeURIComponent(opts.language ?? 'pt-BR')}`, { method: 'POST', headers: { 'Content-Type': 'audio/wav' }, body: wav, signal: ctrl.signal });
-        const data = (await res.json().catch(() => ({}))) as { words?: { word: string; start: number; end: number }[]; error?: string };
-        if (!res.ok) throw new Error(data.error || `erro ${res.status} na transcrição`);
-        for (const w of data.words ?? []) chunks.push({ text: ` ${w.word.trim()}`, timestamp: [w.start + j.a, w.end + j.a] });
+        const res = await deps.fetch(`/api/ai/transcribe?lang=${encodeURIComponent(opts.language ?? 'pt-BR')}`, { method: 'POST', headers: { 'Content-Type': 'audio/wav' }, body: wav, signal: ctrl.signal });
+        const data = (await res.json().catch(() => ({}))) as { words?: { word: string; start: number; end: number }[]; error?: string; retryAfter?: number; provider?: string; model?: string };
+        if (!res.ok) {
+          const ra = Number(res.headers?.get?.('retry-after')) || data.retryAfter;
+          throw new HttpFail(data.error || `erro ${res.status} na transcrição`, res.status, ra && ra > 0 ? ra : undefined);
+        }
+        if (data.model) label = `${data.provider === 'groq' ? 'Groq' : data.provider === 'openai' ? 'OpenAI' : 'servidor'} ${data.model}`;
+        const local: WhisperChunk[] = [];
+        for (const w of data.words ?? []) {
+          if (!w || typeof w.word !== 'string' || !Number.isFinite(w.start)) continue;
+          const s = Math.min(len, Math.max(0, w.start));
+          const e = Math.min(len, Math.max(s, Number.isFinite(w.end) ? w.end : s));
+          local.push({ text: ` ${w.word.trim()}`, timestamp: [s + j.a, e + j.a] });
+        }
+        local.sort((x, y) => x.timestamp[0] - y.timestamp[0]);
+        chunks.push(...local);
+        return;
       } catch (e) {
-        if (opts.signal?.aborted) throw new DOMException('Transcrição cancelada', 'AbortError');
-        throw e;
+        if (opts.signal?.aborted) throw abortError();
+        const st = e instanceof HttpFail ? e.status : 0; // 0 = rede/tempo esgotado
+        // 502 = o provedor recusou (chave, formato): repetir não adianta. 503/504/500/429/rede: tenta de novo
+        const retryable = st === 0 || st === 429 || (st >= 500 && st !== 502);
+        if (!retryable || attempt >= 2) {
+          failed.push(j);
+          errors.push(e instanceof Error ? e.message : String(e));
+          return;
+        }
+        const wait = e instanceof HttpFail && e.retryAfter ? Math.min(20_000, e.retryAfter * 1000) : 800 * 2 ** attempt;
+        await deps.sleep(wait);
       } finally {
         clearTimeout(timer);
         opts.signal?.removeEventListener('abort', onAbort);
       }
-      done++;
-    };
-    for (let i = 0; i < jobs.length; i += 2) await Promise.all(jobs.slice(i, i + 2).map(run));
-  } finally {
-    stop();
+    }
+  };
+  // fila com 3 trabalhando ao mesmo tempo
+  let next = 0;
+  const worker = async () => { while (next < jobs.length) await one(jobs[next++]); };
+  await Promise.all(Array.from({ length: Math.min(3, jobs.length) }, worker));
+  chunks.sort((x, y) => x.timestamp[0] - y.timestamp[0]);
+  for (let i = 1; i < chunks.length; i++) {
+    if (chunks[i].timestamp[0] < chunks[i - 1].timestamp[0]) chunks[i] = { ...chunks[i], timestamp: [chunks[i - 1].timestamp[0], Math.max(chunks[i - 1].timestamp[0], chunks[i].timestamp[1] ?? 0)] };
   }
-  opts.onStatus?.(`${label} 100%`, 1);
-  void done;
-  return chunks.sort((x, y) => x.timestamp[0] - y.timestamp[0]);
+  return { chunks, failed: failed.sort((x, y) => x.a - y.a), label, errors };
 }
 
-/** Whisper no aparelho: trechos curtos (progresso real) e cão de guarda por trecho */
-async function transcribeLocal(audio: Float32Array, opts: TranscribeOptions): Promise<WhisperChunk[]> {
+/** Whisper no aparelho: trechos curtos (progresso real) e cão de guarda por trecho. `ranges` = só esses trechos. */
+async function transcribeLocal(audio: Float32Array, runs: Range[], opts: TranscribeOptions, ranges?: Job[]): Promise<{ chunks: WhisperChunk[]; label: string }> {
   let choice = opts.choice ?? (await chooseWhisper());
   if (deviceProfile().mobile && choice.device === 'webgpu') choice = { ...choice, device: 'wasm', dtype: 'q8', sizeMB: choice.model.includes('tiny') ? 41 : 77 };
   await loadWhisper(choice, opts);
   const total = audio.length / 16000;
-  const cuts = splitPoints(audio, 16000, deviceProfile().weak ? 20 : 25, 5);
+  const target = deviceProfile().weak ? 20 : 25;
+  const cuts: Job[] = [];
+  for (const r of ranges ?? [{ a: 0, b: total }]) {
+    const pts = splitPoints(audio.subarray(Math.floor(r.a * 16000), Math.floor(r.b * 16000)), 16000, target, 5).map((x) => x + r.a);
+    for (let i = 0; i < pts.length - 1; i++) cuts.push({ a: pts[i], b: pts[i + 1] });
+  }
   const chunks: WhisperChunk[] = [];
   let speed = deviceProfile().mobile ? 1.6 : 0.5; // ms de processamento por ms de áudio (estimativa; ajusta no 1º trecho)
-  for (let i = 0; i < cuts.length - 1; i++) {
-    if (opts.signal?.aborted) throw new DOMException('Transcrição cancelada', 'AbortError');
-    const a = cuts[i], b = cuts[i + 1];
+  for (const { a, b } of cuts) {
+    if (opts.signal?.aborted) throw abortError();
+    if (!pieceHasSpeech(audio, 16000, runs, a, b)) continue; // sem voz (silêncio/tom/zumbido): não manda ao Whisper
     const piece = audio.slice(Math.floor(a * 16000), Math.floor(b * 16000)); // cópia: transferida ao worker
-    if (!speechLikely(piece, 16000)) continue; // sem fala (silêncio/tom/zumbido): não manda ao Whisper
-    const stop = ticker(opts.onStatus, 'Transcrevendo a fala…', a / total, b / total, (b - a) * 1000 * speed);
+    const stop = ticker(opts.onStatus, 'Transcrevendo a fala no aparelho…', a / total, b / total, (b - a) * 1000 * speed);
     const t0 = Date.now();
     try {
       const res = await request<{ chunks: WhisperChunk[] }>(getWorker(), { type: 'transcribe', audio: piece, language: whisperLanguage(opts.language ?? 'pt-BR') }, undefined, opts.signal, [piece.buffer], Math.max(45_000, (b - a) * 8000));
@@ -229,27 +297,64 @@ async function transcribeLocal(audio: Float32Array, opts: TranscribeOptions): Pr
     }
     speed = (Date.now() - t0) / Math.max(1, (b - a) * 1000);
   }
-  opts.onStatus?.('Transcrevendo a fala… 100%', 1);
-  return chunks;
+  opts.onStatus?.('Transcrevendo a fala no aparelho… 100%', 1);
+  return { chunks, label: choice.label };
+}
+
+/**
+ * Palavras cruas do Whisper -> legendas (tempos DA MÍDIA): filtro de alucinação/loop (asrFilter),
+ * correção de tempo pela energia (vad) e agrupamento em FRASES (até 12 palavras / 6 s, quebra em
+ * pausa ≥ 0,45 s). O bloco que aparece na tela é montado depois, no ritmo da fala (engine/captions).
+ */
+export function chunksToCaptions(chunks: WhisperChunk[], runs: Range[] | undefined, duration: number): CaptionSegment[] {
+  const clean = filterAsr(chunks, runs, { duration });
+  const timed = runs ? refineWordTimes(clean, runs) : clean;
+  return wordsToSegments(timed, { duration, maxWords: 12, maxDur: 6, pauseGap: 0.45 });
 }
 
 /** transcreve a fala de uma mídia -> CaptionSegment[] em tempos DA MÍDIA.
- *  1º Whisper large no servidor (se configurado), senão/falhou → Whisper no aparelho. */
+ *  1º Whisper large no servidor (se configurado); trechos que falharem → Whisper no aparelho só neles. */
 export async function transcribeMedia(asset: MediaAsset, opts: TranscribeOptions = {}): Promise<CaptionSegment[]> {
   if (!asset.url) throw new Error(`A mídia "${asset.name}" não está carregada.`);
   opts.onStatus?.('Lendo o áudio…');
   const audio = await toMono16k(await decodeAudio(asset.url));
   const total = audio.length / 16000;
+  const runs = energyRuns(audio, 16000);
+  if (speechSeconds(runs) < 0.4) {
+    opts.onInfo?.({ mode: 'local', label: 'sem fala' });
+    return [];
+  }
   let chunks: WhisperChunk[] | null = null;
   const status = await getStatus().catch(() => null);
   if (status?.transcribe) {
+    const cuts = splitPoints(audio, 16000, 100, 8);
+    const jobs: Job[] = [];
+    for (let i = 0; i < cuts.length - 1; i++) if (pieceHasSpeech(audio, 16000, runs, cuts[i], cuts[i + 1])) jobs.push({ a: cuts[i], b: cuts[i + 1] });
+    const label = 'Transcrevendo a fala (alta precisão)…';
+    const stop = ticker(opts.onStatus, label, 0, 1, Math.max(2500, total * 120));
+    let res: Awaited<ReturnType<typeof serverChunks>>;
     try {
-      chunks = await transcribeOnServer(audio, opts);
-    } catch (e) {
-      if (e instanceof DOMException && e.name === 'AbortError') throw e;
-      opts.onStatus?.(`A transcrição no servidor falhou (${e instanceof Error ? e.message : e}) — usando a do aparelho…`);
+      res = await serverChunks(audio, jobs, opts);
+    } finally {
+      stop();
+    }
+    chunks = res.chunks;
+    const name = res.label ?? `servidor (${status.transcribe})`;
+    if (res.failed.length) {
+      opts.onStatus?.(`${res.failed.length} trecho${res.failed.length > 1 ? 's' : ''} não ${res.failed.length > 1 ? 'foram' : 'foi'} no servidor (${res.errors[0] ?? 'erro'}) — fazendo ${res.failed.length > 1 ? 'esses' : 'esse'} no aparelho…`);
+      const loc = await transcribeLocal(audio, runs, opts, res.failed);
+      chunks = [...chunks, ...loc.chunks].sort((x, y) => x.timestamp[0] - y.timestamp[0]);
+      const all = res.failed.length === jobs.length;
+      opts.onInfo?.({ mode: all ? 'local' : 'mixed', label: all ? loc.label : `${name} + ${loc.label}`, localPieces: res.failed.length });
+    } else {
+      opts.onStatus?.(`${label} 100%`, 1);
+      opts.onInfo?.({ mode: 'server', label: name });
     }
   }
-  if (!chunks) chunks = await transcribeLocal(audio, opts);
-  return dropHallucinations(wordsToSegments(chunks, { duration: total }));
+  if (!chunks) {
+    const loc = await transcribeLocal(audio, runs, opts);
+    chunks = loc.chunks;
+    opts.onInfo?.({ mode: 'local', label: loc.label });
+  }
+  return chunksToCaptions(chunks, runs, total);
 }

@@ -16,6 +16,7 @@ import { FastButton } from './FastButton';
 import AttachMenu, { filesFromTransfer } from './AttachMenu';
 import { ModelActions, ModelAttachment, ModelChip } from './ModelBits';
 import { ChangesButton } from './RunExtras';
+import { LegacyCaptionsChip, RunActions } from './CaptionBits';
 import { suggestionsFor } from '@/lib/ai/suggest';
 import { useAIChat, type RunState } from '@/lib/ai/chatStore';
 import type { ChatMessage } from '@/lib/types';
@@ -84,6 +85,7 @@ function AssistantBubble({ m, run, canUndo, onUndo, canUndoTo, onUndoTo, editNo,
         ) : null}
         {run ? <Steps run={run} /> : null}
         {m.text ? <p className="ep-ch-text">{m.text}</p> : null}
+        <RunActions msgId={m.id} run={run} />
         {run?.model && run.done && !run.error ? <ModelActions assetId={run.model.assetId} /> : null}
         <ChangesButton run={run} />
         {canUndo ? (
@@ -258,6 +260,7 @@ export default function ChatPanel() {
       </div>
 
       <div className="ep-ch-foot">
+        <LegacyCaptionsChip />
         {pendingComments ? (
           <button className="ep-ch-comments" disabled={busy} onClick={() => comments()}>
             <Icon name="review" size={14} /> Aplicar comentários com IA <b>{pendingComments}</b>

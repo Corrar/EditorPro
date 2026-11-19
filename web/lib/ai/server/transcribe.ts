@@ -6,7 +6,7 @@
    Sem chave → o navegador usa o Whisper local (fallback).
    ===================================================================== */
 export interface TranscribeWord { word: string; start: number; end: number }
-export interface TranscribeResult { text: string; words: TranscribeWord[] }
+export interface TranscribeResult { text: string; words: TranscribeWord[]; /** provedor/modelo (p/ o chat dizer de onde veio a legenda) */ provider?: string; model?: string }
 
 interface Provider { name: 'groq' | 'openai'; url: string; key: string; model: string }
 
@@ -19,7 +19,8 @@ export function transcribeProvider(): Provider | null {
 }
 
 export class TranscribeError extends Error {
-  constructor(message: string, public status = 502) { super(message); }
+  /** segundos para tentar de novo (429), quando o provedor diz */
+  constructor(message: string, public status = 502, public retryAfter?: number) { super(message); }
 }
 
 /** manda um WAV (16 kHz mono) ao provedor e devolve as palavras com tempo (segundos do pedaço) */
@@ -44,8 +45,12 @@ export async function transcribeWav(wav: ArrayBuffer, language: string, prompt?:
   const data = (await res.json().catch(() => ({}))) as { text?: string; words?: TranscribeWord[]; segments?: { start: number; end: number; text: string }[]; error?: { message?: string } };
   if (!res.ok) {
     if (res.status === 401 || res.status === 403) throw new TranscribeError('a chave de transcrição foi recusada (confira GROQ_API_KEY na Vercel)', 502);
-    if (res.status === 429) throw new TranscribeError('limite grátis de transcrição atingido por agora — tente em alguns minutos', 429);
-    throw new TranscribeError(data.error?.message || `erro ${res.status} na transcrição`, 502);
+    if (res.status === 429) {
+      const ra = Number(res.headers.get('retry-after'));
+      throw new TranscribeError('limite grátis de transcrição atingido por agora — tente em alguns minutos', 429, Number.isFinite(ra) && ra > 0 ? Math.min(60, ra) : undefined);
+    }
+    // 5xx do provedor continua 5xx (o navegador tenta de novo); 4xx vira 502 (não adianta repetir)
+    throw new TranscribeError(data.error?.message || `erro ${res.status} na transcrição`, res.status >= 500 ? 503 : 502);
   }
   let words = (data.words ?? []).filter((w) => w && typeof w.word === 'string' && Number.isFinite(w.start) && Number.isFinite(w.end));
   // provedor sem tempo por palavra: distribui cada frase pelas palavras dela
@@ -56,5 +61,5 @@ export async function transcribeWav(wav: ArrayBuffer, language: string, prompt?:
       return ws.map((w, i) => ({ word: w, start: s.start + i * step, end: s.start + (i + 1) * step }));
     });
   }
-  return { text: (data.text ?? '').trim(), words };
+  return { text: (data.text ?? '').trim(), words, provider: p.name, model: p.model };
 }

@@ -14,7 +14,8 @@ import { CAPTION_ADD, canonVerbs, chatIntent, demoNeeds, planFirstEdit, silenceC
 import { deviceProfile, framesFromThumbnails, sampleVideo } from './frames';
 import { captionsMediaToTimeline } from './timemap';
 import { sanitizeOps } from './validate';
-import { chooseWhisper, transcribeMedia } from './whisper';
+import { chooseWhisper, transcribeMedia, type TranscribeInfo } from './whisper';
+import { captionsNeedTranscription } from './legacyCaptions';
 import { beatSyncOps, emphasisZoomOps, fillerOps, reframeOps } from './features';
 import { trackSubject } from './reframe';
 import { distributeWords } from './sanitize';
@@ -72,7 +73,7 @@ async function claudeOps(res: EditResponse, userText: string, opts: PipelineOpti
 /** depois de aplicar: legendas pedidas pela IA, erros que sobraram e a conferência visual */
 async function afterClaude(f: Finalized, before: Project, userText: string, apply: NonNullable<PipelineOptions['apply']>, opts: PipelineOptions, warnings: string[]): Promise<string> {
   const notes: string[] = [];
-  if (f.captions && !store().project.captions.segments.length) {
+  if (f.captions && captionsNeedTranscription(store().project)) {
     try {
       const r = await generateCaptions({ ...opts, apply, language: f.captions.language });
       if (r.ops.length) notes.push(r.reply);
@@ -142,6 +143,13 @@ export interface PipelineResult {
   /** o pedido era "desfazer" (demo) */
   undo?: boolean;
   warnings: string[];
+  /** botões oferecidos depois da resposta (ex.: "Tentar transcrever de novo") — id tratado pelo chat */
+  actions?: AskOption[];
+}
+
+/** "coloque legenda" deve transcrever? sem legenda, legenda antiga de exemplo ou texto que não é a fala (exceto tradução) */
+function captionsWantTranscription(p: Project): boolean {
+  return captionsNeedTranscription(p) || (!!p.captions.source && p.captions.source !== 'transcription' && p.captions.source !== 'translation');
 }
 
 const store = () => useEditor.getState();
@@ -245,27 +253,51 @@ export async function sourceFrames(sources: MediaAsset[], allowSampling: boolean
   return out.slice(0, max);
 }
 
-/* ---------- transcrição (Whisper no navegador) ---------- */
+/* ---------- transcrição (Whisper no navegador / servidor) ---------- */
 
 /** mídias já transcritas nesta sessão (tempos DA MÍDIA): refazer a edição reaproveita, sem pular a legenda.
  *  Falha NÃO entra aqui: a próxima tentativa transcreve de novo. */
-const transcribed = new Map<string, CaptionSegment[]>();
+const transcribed = new Map<string, { segs: CaptionSegment[]; info?: TranscribeInfo }>();
 const triedTranscription = { delete: (k: string) => transcribed.delete(k) };
 
-/** transcreve as fontes com Whisper e converte p/ tempos da timeline. null = pulada/falhou/desligada. */
-async function whisperCaptions(sources: MediaAsset[], language: string, opts: PipelineOptions, warnings: string[]): Promise<CaptionSegment[] | null> {
+/** por que não saiu legenda (a resposta do chat diz o motivo REAL e oferece o botão certo) */
+export type CaptionMissReason = 'skipped' | 'failed' | 'cc-off' | 'no-speech' | 'no-media';
+
+/** o que a transcrição produziu além das legendas: quem transcreveu e, se falhou, por quê */
+export interface CaptionRun { info?: TranscribeInfo; reason?: CaptionMissReason; error?: string }
+
+/** "Legendas: alta precisão (Groq)…" — de onde veio a legenda, dito no chat */
+export function providerLine(info: TranscribeInfo | undefined): string | null {
+  if (!info || info.label === 'sem fala') return null;
+  if (info.mode === 'server') return `Legendas em alta precisão (${info.label}) — o áudio foi enviado para transcrição.`;
+  if (info.mode === 'mixed') return `Legendas em alta precisão (${info.label.split(' + ')[0]}); ${info.localPieces} trecho${(info.localPieces ?? 0) > 1 ? 's' : ''} feito${(info.localPieces ?? 0) > 1 ? 's' : ''} no aparelho.`;
+  return `Legendas transcritas no aparelho (${info.label}, menos preciso que a transcrição no servidor).`;
+}
+
+/** op de legendas vindas da FALA (origem e modelo gravados no projeto) */
+function speechCaptionsOp(segs: CaptionSegment[], language: string, run: CaptionRun, explain: string): EditOp {
+  return { op: 'set_captions', segments: segs, language, source: 'transcription', ...(run.info?.label && run.info.label !== 'sem fala' ? { model: run.info.label } : {}), explain };
+}
+
+/** transcreve as fontes com Whisper e converte p/ tempos da timeline. null = pulada/falhou/desligada (motivo em `run`). */
+async function whisperCaptions(sources: MediaAsset[], language: string, opts: PipelineOptions, warnings: string[], run: CaptionRun = {}): Promise<CaptionSegment[] | null> {
   const all = sources.filter((a) => (a.kind === 'video' || a.kind === 'audio') && a.url);
-  if (!all.length) return null;
+  if (!all.length) { run.reason = 'no-media'; return null; }
+  const key = (a: MediaAsset) => `${a.id}|${a.url}`;
   // já transcritas: só remapeia para a timeline atual (cortes/velocidade podem ter mudado)
-  const cached = all.filter((a) => transcribed.has(`${a.id}|${a.url}`));
-  const media = all.filter((a) => !transcribed.has(`${a.id}|${a.url}`));
+  const cached = all.filter((a) => transcribed.has(key(a)));
+  const media = all.filter((a) => !transcribed.has(key(a)));
+  const fromCache = () => cached.flatMap((a) => { const c = transcribed.get(key(a))!; if (c.info) run.info = c.info; return captionsMediaToTimeline(store().project, a.id, c.segs); });
   if (!media.length) {
-    const segs = cached.flatMap((a) => captionsMediaToTimeline(store().project, a.id, transcribed.get(`${a.id}|${a.url}`)!));
-    return segs.sort((x, y) => x.start - y.start);
+    const segs = fromCache().sort((x, y) => x.start - y.start);
+    if (!segs.length) run.reason = 'no-speech';
+    return segs;
   }
   const server = !!(await getStatus()).transcribe; // Whisper large no servidor: não baixa nada no aparelho
   if (!server && opts.whisper === false) {
+    run.reason = 'cc-off';
     warnings.push('sem transcrição (a transcrição no aparelho está desligada no botão CC)');
+    opts.onLog?.('Transcrição desligada no botão CC');
     return null;
   }
   const dev = deviceProfile();
@@ -278,29 +310,57 @@ async function whisperCaptions(sources: MediaAsset[], language: string, opts: Pi
       [{ id: 'go', label: `Transcrever (~${choice.sizeMB} MB)` }, { id: 'skip', label: 'Pular legendas' }],
     );
     if (pick !== 'go') {
-      opts.onLog?.('Transcrição pulada');
+      run.reason = 'skipped';
+      opts.onLog?.('Transcrição pulada (você escolheu "Pular legendas")');
       return null;
     }
   }
   const signal = opts.skippable?.('Pular transcrição');
   try {
-    const segs: CaptionSegment[] = cached.flatMap((a) => captionsMediaToTimeline(store().project, a.id, transcribed.get(`${a.id}|${a.url}`)!));
+    const segs: CaptionSegment[] = fromCache();
     for (const a of media) {
-      const mediaSegs = await transcribeMedia(a, { language, choice, signal, onStatus: (t, f) => opts.onStatus?.(media.length > 1 ? `${t} ("${a.name}")` : t, f) });
-      transcribed.set(`${a.id}|${a.url}`, mediaSegs);
+      let info: TranscribeInfo | undefined;
+      const mediaSegs = await transcribeMedia(a, { language, choice, signal, onInfo: (i) => { info = i; }, onStatus: (t, f) => opts.onStatus?.(media.length > 1 ? `${t} ("${a.name}")` : t, f) });
+      transcribed.set(key(a), { segs: mediaSegs, info });
+      if (info && info.label !== 'sem fala') run.info = info;
       segs.push(...captionsMediaToTimeline(store().project, a.id, mediaSegs));
     }
+    const line = providerLine(run.info);
+    if (line) opts.onLog?.(line);
+    if (!segs.length) run.reason = 'no-speech';
     return segs.sort((x, y) => x.start - y.start);
   } catch (e) {
     if (isAbort(e)) {
-      opts.onLog?.('Transcrição pulada');
+      if (opts.signal?.aborted) throw e; // Parar/desfazer: a execução inteira para
+      run.reason = 'skipped';
+      opts.onLog?.('Transcrição pulada (você tocou em "Pular transcrição")');
       return null;
     }
+    run.reason = 'failed';
+    run.error = errText(e);
     warnings.push(`sem transcrição (${errText(e)})`);
-    opts.onLog?.(`A transcrição falhou neste navegador (${errText(e)})`);
+    opts.onLog?.(`A transcrição falhou (${errText(e)})`);
     return null;
   } finally {
     opts.skippable?.(null);
+  }
+}
+
+/** texto e botões honestos quando não saiu legenda */
+export function captionMissReply(run: CaptionRun): { text: string; actions: AskOption[] } {
+  const retry = { id: 'captions:retry', label: 'Tentar transcrever de novo' };
+  const manual = { id: 'captions:manual', label: 'Escrever manualmente' };
+  switch (run.reason) {
+    case 'cc-off':
+      return { text: 'Não coloquei legendas porque a transcrição no aparelho está desligada (botão CC). Legenda inventada não serve: ela tem que ser a sua fala.', actions: [{ id: 'captions:cc', label: 'Ligar CC e transcrever' }, manual] };
+    case 'skipped':
+      return { text: 'A transcrição foi pulada, então não coloquei legendas.', actions: [retry, manual] };
+    case 'no-speech':
+      return { text: 'Não encontrei fala para legendar neste vídeo (só silêncio, música ou ruído).', actions: [retry, manual] };
+    case 'no-media':
+      return { text: 'Não há áudio/vídeo carregado na timeline para transcrever.', actions: [manual] };
+    default:
+      return { text: `Não consegui transcrever a fala${run.error ? ` (${run.error})` : ''}, então não coloquei legendas — legenda inventada não serve.`, actions: [retry, manual] };
   }
 }
 
@@ -360,16 +420,24 @@ export async function runFirstEdit(opts: PipelineOptions & { brief: string }): P
       }
     }
 
-    // 2) legendas reais (Whisper local, grátis)
+    // 2) legendas reais: a FALA transcrita (servidor ou Whisper no aparelho) — legenda antiga de exemplo também é refeita
     const media = sources.filter((a) => a.kind !== 'image');
-    if (!store().project.captions.segments.length && !/sem legenda/i.test(brief)) {
+    let capRun: CaptionRun | null = null;
+    if (captionsNeedTranscription(store().project) && !/sem legenda/i.test(brief)) {
       const lang = store().project.captions.language || 'pt-BR';
-      const segs = await whisperCaptions(media, lang, opts, warnings);
+      capRun = {};
+      const segs = await whisperCaptions(media, lang, opts, warnings, capRun);
       if (segs?.length) {
-        await apply([{ op: 'set_captions', segments: segs, language: lang, explain: `Colocando ${segs.length} legendas sincronizadas` }], { delayMs: 300 });
-        opts.onLog?.(`Fala transcrita: ${segs.length} legendas`);
+        await apply([speechCaptionsOp(segs, lang, capRun, `Colocando ${segs.length} legendas no ritmo da fala`)], { delayMs: 300 });
+        opts.onLog?.(`Fala transcrita: ${segs.length} frases`);
       } else if (segs) opts.onLog?.('Não encontrei fala para legendar');
     }
+    const capNote = () => {
+      if (!capRun || store().project.captions.segments.length) return '';
+      const miss = captionMissReply(capRun);
+      return `\n${miss.text}`;
+    };
+    const capActions = () => (capRun && !store().project.captions.segments.length ? captionMissReply(capRun).actions : undefined);
 
     // batidas da música (p/ cortes na batida), se houver música
     if (Object.values(store().assets).some((a) => a.role === 'music')) {
@@ -407,7 +475,7 @@ export async function runFirstEdit(opts: PipelineOptions & { brief: string }): P
       opts.onStatus?.('Editando…');
       const appliedIds = ops.length ? await apply(ops) : [];
       reply += await afterClaude(fin, before, userText, apply, opts, warnings);
-      return { reply, ops, appliedIds, provider: 'anthropic' as const, warnings };
+      return { reply: reply + capNote(), ops, appliedIds, provider: 'anthropic' as const, warnings, actions: capActions() };
     }
 
     // ----- modo demo -----
@@ -454,7 +522,7 @@ export async function runFirstEdit(opts: PipelineOptions & { brief: string }): P
     }
     opts.onStatus?.('Editando…');
     const appliedIds = ops.length ? await apply(ops) : [];
-    return { reply, ops, appliedIds, provider: 'demo' as const, warnings };
+    return { reply: reply + capNote(), ops, appliedIds, provider: 'demo' as const, warnings, actions: capActions() };
   });
 }
 
@@ -470,21 +538,17 @@ export async function generateCaptions(opts: PipelineOptions & { language?: stri
   // pedido explícito do usuário: pode tentar de novo
   for (const a of used) triedTranscription.delete(`${a.id}|${a.url}`);
 
-  const segs = await whisperCaptions(used, language, opts, warnings);
-  const real = true;
-  if (!segs) {
-    // legenda é SEMPRE a fala de verdade: sem transcrição, explica em vez de inventar texto
-    const why = warnings[0] ? ` (${warnings[0].replace(/^sem transcrição \(|\)$/g, '')})` : '';
-    return { reply: `Não consegui transcrever a fala${why}, então não coloquei legendas — legenda inventada não serve. Toque em "Gerar legendas" para tentar de novo.`, ops: [], appliedIds: [], provider: status.provider, warnings };
+  const run: CaptionRun = {};
+  const segs = await whisperCaptions(used, language, opts, warnings, run);
+  if (!segs?.length) {
+    // legenda é SEMPRE a fala de verdade: sem transcrição, explica o motivo real em vez de inventar texto
+    const miss = captionMissReply(run);
+    return { reply: miss.text, ops: [], appliedIds: [], provider: status.provider, warnings, actions: miss.actions };
   }
-  if (!segs.length) return { reply: 'Não encontrei fala para legendar neste vídeo.', ops: [], appliedIds: [], provider: status.provider, warnings };
-  const ops = sanitizeOps(
-    [{ op: 'set_captions', segments: segs, language, explain: `Colocando ${segs.length} legendas${real ? ' sincronizadas' : ' de exemplo'}` }],
-    store().project, store().assets,
-  ).ops;
+  const replaced = store().project.captions.segments.length > 0;
+  const ops = sanitizeOps([speechCaptionsOp(segs, language, run, `Colocando ${segs.length} legendas no ritmo da fala`)], store().project, store().assets).ops;
   const appliedIds = await apply(ops, { delayMs: 300 });
-  void real;
-  const reply = `Pronto! Gerei ${segs.length} legendas com a fala, no tempo de cada palavra. Quer mudar o estilo (ex.: "legendas estilo TikTok")?`;
+  const reply = `Pronto! ${replaced ? 'Refiz as legendas pela fala' : 'Gerei as legendas com a fala'}: ${segs.length} frases, cada palavra no tempo em que é dita. Quer mudar o estilo (ex.: "legendas estilo TikTok")?`;
   return { reply, ops, appliedIds, provider: status.provider, warnings };
 }
 
@@ -595,18 +659,20 @@ const LANGS: [RegExp, string, string][] = [
 /** garante legendas com palavras (Whisper) antes de recursos que dependem da fala */
 async function ensureWords(opts: PipelineOptions, apply: NonNullable<PipelineOptions['apply']>, warnings: string[]): Promise<boolean> {
   const segsNow = store().project.captions.segments;
-  if (segsNow.some((s) => s.words?.some((w) => w.id))) return true;
+  const fake = captionsNeedTranscription(store().project); // legenda antiga de exemplo não é fala: transcreve
+  if (!fake && segsNow.some((s) => s.words?.some((w) => w.id))) return true;
   // já há legendas (sem ids de palavra): reaproveita, só numerando as palavras — nunca retranscreve
-  if (segsNow.length) {
+  if (!fake && segsNow.length) {
     const { ops } = sanitizeOps([{ op: 'set_captions', segments: segsNow, language: store().project.captions.language, explain: 'Preparando as palavras das legendas' }], store().project, store().assets);
     if (ops.length) await apply(ops, { delayMs: 120 });
     return true;
   }
   const used = sourceAssets(store().assets).filter((a) => a.kind !== 'image' && onTimeline(store().project).has(a.id));
   const lang = store().project.captions.language || 'pt-BR';
-  const segs = await whisperCaptions(used, lang, opts, warnings);
+  const run: CaptionRun = {};
+  const segs = await whisperCaptions(used, lang, opts, warnings, run);
   if (!segs?.length) return false;
-  const { ops } = sanitizeOps([{ op: 'set_captions', segments: segs, language: lang, explain: `Transcrevendo: ${segs.length} legendas` }], store().project, store().assets);
+  const { ops } = sanitizeOps([speechCaptionsOp(segs, lang, run, `Transcrevendo: ${segs.length} frases`)], store().project, store().assets);
   await apply(ops, { delayMs: 250 });
   opts.onLog?.(`Fala transcrita: ${segs.length} legendas`);
   return true;
@@ -653,7 +719,7 @@ async function localFeature(text: string, apply: NonNullable<PipelineOptions['ap
 
   // "coloque legenda no vídeo" sem legendas ainda → transcreve a fala de verdade (Whisper no aparelho),
   // nos dois modos; se o pedido também traz estilo ("…estilo TikTok", "amarela"), aplica em seguida
-  if (/legenda/.test(t) && CAPTION_ADD.test(t) && !/(sem|tir|remov|escond|deslig|apag|ocult)\w* .{0,12}legenda/.test(t) && !RE.translate.test(t) && !store().project.captions.segments.length) {
+  if (/legenda/.test(t) && CAPTION_ADD.test(t) && !/(sem|tir|remov|escond|deslig|apag|ocult)\w* .{0,12}legenda/.test(t) && !RE.translate.test(t) && captionsWantTranscription(store().project)) {
     const cap = await generateCaptions({ ...opts, apply });
     const styleWords = /estilo|tiktok|karaok|neon|maior|menor|em cima|embaixo|no meio|centro|amarel|vermelh|branc|pret|azul|verde|rosa|laranja|roxo|dourad|negrito|caixa|fundo|contorno|anima|palavra/.test(t.replace(/^.*?legendas?/, ''));
     if (!cap.ops.length || !styleWords) return { ...cap, warnings: [...warnings, ...cap.warnings] };
@@ -685,7 +751,7 @@ async function localFeature(text: string, apply: NonNullable<PipelineOptions['ap
   if (RE.translate.test(t) && /legenda/.test(t)) {
     const lang = LANGS.find(([re]) => re.test(t));
     if (!status.configured) return null; // demo responde que precisa da chave
-    if (!store().project.captions.segments.length) {
+    if (captionsNeedTranscription(store().project)) {
       if (!(await ensureWords(opts, apply, warnings))) return { reply: 'Não há legendas para traduzir — gere as legendas primeiro.', ops: [], appliedIds: [], provider, warnings };
     }
     const [, code, name] = lang ?? [null, 'en-US', 'inglês'];
@@ -696,7 +762,7 @@ async function localFeature(text: string, apply: NonNullable<PipelineOptions['ap
       const tx = map.get(s.id) ?? s.text;
       return { id: s.id, start: s.start, end: s.end, text: tx, words: distributeWords(tx, s.start, s.end) };
     });
-    return done([{ op: 'set_captions', segments, language: code, explain: `Legendas em ${name}` }], `Traduzi ${segments.length} legendas para ${name}. Os tempos de cada frase foram mantidos.`);
+    return done([{ op: 'set_captions', segments, language: code, source: 'translation', model: store().project.captions.model, explain: `Legendas em ${name}` }], `Traduzi ${segments.length} legendas para ${name}. Os tempos de cada frase foram mantidos.`);
   }
 
   // cortar vícios (ids das palavras do Whisper) — exato e grátis

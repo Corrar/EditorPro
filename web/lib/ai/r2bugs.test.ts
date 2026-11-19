@@ -121,9 +121,11 @@ describe('#4 remove_words com ids de legenda corrigida', () => {
     expect(r.dropped).toEqual([]);
     expect(r.ops[0]).toMatchObject({ op: 'remove_words', fromWordId: 'cap_mwni9qwp53gpwb7_1' });
   });
-  it('quantidade mudou: ids novos curtos continuam a numeração wNNNNN', () => {
+  it('quantidade mudou: palavras mantidas guardam id/tempo; a nova ganha id curto que continua a numeração wNNNNN', () => {
     const r = sanitizeOps([{ op: 'update_caption', segmentId: 'cap_mwni9qwp53gpwb7', patch: { text: 'é o Bruno né' } }], withCaps(), assets);
-    expect(r.project.captions.segments[0].words!.map((w) => w.id)).toEqual(['w00004', 'w00005', 'w00006', 'w00007']);
+    // (legendas §1.6) correção alinhada palavra a palavra: os tempos reais da fala não são redistribuídos
+    expect(r.project.captions.segments[0].words!.map((w) => w.id)).toEqual(['w00001', 'w00004', 'w00002', 'w00003']);
+    expect(r.project.captions.segments[0].words![2]).toMatchObject({ text: 'Bruno', start: 0.4, end: 1.1 });
   });
 });
 

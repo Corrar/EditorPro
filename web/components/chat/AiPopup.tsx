@@ -16,6 +16,7 @@ import { liveLabel, liveSummary } from '@/lib/ai/live';
 import { FastButton } from './FastButton';
 import AttachMenu, { filesFromTransfer } from './AttachMenu';
 import { ModelActions, ModelAttachment, ModelChip } from './ModelBits';
+import { LegacyCaptionsChip, RunActions } from './CaptionBits';
 import { ChangesButton } from './RunExtras';
 import { suggestionsFor } from '@/lib/ai/suggest';
 import { emit } from '@/lib/events';
@@ -179,6 +180,7 @@ export default function AiPopup({ onMinimize, onExpand, autoFocus = false, initi
                 ) : null}
                 {run ? <MiniSteps run={run} /> : null}
                 {lastAssistant.text ? <p className="ep-aip-text">{lastAssistant.text}</p> : null}
+                <RunActions msgId={lastAssistant.id} run={run} />
                 {run?.model && run.done && !run.error ? <ModelActions assetId={run.model.assetId} /> : null}
                 <ChangesButton run={run} />
                 {canUndo ? (
@@ -197,6 +199,7 @@ export default function AiPopup({ onMinimize, onExpand, autoFocus = false, initi
         )}
       </div>
 
+      <LegacyCaptionsChip />
       <div className="ep-aip-chips" role="list">
         {suggestions.map((s) => (
           <button key={s} role="listitem" className="ep-pill2 ep-ch-chip" disabled={busy} onClick={() => submit(s)}>{s}</button>
