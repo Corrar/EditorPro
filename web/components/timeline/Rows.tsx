@@ -403,3 +403,42 @@ export const KeyframeLayer = memo(function KeyframeLayer({ project, rows, zoom }
     </>
   );
 });
+
+/* ---------------- contorno de grupo (clipes de um mesmo modelo) ---------------- */
+
+export const GroupOutlines = memo(function GroupOutlines({ project, rows, zoom }: { project: Project; rows: RowInfo[]; zoom: number }) {
+  const { headerW } = useDims();
+  const selection = useEditor((s) => s.selection);
+  const drag = useTimelineUi((s) => (s.drag?.mode === 'move' ? s.drag : null));
+  const groups = new Map<string, { t0: number; t1: number; y0: number; y1: number; sel: boolean; label?: string }>();
+  const sel = new Set(selection);
+  for (const r of rows) {
+    if (!r.track) continue;
+    for (const c of r.track.clips) {
+      if (!c.groupId) continue;
+      const shift = drag && drag.ids.includes(c.id) ? drag.delta : 0;
+      const g = groups.get(c.groupId) ?? { t0: Infinity, t1: -Infinity, y0: Infinity, y1: -Infinity, sel: false, label: undefined as string | undefined };
+      g.t0 = Math.min(g.t0, c.start + shift);
+      g.t1 = Math.max(g.t1, c.start + c.duration + shift);
+      g.y0 = Math.min(g.y0, r.top);
+      g.y1 = Math.max(g.y1, r.top + r.height);
+      g.sel = g.sel || sel.has(c.id);
+      g.label = g.label ?? c.label;
+      groups.set(c.groupId, g);
+    }
+  }
+  return (
+    <>
+      {[...groups.entries()].map(([id, g]) => (
+        <div
+          key={id}
+          className={`ep-tl-group${g.sel ? ' sel' : ''}`}
+          style={{ transform: `translate(${headerW + g.t0 * zoom - 3}px, ${g.y0 - 1}px)`, width: (g.t1 - g.t0) * zoom + 6, height: g.y1 - g.y0 + 2 }}
+          aria-hidden
+        >
+          {g.sel && g.label && <span className="lbl">{g.label}</span>}
+        </div>
+      ))}
+    </>
+  );
+});

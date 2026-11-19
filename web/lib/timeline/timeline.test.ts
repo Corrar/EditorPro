@@ -351,3 +351,27 @@ describe('preencher altura (celular)', () => {
     expect(fillRowHeights(rh, p, base * 5).video).toBe(Math.floor(rh.video * 1.6));
   });
 });
+
+describe('grupos', () => {
+  const grouped = () =>
+    applyOps(mock(), [
+      { op: 'update_clip', clipId: 't1', patch: { groupId: 'g1' } },
+      { op: 'update_clip', clipId: 'v1', patch: { groupId: 'g1' } },
+    ]).project;
+  it('expandGroups inclui o grupo todo', async () => {
+    const { expandGroups } = await import('./edit');
+    const p = grouped();
+    expect(expandGroups(p, ['t1']).sort()).toEqual(['t1', 'v1']);
+    expect(expandGroups(p, ['v2'])).toEqual(['v2']);
+  });
+  it('duplicateWithGroups copia o grupo em bloco com groupId novo', async () => {
+    const { duplicateWithGroups } = await import('./edit');
+    const p = grouped(); // g1: v1 [0,5], t1 [1,3]
+    const { ops, newIds } = duplicateWithGroups(p, ['t1', 'v1']);
+    const q = applyOps(p, ops).project;
+    const copies = newIds.map((id) => findClip(q, id)!.clip);
+    expect(copies.map((c) => c.start).sort()).toEqual([5, 6]); // deslocados pela largura do grupo (5s)
+    expect(new Set(copies.map((c) => c.groupId)).size).toBe(1);
+    expect(copies[0].groupId).not.toBe('g1');
+  });
+});

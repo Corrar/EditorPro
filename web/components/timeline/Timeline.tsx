@@ -20,7 +20,7 @@ import { emit } from '@/lib/events';
 import { uid } from '@/lib/util';
 import { collectSnapPoints, snapSpan, snapThreshold, snapTime } from '@/lib/timeline/snap';
 import {
-  MIN_CLIP, fitZoom, insertOps, markerSnapPoints, kindForMedia, magneticInsertTime, magneticOrder, mainTrackId, overlaps, overwriteOps, packOps,
+  MIN_CLIP, expandGroups, fitZoom, insertOps, markerSnapPoints, kindForMedia, magneticInsertTime, magneticOrder, mainTrackId, overlaps, overwriteOps, packOps,
   placeClip, toFrame, trimBounds,
 } from '@/lib/timeline/edit';
 import {
@@ -29,7 +29,7 @@ import {
 import { type RowInfo, dimsFor, fillRowHeights, rowAtY, rowLayout, rowsHeight, useDims, useTimelineUi } from '@/lib/timeline/ui';
 import { Toolbar, ZMAX, ZMIN } from './Toolbar';
 import { Ruler } from './Ruler';
-import { DragLayer, Guides, KeyframeLayer, PlayheadLine, Rows, TouchHandles } from './Rows';
+import { DragLayer, GroupOutlines, Guides, KeyframeLayer, PlayheadLine, Rows, TouchHandles } from './Rows';
 import { ClipMenu, LiveBanner, TrackPop } from './Overlays';
 import { useShortcuts } from './useShortcuts';
 import { MarkerLines, MarkerPop, RangePop } from './Markers';
@@ -615,7 +615,7 @@ export default function Timeline() {
 
     if (g.kind === 'move') {
       if (!g.moved) {
-        if (g.clickReduce) st.select([g.primary]);
+        if (g.clickReduce) st.select(expandGroups(st.project, [g.primary]));
         return;
       }
       if (!drag || drag.mode !== 'move') return;
@@ -704,7 +704,7 @@ export default function Timeline() {
     } else if (g.kind === 'tap') {
       if (g.moved) return;
       if (g.clipId) {
-        st.select([g.clipId]);
+        st.select(expandGroups(st.project, [g.clipId]));
         ui.set({ captionSel: null });
       } else if (g.capId) {
         st.select([]);
@@ -782,7 +782,7 @@ export default function Timeline() {
         if (g && g.kind !== 'scrub' && g.moved) return;
         endGestureRef.current(false);
         const st = useEditor.getState();
-        if (target.clipId && !st.selection.includes(target.clipId)) st.select([target.clipId]);
+        if (target.clipId && !st.selection.includes(target.clipId)) st.select(expandGroups(st.project, [target.clipId]));
         if (target.capId) setUi({ captionSel: target.capId });
         try { navigator.vibrate?.(12); } catch {}
         setUi({ menu: { x: x + 10, y: y + 10, ...target, touch: true } });
@@ -847,9 +847,11 @@ export default function Timeline() {
       setUi({ captionSel: null });
       const multi = e.shiftKey || e.metaKey || e.ctrlKey;
       const was = st.selection.includes(id);
+      // grupo (modelo): seleciona todos os clipes juntos; Alt = só este
+      const unit = e.altKey ? [id] : expandGroups(p, [id]);
       let sel = st.selection;
-      if (multi) sel = was ? sel.filter((s) => s !== id) : [...sel, id];
-      else if (!was) sel = [id];
+      if (multi) sel = was ? sel.filter((s) => !unit.includes(s)) : [...new Set([...sel, ...unit])];
+      else if (!was || (e.altKey && sel.length > 1) || (!e.altKey && unit.some((u) => !sel.includes(u)))) sel = unit;
       st.select(sel);
       const locked = !!f.track.locked || !!f.clip.locked;
       if (locked || (multi && was)) return;
@@ -964,7 +966,7 @@ export default function Timeline() {
     e.preventDefault();
     const id = clipEl.dataset.clipId!;
     const st = useEditor.getState();
-    if (!st.selection.includes(id)) st.select([id]);
+    if (!st.selection.includes(id)) st.select(e.altKey ? [id] : expandGroups(st.project, [id]));
     setUi({ menu: { x: e.clientX, y: e.clientY, clipId: id } });
   };
 
@@ -1070,6 +1072,7 @@ export default function Timeline() {
             <PlayheadLine zoom={zoom} height={rowsH} scrollRef={scrollRef} />
             <TouchHandles project={project} rows={rows} zoom={zoom} />
             <KeyframeLayer project={project} rows={rows} zoom={zoom} />
+            <GroupOutlines project={project} rows={rows} zoom={zoom} />
             <MarkerLines zoom={zoom} height={rowsH} headerW={dims.headerW} />
             {empty && <EmptyHint compact={dims.compact} headerW={dims.headerW} />}
           </div>
