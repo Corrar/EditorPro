@@ -626,3 +626,26 @@
   .ep-respill-wrap { margin-right:4px; }
 }
 @media (orientation: landscape) and (max-height: 520px) { .ep-hsearch { display:none; } }
+
+/* ---------- v2.4: cursor da IA (estilo colaborador do Figma) ---------- */
+.ep-aicursor-layer { position:fixed; inset:0; z-index:150; pointer-events:none; transition:opacity .5s ease; }
+.ep-aicursor-layer.leaving { opacity:0; }
+.ep-aicursor, .ep-aicursor-trail { position:absolute; left:0; top:0; will-change:transform; transition:transform 420ms cubic-bezier(.22,1.12,.36,1); }
+.ep-aicursor.instant, .ep-aicursor-trail.instant { transition:none; }
+.ep-aicursor-trail { width:14px; height:14px; margin:-7px 0 0 -7px; border-radius:50%; background:radial-gradient(circle, rgba(242,104,31,.45), rgba(242,104,31,0) 70%); transition-duration:640ms; transition-timing-function:cubic-bezier(.3,.9,.3,1); }
+.ep-aicursor-arrow { display:block; margin:-2px 0 0 -2px; filter:drop-shadow(0 2px 4px rgba(0,0,0,.35)); }
+.ep-aicursor-arrow path { fill:var(--green, #F2681F); stroke:#fff; stroke-width:1.6; stroke-linejoin:round; }
+.ep-aicursor-tag { position:absolute; left:16px; top:18px; padding:3px 8px; border-radius:8px 8px 8px 3px; background:var(--green, #F2681F); color:#fff; font:800 11px/1.2 var(--font, inherit); white-space:nowrap; box-shadow:0 4px 12px rgba(242,104,31,.35); }
+.ep-aicursor-bubble { position:absolute; left:16px; top:42px; max-width:min(240px, 62vw); padding:7px 11px; border-radius:12px; background:rgba(20,20,22,.88); color:#fff; font:600 12.5px/1.3 var(--font, inherit); box-shadow:0 8px 22px rgba(0,0,0,.28); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); animation:toastIn .2s ease both; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+.ep-aicursor.flip .ep-aicursor-tag { left:auto; right:6px; border-radius:8px 8px 3px 8px; }
+.ep-aicursor.flip .ep-aicursor-bubble { left:auto; right:6px; }
+.ep-aicursor-click { position:absolute; width:36px; height:36px; margin:-18px 0 0 -18px; border-radius:50%; border:2.5px solid var(--green, #F2681F); animation:epAiClick .6s ease-out forwards; }
+@keyframes epAiClick { from { transform:scale(.3); opacity:1 } to { transform:scale(1.5); opacity:0 } }
+.ep-aiflash { animation:epAiFlash .7s ease-out; }
+@keyframes epAiFlash { 0% { box-shadow:0 0 0 0 rgba(242,104,31,.7) } 100% { box-shadow:0 0 0 10px rgba(242,104,31,0) } }
+@media (prefers-reduced-motion: reduce) {
+  .ep-aicursor, .ep-aicursor-trail { transition:none; }
+  .ep-aicursor-trail { display:none; }
+  .ep-aicursor-click { animation-duration:.3s; }
+}
+.ep-root:has(.ep-modal-bg) .ep-aicursor-layer { display:none; } /* modais ficam por cima */

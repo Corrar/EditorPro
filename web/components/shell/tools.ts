@@ -23,3 +23,6 @@ export const TOOLS: { id: ToolId; label: string; Icon: typeof IconMedia }[] = [
 ];
 
 export const toolDef = (id: ToolId) => TOOLS.find((t) => t.id === id)!;
+
+/** valor de data-ep-tool (contrato do cursor da IA, lib/aiCursor.ts): 'canvas' é 'formats' lá */
+export const toolAttr = (id: string) => (id === 'canvas' ? 'formats' : id);

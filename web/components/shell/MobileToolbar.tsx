@@ -24,6 +24,9 @@ import type { ToolId } from './tools';
 
 interface Item { id: string; label: string; icon: IconName; run: () => void; on?: boolean; danger?: boolean; tag?: string }
 
+/** id do item da barra → data-ep-tool (cursor da IA) */
+const ITEM_TOOL: Record<string, string> = { edit: 'edit', audio: 'audio', text: 'text', effects: 'effects', captions: 'captions', filters: 'filters', adjust: 'adjust', stickers: 'stickers', templates: 'templates', format: 'formats', transitions: 'transitions', media: 'media', review: 'review' };
+
 const toast = (text: string, kind: 'ok' | 'error' | 'info' = 'info') => emit('ep:toast', { text, kind });
 
 export default function MobileToolbar({ onTool, onAi, onMenu, tool, toolOpen }: {
@@ -218,7 +221,7 @@ export default function MobileToolbar({ onTool, onAi, onMenu, tool, toolOpen }: 
         )}
         <div className={`ep-mtscroll${edges.l ? ' fl' : ''}${edges.r ? ' fr' : ''}`} ref={scroller} onScroll={updateEdges} key={mode}>
           {items.map((it) => (
-            <button key={it.id} type="button" className={`ep-mtitem${it.on ? ' on' : ''}${it.danger ? ' danger' : ''}`} onClick={it.run}>
+            <button key={it.id} type="button" data-ep-tool={!back ? ITEM_TOOL[it.id] : undefined} className={`ep-mtitem${it.on ? ' on' : ''}${it.danger ? ' danger' : ''}`} onClick={it.run}>
               <span className="ic"><Icon name={it.icon} size={24} strokeWidth={1.6} />{it.tag && <span className="ep-tag ep-mttag">{it.tag}</span>}</span>
               <span className="lb">{it.label}</span>
             </button>
