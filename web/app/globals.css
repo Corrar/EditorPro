@@ -366,3 +366,29 @@ html, body { height: 100%; overflow: hidden; }
 .ep-statpill { background:var(--tile); border-color:transparent; box-shadow:none; backdrop-filter:none; }
 .ep-segside { background:var(--tile); border-color:transparent; border-radius:999px; }
 .ep-segside button { border-radius:999px; }
+
+/* ---------- design v2.1: menu lateral, barra inferior, fundo da página ---------- */
+/* fundo do documento acompanha o tema (evita faixa colorida atrás da barra do sistema) */
+html:has(.ep-root.dark), html:has(.ep-root.dark) body { background:#0D0D0F; }
+html:has(.ep-root:not(.dark)), html:has(.ep-root:not(.dark)) body { background:#FFFFFF; }
+
+/* menu lateral: ícone dentro de um bloco arredondado; ativo = bloco laranja com ícone branco */
+.ep-navitem { gap:12px; padding:6px 10px 6px 6px; border-radius:16px; }
+.ep-navitem .ib { width:38px; height:38px; border-radius:13px; background:var(--tile); color:var(--ink); display:grid; place-items:center; transition:background .15s, color .15s, transform .12s; }
+.ep-navitem:hover { background:transparent; }
+.ep-navitem:hover .ib { background:var(--tileHover); }
+.ep-navitem:active .ib { transform:scale(.95); }
+.ep-navitem.active, .ep-root.dark .ep-navitem.active { background:transparent; box-shadow:none; color:var(--ink); font-weight:700; }
+.ep-navitem.active .ib { background:var(--green); color:#fff; box-shadow:0 6px 16px rgba(242,104,31,.30); }
+.ep-navitem .c, .ep-navitem:not(.active) .c { background:var(--tile); color:var(--sub); font-family:var(--font-ui); font-weight:700; }
+.ep-navitem .nb { background:var(--red); color:#fff; }
+.ep-sect { border-top:0; font-size:11px; letter-spacing:.08em; color:var(--muted); padding:18px 10px 8px; margin:0; }
+
+/* barra inferior: fundo cobre a área segura; no escuro usa superfície; o círculo ativo ganha "recorte" */
+.ep-tabbar { background:var(--colBg); }
+.ep-root.dark .ep-tabbar { background:var(--card); }
+.ep-tab.on .ic { border:5px solid var(--bg); box-sizing:content-box; }
+.ep-tab .ic svg { display:block; }
+
+/* faixa de dica: no escuro fica em superfície escura (não branca) */
+.ep-root.dark .ep-banner { background:var(--tile); color:var(--ink); }
