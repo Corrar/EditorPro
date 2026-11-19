@@ -6,6 +6,8 @@
    - 'ep:generate-captions'  shell (painel Legendas)  -> ai (transcrição)
    - 'ep:attach-files'       ai (chat) / qualquer     -> shell (ingestão de mídia)
    - 'ep:toast'              qualquer                 -> shell (toasts)
+   - 'ep:open-ai-popup'      timeline/qualquer        -> shell (abre o pop-up da IA no celular / chat no desktop)
+   - 'ep:open-tool'          timeline/qualquer        -> shell (abre uma ferramenta: media, audio, text…)
    ===================================================================== */
 import type { MediaRole } from './types';
 
@@ -16,6 +18,8 @@ export interface EpEvents {
   'ep:generate-captions': { language?: string };
   'ep:attach-files': { files: File[]; role?: MediaRole };
   'ep:toast': { text: string; kind?: 'info' | 'ok' | 'error' };
+  'ep:open-ai-popup': { prompt?: string };
+  'ep:open-tool': { tool: string };
 }
 
 export function emit<K extends keyof EpEvents>(name: K, detail: EpEvents[K]): void {

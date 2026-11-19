@@ -308,6 +308,8 @@ export interface ShapeClip extends BaseClip, VisualExtras {
   stroke?: string;
   strokeWidth?: number;
   cornerRadius?: number;
+  /** (aditivo, biblioteca) proporção largura/altura da forma; sem isso o engine usa a natural (barras de lower third, pílulas de CTA) */
+  aspect?: number;
   transform: Transform;
   keyframes?: Keyframe[];
 }
@@ -423,6 +425,8 @@ export interface Project {
   /** fundo quando a mídia não preenche o quadro (CapCut: "Tela de fundo") */
   canvas?: { type: 'color' | 'blur' | 'image'; color?: string; blur?: number; assetId?: Id };
   markers?: Marker[];
+  /** tempo do quadro usado como capa/thumbnail (CapCut: "Capa") */
+  coverTime?: Seconds;
   style?: StyleProfile;
   createdAt: number;
   updatedAt: number;
