@@ -25,8 +25,8 @@ interface Item { id: string; label: string; icon: IconName; run: () => void; on?
 
 const toast = (text: string, kind: 'ok' | 'error' | 'info' = 'info') => emit('ep:toast', { text, kind });
 
-export default function MobileToolbar({ onTool, onChat, onMenu, tool, toolOpen }: {
-  onTool: (t: ToolId) => void; onChat: (open: boolean) => void; onMenu: () => void; tool: ToolId; toolOpen: boolean;
+export default function MobileToolbar({ onTool, onAi, onMenu, tool, toolOpen }: {
+  onTool: (t: ToolId) => void; onAi: () => void; onMenu: () => void; tool: ToolId; toolOpen: boolean;
 }) {
   const selId = useEditor((s) => s.selection[0]);
   const clip = useEditor((s) => (s.selection[0] ? findClip(s.project, s.selection[0])?.clip ?? null : null));
@@ -47,7 +47,7 @@ export default function MobileToolbar({ onTool, onChat, onMenu, tool, toolOpen }
     setEdges({ l: el.scrollLeft > 4, r: el.scrollLeft + el.clientWidth < el.scrollWidth - 4 });
   };
 
-  const openPanel = (t: ToolId) => { onChat(false); onTool(t); };
+  const openPanel = (t: ToolId) => onTool(t);
   const isOn = (t: ToolId) => toolOpen && tool === t;
 
   const addPip = async (f: File | undefined) => {
@@ -84,6 +84,7 @@ export default function MobileToolbar({ onTool, onChat, onMenu, tool, toolOpen }
 
   /* ---------- listas ---------- */
   const root: Item[] = [
+    { id: 'ai', label: 'IA', icon: 'ai', run: onAi, accent: true },
     { id: 'edit', label: 'Editar', icon: 'edit', run: firstVideoAtPlayhead },
     { id: 'media', label: 'Mídia', icon: 'media', run: () => openPanel('media'), on: isOn('media') },
     { id: 'audio', label: 'Áudio', icon: 'audio', run: () => setLevel2('audio') },
@@ -213,17 +214,12 @@ export default function MobileToolbar({ onTool, onChat, onMenu, tool, toolOpen }
         )}
         <div className={`ep-mtscroll${edges.l ? ' fl' : ''}${edges.r ? ' fr' : ''}`} ref={scroller} onScroll={updateEdges} key={mode}>
           {items.map((it) => (
-            <button key={it.id} type="button" className={`ep-mtitem${it.on ? ' on' : ''}${it.danger ? ' danger' : ''}`} onClick={it.run}>
+            <button key={it.id} type="button" className={`ep-mtitem${it.on ? ' on' : ''}${it.danger ? ' danger' : ''}${it.accent ? ' accent' : ''}`} onClick={it.run}>
               <span className="ic"><Icon name={it.icon} size={24} /></span>
               <span className="lb">{it.label}</span>
             </button>
           ))}
         </div>
-        {!back && (
-          <button type="button" className="ep-mtai" onClick={() => onChat(true)} aria-label="Assistente IA">
-            <Icon name="ai" size={22} /><span>IA</span>
-          </button>
-        )}
       </nav>
       <input ref={pipInput} type="file" hidden accept="video/*,image/*" onChange={(e) => { void addPip(e.target.files?.[0]); e.target.value = ''; }} />
       {sheet && clip && <ToolSheet kind={sheet} clip={clip} onClose={() => setSheet(null)} />}

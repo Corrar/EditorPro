@@ -7,7 +7,9 @@ import { useSaveStatus } from '@/lib/persist';
 import { useEditor } from '@/lib/store';
 import type { AspectRatio } from '@/lib/types';
 import { formatTime } from '@/lib/util';
-import { IconArrowLeft, IconExport, IconRedo, IconUndo } from './icons';
+import { openExport } from './exportPref';
+import { IconClose, IconExport, IconRedo, IconUndo } from './icons';
+import ResolutionPill from './ResolutionPill';
 
 const ASPECTS: AspectRatio[] = ['9:16', '16:9', '1:1', '4:5'];
 
@@ -60,7 +62,7 @@ export default function Header({ onHome }: { onHome?: () => void }) {
   return (
     <header className="ep-header">
       <div className="ep-hmain">
-        {onHome && <button type="button" className="ep-hback" onClick={onHome} aria-label="Voltar ao início" title="Início"><IconArrowLeft size={22} /></button>}
+        {onHome && <button type="button" className="ep-hback" onClick={onHome} aria-label="Fechar e voltar ao início" title="Início"><IconClose size={22} /></button>}
         <ProjectName />
         <div className="ep-stats">
           <span className="ep-statpill"><span className="dot" style={{ background: 'var(--green)' }} /><b className="mono">{formatTime(duration)}</b><span>duração</span></span>
@@ -86,7 +88,8 @@ export default function Header({ onHome }: { onHome?: () => void }) {
         <select className="ep-select ep-aspect-sel" value={aspect} aria-label="Formato" onChange={(e) => dispatch({ op: 'set_aspect', aspect: e.target.value as AspectRatio })}>
           {ASPECTS.map((a) => <option key={a} value={a}>{a}</option>)}
         </select>
-        <button type="button" className="ep-btn primary ep-exportbtn" onClick={() => emit('ep:open-export', {})}>
+        <ResolutionPill />
+        <button type="button" className="ep-btn primary ep-exportbtn" onClick={() => (window.matchMedia('(max-width: 899px)').matches ? openExport() : emit('ep:open-export', {}))}>
           <IconExport size={16} /><span>Exportar</span>
         </button>
       </div>

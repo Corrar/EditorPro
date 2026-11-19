@@ -10,7 +10,8 @@
 import type { MediaRole } from './types';
 
 export interface EpEvents {
-  'ep:open-export': Record<string, never>;
+  /** quality/fps opcionais = padrão escolhido na pílula de resolução do celular (v2.3) */
+  'ep:open-export': { quality?: 'draft' | 'hd' | 'fhd' | '4k' | 'full'; fps?: number };
   'ep:start-ai-edit': { brief: string };
   'ep:generate-captions': { language?: string };
   'ep:attach-files': { files: File[]; role?: MediaRole };

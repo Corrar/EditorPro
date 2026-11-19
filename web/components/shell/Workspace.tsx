@@ -55,7 +55,7 @@ export default function Workspace({ tool, sideOpen, onCloseSide, chatOpen, onCha
 
   // altura padrão do preview no celular: proporcional ao formato, limitada
   const { width: aw, height: ah } = ASPECT_SIZES[aspect];
-  const pvDefault = typeof window !== 'undefined' ? clampPv(Math.min(window.innerHeight * 0.5, (window.innerWidth - 16) * (ah / aw))) : 360;
+  const pvDefault = typeof window !== 'undefined' ? clampPv(Math.min(window.innerHeight * (window.innerWidth < 900 ? 0.53 : 0.5), (window.innerWidth - 16) * (ah / aw))) : 360;
 
   const save = (k: string, h: number) => { try { localStorage.setItem(k, String(h)); } catch {} };
 
