@@ -102,7 +102,8 @@ export async function makePreviewProxy(file: Blob, opts: ProxyOptions = {}): Pro
 
   let failure: unknown = null;
   const encoder = new VideoEncoder({
-    output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+    // erro do muxer encerra o laço (antes: pageerror por quadro e o laço seguia à toa)
+    output: (chunk, meta) => { try { muxer.addVideoChunk(chunk, meta); } catch (e) { failure = e; } },
     error: (e) => { failure = e; },
   });
   encoder.configure(encCfg);
@@ -110,6 +111,9 @@ export async function makePreviewProxy(file: Blob, opts: ProxyOptions = {}): Pro
   let encoded = 0;
   const decoder = new VideoDecoder({
     output: (frame) => {
+      // pré-rolagem escondida pelo edit list (corte sem reencode): decodifica (é referência) mas não entra no proxy.
+      // O 1º quadro ≥ 0 sai como chave (encoded só conta os codificados) e leva o decoderConfig.
+      if (frame.timestamp < 0) { frame.close(); return; }
       try {
         cx.save();
         cx.translate(out.w / 2, out.h / 2);

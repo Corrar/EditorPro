@@ -10,7 +10,7 @@ mkdir -p "$T"; cp "$HERE/entry.txt" "$T/entry.ts"
 echo '<!doctype html><script src="epx.js"></script>' > "$T/index.html"
 cd "$T"
 [ -f rot90.mp4 ] || { ffmpeg -y -loglevel error -f lavfi -i testsrc2=duration=6:size=1280x720:rate=30 -c:v libx264 -pix_fmt yuv420p base.mp4; ffmpeg -y -loglevel error -display_rotation 90 -i base.mp4 -c copy rot90.mp4; }
-[ -f preroll.mp4 ] || { ffmpeg -y -loglevel error -f lavfi -i testsrc2=duration=8:size=1280x720:rate=30 -f lavfi -i sine=frequency=440:duration=8 -c:v libx264 -g 90 -pix_fmt yuv420p -c:a aac -shortest gop.mp4; ffmpeg -y -loglevel error -ss 1.5 -i gop.mp4 -c copy -avoid_negative_ts make_zero preroll.mp4 || cp gop.mp4 preroll.mp4; }
+[ -f preroll.mp4 ] || { ffmpeg -y -loglevel error -f lavfi -i testsrc2=duration=8:size=1280x720:rate=30 -f lavfi -i sine=frequency=440:duration=8 -c:v libx264 -g 90 -pix_fmt yuv420p -c:a aac -shortest gop.mp4; ffmpeg -y -loglevel error -ss 1.5 -i gop.mp4 -c copy preroll.mp4; }
 [ -f sine.mp4 ] || ffmpeg -y -loglevel error -f lavfi -i color=c=gray:s=320x240:r=30:d=6 -f lavfi -i sine=frequency=440:duration=6 -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest sine.mp4
 python3 -m http.server 3200 >/dev/null 2>&1 & SRV=$!; trap 'kill $SRV' EXIT; sleep 1
 for t in "$HERE"/t_*.js; do echo "== $(basename "$t")"; NODE_PATH=$(npm root -g) node "$HERE/run.js" "$t" "$1"; done
