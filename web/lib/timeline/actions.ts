@@ -11,7 +11,7 @@ import { useEditor } from '../store';
 import { emit } from '../events';
 import { formatTime, uid } from '../util';
 import {
-  copyItems, deleteOps, detachAudioOps, duplicateOps, mainTrackId, packOps, pasteOps, speedOps, splitOps,
+  copyItems, deleteOps, detachAudioOps, duplicateWithGroups, mainTrackId, packOps, pasteOps, speedOps, splitOps,
 } from './edit';
 import { useTimelineUi } from './ui';
 import { captureFrame } from '../media/tools';
@@ -66,7 +66,7 @@ export function removeClips(ids?: Id[], ripple = false) {
 
 export function duplicateClips(ids?: Id[]) {
   const st = useEditor.getState();
-  const { ops, newIds } = duplicateOps(st.project, ids ?? st.selection);
+  const { ops, newIds } = duplicateWithGroups(st.project, ids ?? st.selection);
   if (!ops.length) return;
   commit(ops);
   st.select(newIds);
