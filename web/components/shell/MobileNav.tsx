@@ -1,6 +1,6 @@
 'use client';
 /* celular (≤899px): barra inferior .ep-tabbar (Início, Mídia, Texto/Editar, IA, Menu — ativo em
-   círculo laranja) + Menu em bottom-sheet .ep-sheet2 (busca, card de IA, acesso rápido, seções) */
+   círculo laranja; no editor só fica na paisagem — em retrato quem manda é a MobileToolbar) + Menu em bottom-sheet .ep-sheet2 (busca, card de IA, acesso rápido, seções) */
 import { useEffect, useState } from 'react';
 import { useInstallPrompt } from '@/lib/pwa';
 import { useEditor } from '@/lib/store';
@@ -10,8 +10,16 @@ import type { NavProps } from './Sidebar';
 import { logout } from './session';
 import { TOOLS, toolDef, type ToolId } from './tools';
 
-export default function MobileNav({ chatOpen, onChat, ...p }: NavProps & { chatOpen: boolean; onChat: (open: boolean) => void }) {
-  const [open, setOpen] = useState(false);
+export default function MobileNav({ chatOpen, onChat, menuOpen, onMenuOpen, ...p }: NavProps & {
+  chatOpen: boolean; onChat: (open: boolean) => void; menuOpen?: boolean; onMenuOpen?: (open: boolean) => void;
+}) {
+  // estado do menu pode vir de fora (no editor, o item "Mais" da barra de ferramentas também abre)
+  const [ownOpen, setOwnOpen] = useState(false);
+  const open = menuOpen ?? ownOpen;
+  const setOpen = (v: boolean | ((o: boolean) => boolean)) => {
+    const next = typeof v === 'function' ? v(open) : v;
+    if (onMenuOpen) onMenuOpen(next); else setOwnOpen(next);
+  };
   const [q, setQ] = useState('');
   const { canInstall, install, iosHint } = useInstallPrompt();
   const hasSel = useEditor((s) => s.selection.length > 0);
