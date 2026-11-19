@@ -140,8 +140,10 @@ export function applyMask(layerCtx: Ctx, mask: Mask, W: number, H: number, local
     ctx.save();
     ctx.shadowColor = '#fff';
     ctx.shadowBlur = feather * 2;
-    ctx.shadowOffsetX = W * 3;
-    ctx.translate(-W * 3, 0);
+    // deslocamento maior que qualquer forma ('line'/'mirror' vão até 4(W+H)·√2): só a sombra cai no quadro
+    const off = (W + H) * 12;
+    ctx.shadowOffsetX = off;
+    ctx.translate(-off, 0);
     paintMaskShape(ctx, m, W, H);
     ctx.restore();
   } else paintMaskShape(ctx, m, W, H);
