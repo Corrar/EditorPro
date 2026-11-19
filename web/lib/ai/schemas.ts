@@ -3,6 +3,7 @@
    São PERMISSIVOS de propósito (op como enum + campos opcionais): guiam o
    modelo; a validação real é validate.ts/sanitize.ts.
    ===================================================================== */
+import { LIBRARY_MACROS } from './library';
 import { z } from 'zod';
 import {
   ASPECTS, AUDIO_EFFECTS, BLEND_MODES, CAPTION_PRESETS, CLIP_ANIMATIONS, COLOR_PRESETS, EASINGS, EFFECT_KINDS, FILTER_KINDS, FIT_MODES,
@@ -122,7 +123,7 @@ const word = z.object({ start: z.number(), end: z.number(), text: z.string() });
 const segment = z.object({ start: z.number(), end: z.number(), text: z.string(), words: z.array(word).optional() });
 
 export const EditOpSchema = z.object({
-  op: z.enum(OP_KINDS as [string, ...string[]]),
+  op: z.enum([...OP_KINDS, ...LIBRARY_MACROS] as string[] as [string, ...string[]]),
   explain: z.string().describe('frase curta em PT-BR mostrada ao usuário enquanto aplica'),
   clipId: z.string().optional(),
   trackId: z.string().optional(),
@@ -150,6 +151,18 @@ export const EditOpSchema = z.object({
   style: captionStyle.optional(),
   segments: z.array(segment).optional(),
   track: z.object({ id: z.string().optional(), kind: z.enum(TRACK_KINDS as [string, ...string[]]), name: z.string().optional() }).optional(),
+  // ---- biblioteca profissional (macro-ops) ----
+  templateId: z.string().optional().describe('apply_template: id do modelo'),
+  values: z.array(z.object({ key: z.string(), value: z.string() })).optional().describe('apply_template: parâmetros do modelo'),
+  duration: z.number().optional(),
+  brand: z.object({ primary: z.string().optional(), secondary: z.string().optional(), text: z.string().optional() }).optional(),
+  presetId: z.string().optional().describe('apply_caption_preset: id do estilo de legenda'),
+  lookId: z.string().optional().describe('apply_look: id do look'),
+  intensity: z.number().optional().describe('apply_look: 0..1'),
+  clipIds: z.array(z.string()).optional(),
+  sfxId: z.string().optional().describe('add_sfx: id do efeito sonoro'),
+  atCuts: z.boolean().optional().describe('add_sfx: um em cada corte/transição da trilha principal'),
+  volume: z.number().optional(),
 });
 
 export const EditResponseSchema = z.object({

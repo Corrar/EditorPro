@@ -4,7 +4,7 @@
    AO VIVO (store.applyLive). Sem chave: MODO DEMO (local, sem custo).
    ===================================================================== */
 import type { CaptionSegment, ChatContext, Clip, Id, MediaAsset, Project, StyleProfile } from '../types';
-import { clipEnd, projectDuration, type EditOp } from '../ops';
+import { applyOps, clipEnd, projectDuration, type EditOp } from '../ops';
 import { makeAudioClip, makeImageClip, makeVideoClip } from '../defaults';
 import { useEditor } from '../store';
 import { AIClientError, analyzeReference, getStatus, requestEdit, translateSegments, type AIStatus, type EditFrame } from './client';
@@ -17,6 +17,20 @@ import { chooseWhisper, transcribeMedia } from './whisper';
 import { beatSyncOps, fillerOps, reframeOps } from './features';
 import { trackSubject } from './reframe';
 import { distributeWords } from './sanitize';
+import { materializeSfx, sanitizeSfxRequests, type SfxRequest } from './library';
+
+/** acrescenta às ops os AudioClips dos efeitos sonoros pedidos (gera o WAV no aparelho) */
+async function withSfx(ops: EditOp[], sfx: SfxRequest[] | undefined, onStatus?: (s: string) => void): Promise<EditOp[]> {
+  const reqs = sanitizeSfxRequests(sfx, Math.max(projectDuration(store().project), 1) + 600);
+  if (!reqs.length) return ops;
+  onStatus?.('Gerando efeitos sonoros…');
+  try {
+    const after = applyOps(store().project, ops).project;
+    return [...ops, ...(await materializeSfx(reqs, after, (p, o) => applyOps(p, o).project))];
+  } catch {
+    return ops; // sem WebAudio (ex.: navegador antigo): segue sem os sons
+  }
+}
 
 export interface AskOption { id: string; label: string }
 
@@ -255,7 +269,8 @@ export async function runFirstEdit(opts: PipelineOptions & { brief: string }): P
         project: store().project, assets: store().assets, messages: store().messages, mode: 'first', frames,
         userText: brief || 'Edite este vídeo de forma profissional.',
       });
-      const { ops } = sanitizeOps(res.ops, store().project, store().assets);
+      const san = sanitizeOps(res.ops, store().project, store().assets);
+      const ops = await withSfx(san.ops, [...(res.sfx ?? []), ...san.sfx], opts.onStatus);
       opts.onStatus?.('Editando…');
       const appliedIds = ops.length ? await apply(ops) : [];
       return { reply: res.reply, ops, appliedIds, provider: 'anthropic' as const, warnings };
@@ -347,7 +362,8 @@ async function demoChat(text: string, apply: NonNullable<PipelineOptions['apply'
     store().undo();
     return { reply: r.reply, ops: [], appliedIds: [], provider: 'demo', undo: true, warnings: [] };
   }
-  const { ops } = sanitizeOps(r.ops, store().project, store().assets);
+  const san = sanitizeOps(r.ops, store().project, store().assets);
+  const ops = await withSfx(san.ops, san.sfx, opts.onStatus);
   const appliedIds = ops.length ? await apply(ops) : [];
   return { reply: r.reply, ops, appliedIds, provider: 'demo', warnings: [] };
 }
@@ -358,7 +374,8 @@ async function claudeChat(text: string, apply: NonNullable<PipelineOptions['appl
     const s = store();
     const frames = await sourceFrames(sourceAssets(s.assets), false, 6);
     const res = await requestEdit({ project: s.project, assets: s.assets, messages: s.messages, userText: text, mode: 'chat', frames, context: opts.context });
-    const { ops } = sanitizeOps(res.ops, store().project, store().assets);
+    const san = sanitizeOps(res.ops, store().project, store().assets);
+    const ops = await withSfx(san.ops, [...(res.sfx ?? []), ...san.sfx], opts.onStatus);
     if (ops.length) opts.onStatus?.('Editando…');
     const appliedIds = ops.length ? await apply(ops) : [];
     return { reply: res.reply, ops, appliedIds, provider: 'anthropic', warnings: [] };
@@ -366,7 +383,8 @@ async function claudeChat(text: string, apply: NonNullable<PipelineOptions['appl
     // IA indisponível: tenta o intérprete local antes de desistir
     const local = chatIntent(text, { project: store().project, assets: store().assets, target: opts.context });
     if (local.ops.length) {
-      const { ops } = sanitizeOps(local.ops, store().project, store().assets);
+      const san = sanitizeOps(local.ops, store().project, store().assets);
+      const ops = await withSfx(san.ops, san.sfx, opts.onStatus);
       const appliedIds = ops.length ? await apply(ops) : [];
       return { reply: `${local.reply} (A IA falhou: ${errText(e)} — usei o modo local.)`, ops, appliedIds, provider: 'demo', warnings: [errText(e)] };
     }
@@ -532,13 +550,16 @@ export async function applyComments(opts: PipelineOptions & { markerIds?: Id[] }
 
   return withSingleUndo(async () => {
     let ops: EditOp[] = [];
+    const sfx: SfxRequest[] = [];
     const replies = new Map<string, string>();
     let reply = '';
     if (status.configured) {
       opts.onStatus?.(`Lendo ${pending.length} comentário${pending.length > 1 ? 's' : ''}…`);
       const s = store();
       const res = await requestEdit({ project: s.project, assets: s.assets, messages: s.messages, mode: 'comments', frames: await sourceFrames(sourceAssets(s.assets), false, 6), userText: `Aplique estes comentários de revisão:\n${list}` });
-      ops = sanitizeOps(res.ops, store().project, store().assets).ops;
+      const san = sanitizeOps(res.ops, store().project, store().assets);
+      ops = san.ops;
+      sfx.push(...(res.sfx ?? []), ...san.sfx);
       for (const c of res.comments ?? []) replies.set(c.markerId, c.reply);
       reply = res.reply;
     } else {
@@ -549,6 +570,7 @@ export async function applyComments(opts: PipelineOptions & { markerIds?: Id[] }
         const r = chatIntent(m.label ?? '', { project: p, assets: store().assets, target });
         const clean = sanitizeOps(r.ops, p, store().assets);
         ops.push(...clean.ops);
+        sfx.push(...clean.sfx);
         p = clean.project;
         replies.set(m.id, clean.ops.length ? r.reply : 'Não entendi este no modo demonstração.');
       }
@@ -561,7 +583,7 @@ export async function applyComments(opts: PipelineOptions & { markerIds?: Id[] }
       if (!status.configured && replies.get(m.id)?.startsWith('Não entendi')) continue;
       ops.push({ op: 'update_marker', markerId: m.id, patch: { resolved: true }, explain: `Comentário em ${f(m.t)} s resolvido` });
     }
-    const clean = sanitizeOps(ops, store().project, store().assets).ops;
+    const clean = await withSfx(sanitizeOps(ops, store().project, store().assets).ops, sfx, opts.onStatus);
     opts.onStatus?.('Editando…');
     const appliedIds = clean.length ? await apply(clean) : [];
     const lines = pending.map((m) => `• ${f(m.t)} s — "${m.label ?? ''}": ${replies.get(m.id) ?? 'feito.'}`);
