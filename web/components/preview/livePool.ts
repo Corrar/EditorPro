@@ -553,7 +553,7 @@ export class LiveMediaPool implements MediaSources {
         const el = els[i];
         const g = nativeGeometry(l.clip, t, W, H, el.videoWidth, el.videoHeight, l.tv);
         const st = el.style;
-        const w = `${g.w.toFixed(2)}px`, h = `${g.h.toFixed(2)}px`, tr = geometryTransform(g);
+        const w = `${(g.bw ?? g.w).toFixed(2)}px`, h = `${(g.bh ?? g.h).toFixed(2)}px`, tr = geometryTransform(g);
         const op = l.opacity.toFixed(3), fl = layerFilter(l, W, H), cp = geometryClip(g), z = String(l.z);
         if (st.width !== w) st.width = w;
         if (st.height !== h) st.height = h;
