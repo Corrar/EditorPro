@@ -53,7 +53,11 @@ export class LiveMediaPool implements MediaSources {
   /** último play()/seek de cada elemento (ms) — carência antes de corrigir desvio com seek */
   private kicks = new WeakMap<AV, number>();
   /** contadores p/ o painel "Mostrar desempenho" */
-  readonly stats = { waiting: 0, seeks: 0 };
+  readonly stats = { waiting: 0, seeks: 0, errors: 0 };
+  /** fontes que este aparelho não decodifica (ex.: HEVC/HDR em Android sem suporte) */
+  readonly unplayable = new Set<string>();
+  /** avisado quando uma fonte falha (o Preview mostra um aviso uma vez por asset) */
+  onUnplayable: (assetId: string, usingProxy: boolean) => void = () => {};
   /** último quadro apresentado (requestVideoFrameCallback) e último seeked/loadeddata, por elemento */
   private presented = new WeakMap<AV, number>();
   private settledAt = new WeakMap<AV, number>();
@@ -123,6 +127,16 @@ export class LiveMediaPool implements MediaSources {
     }
     el.addEventListener('seeked', ping);
     el.addEventListener('waiting', () => { this.stats.waiting++; });
+    el.addEventListener('error', () => {
+      const err = el.error;
+      // só "formato não suportado"/decodificação; aborto por troca de src não conta
+      if (!err || (err.code !== 3 && err.code !== 4) || !el.getAttribute('src')) return;
+      this.stats.errors++;
+      const url = el.dataset.url ?? '';
+      if (this.unplayable.has(url)) return;
+      this.unplayable.add(url);
+      this.onUnplayable(asset.id, !!(asset as MediaAsset & { proxyUrl?: string }).proxyUrl && url === (asset as MediaAsset & { proxyUrl?: string }).proxyUrl);
+    });
     el.addEventListener('seeking', () => { this.stats.seeks++; });
     el.addEventListener('loadeddata', ping);
     this.host?.appendChild(el);

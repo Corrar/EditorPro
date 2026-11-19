@@ -205,6 +205,20 @@ export default function Preview() {
     const pool = poolRef.current ?? (poolRef.current = new LiveMediaPool());
     if (hostRef.current) pool.attach(hostRef.current);
     pool.onFrame = () => { if (!useEditor.getState().playing) requestStill(); };
+    // vídeo que o aparelho não decodifica (HEVC/HDR sem suporte): avisa em vez de ficar preto em silêncio
+    const warned = new Set<string>();
+    pool.onUnplayable = (assetId) => {
+      if (warned.has(assetId)) return;
+      warned.add(assetId);
+      const a = useEditor.getState().assets[assetId];
+      const st = (a as { proxyStatus?: string } | undefined)?.proxyStatus;
+      emit('ep:toast', {
+        kind: 'error',
+        text: st === 'pending'
+          ? `Este aparelho não reproduz "${a?.name ?? 'o vídeo'}" no formato original. Gerando uma versão compatível…`
+          : `Este aparelho não consegue reproduzir "${a?.name ?? 'o vídeo'}" (formato como HEVC/HDR). Grave em H.264 ("Mais compatível" na câmera) ou converta antes de enviar.`,
+      });
+    };
     // máscara de "remover fundo" ficou pronta: redesenha o quadro parado
     segEvents.onReady = () => { if (!useEditor.getState().playing) requestStill(); };
     // fonte/emoji da biblioteca carregou: redesenha
