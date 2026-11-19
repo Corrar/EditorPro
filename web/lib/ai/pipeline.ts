@@ -146,9 +146,12 @@ export async function sourceFrames(sources: MediaAsset[], allowSampling: boolean
 
 /* ---------- transcrição (Whisper no navegador) ---------- */
 
+/** mídias já transcritas (ou tentadas) nesta sessão — comandos de chat não retranscrevem */
+const triedTranscription = new Set<string>();
+
 /** transcreve as fontes com Whisper e converte p/ tempos da timeline. null = pulada/falhou/desligada. */
 async function whisperCaptions(sources: MediaAsset[], language: string, opts: PipelineOptions, warnings: string[]): Promise<CaptionSegment[] | null> {
-  const media = sources.filter((a) => (a.kind === 'video' || a.kind === 'audio') && a.url);
+  const media = sources.filter((a) => (a.kind === 'video' || a.kind === 'audio') && a.url && !triedTranscription.has(`${a.id}|${a.url}`));
   if (!media.length || opts.whisper === false) return null;
   const dev = deviceProfile();
   const total = media.reduce((n, a) => n + (a.duration || 0), 0);
@@ -168,6 +171,7 @@ async function whisperCaptions(sources: MediaAsset[], language: string, opts: Pi
   try {
     const segs: CaptionSegment[] = [];
     for (const a of media) {
+      triedTranscription.add(`${a.id}|${a.url}`); // não retranscreve a mesma mídia nesta sessão (deu certo, vazio ou falhou)
       const mediaSegs = await transcribeMedia(a, { language, choice, signal, onStatus: (t, f) => opts.onStatus?.(media.length > 1 ? `${t} ("${a.name}")` : t, f) });
       segs.push(...captionsMediaToTimeline(store().project, a.id, mediaSegs));
     }
@@ -302,6 +306,8 @@ export async function generateCaptions(opts: PipelineOptions & { language?: stri
   const used = sourceAssets(store().assets).filter((a) => a.kind !== 'image' && onTimeline(store().project).has(a.id));
   if (!used.length) throw new AIClientError('Coloque o vídeo na timeline antes de gerar legendas.', 400, 'no_source');
   const warnings: string[] = [];
+  // pedido explícito do usuário: pode tentar de novo
+  for (const a of used) triedTranscription.delete(`${a.id}|${a.url}`);
 
   let segs = await whisperCaptions(used, language, opts, warnings);
   let real = !!segs;
@@ -377,9 +383,15 @@ export async function chatEdit(text: string, opts: PipelineOptions = {}): Promis
       const pre = prelimOps(store().project, store().assets, '');
       if (pre.length) await apply(pre, { delayMs: 260 });
     }
-    const local = await localFeature(text, apply, opts, status);
-    if (local) return local;
-    return status.configured ? claudeChat(text, apply, opts) : demoChat(text, apply, opts);
+    const res = (await localFeature(text, apply, opts, status)) ?? (status.configured ? await claudeChat(text, apply, opts) : await demoChat(text, apply, opts));
+    // pedido feito apontando para um comentário de revisão: se editou, o comentário fica resolvido
+    const mid = opts.context?.markerId;
+    const cm = mid ? store().project.markers?.find((m) => m.id === mid && m.kind === 'comment' && !m.resolved) : undefined;
+    if (cm && res.appliedIds.length) {
+      const ids = await apply([{ op: 'update_marker', markerId: cm.id, patch: { resolved: true }, explain: 'Comentário resolvido' }], { delayMs: 150 });
+      res.appliedIds.push(...ids);
+    }
+    return res;
   });
 }
 
@@ -400,7 +412,14 @@ const LANGS: [RegExp, string, string][] = [
 
 /** garante legendas com palavras (Whisper) antes de recursos que dependem da fala */
 async function ensureWords(opts: PipelineOptions, apply: NonNullable<PipelineOptions['apply']>, warnings: string[]): Promise<boolean> {
-  if (store().project.captions.segments.some((s) => s.words?.some((w) => w.id))) return true;
+  const segsNow = store().project.captions.segments;
+  if (segsNow.some((s) => s.words?.some((w) => w.id))) return true;
+  // já há legendas (sem ids de palavra): reaproveita, só numerando as palavras — nunca retranscreve
+  if (segsNow.length) {
+    const { ops } = sanitizeOps([{ op: 'set_captions', segments: segsNow, language: store().project.captions.language, explain: 'Preparando as palavras das legendas' }], store().project, store().assets);
+    if (ops.length) await apply(ops, { delayMs: 120 });
+    return true;
+  }
   const used = sourceAssets(store().assets).filter((a) => a.kind !== 'image' && onTimeline(store().project).has(a.id));
   const lang = store().project.captions.language || 'pt-BR';
   const segs = await whisperCaptions(used, lang, opts, warnings);
@@ -497,16 +516,16 @@ async function localFeature(text: string, apply: NonNullable<PipelineOptions['ap
   }
 
   // recursos que dependem das palavras: transcreve antes, depois segue normalmente
-  if (RE.needsWords.test(t)) await ensureWords(opts, apply, warnings);
+  if (RE.needsWords.test(t) && !/["“”]/.test(text) && !store().project.captions.segments.length) await ensureWords(opts, apply, warnings);
   return null;
 }
 
 /* ---------- comentários de revisão ---------- */
 
-export async function applyComments(opts: PipelineOptions = {}): Promise<PipelineResult> {
+export async function applyComments(opts: PipelineOptions & { markerIds?: Id[] } = {}): Promise<PipelineResult> {
   const apply = opts.apply ?? defaultApply;
   const status = await getStatus();
-  const pending = (store().project.markers ?? []).filter((m) => m.kind === 'comment' && !m.resolved);
+  const pending = (store().project.markers ?? []).filter((m) => m.kind === 'comment' && !m.resolved && (!opts.markerIds || opts.markerIds.includes(m.id)));
   if (!pending.length) return { reply: 'Não há comentários pendentes. Adicione comentários na timeline (marcadores de comentário) e toque em "Aplicar comentários".', ops: [], appliedIds: [], provider: status.provider, warnings: [] };
   const f = (n: number) => n.toFixed(1);
   const list = pending.map((m, i) => `${i + 1}. [${m.id}] em ${f(m.t)}${m.end !== undefined ? `–${f(m.end)}` : ''} s: "${m.label ?? ''}"`).join('\n');

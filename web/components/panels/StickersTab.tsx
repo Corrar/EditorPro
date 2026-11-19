@@ -36,6 +36,7 @@ function useAddOverlay() {
     const st = useEditor.getState();
     dispatch({ op: 'add_clip', trackId: targetTrackId(st.project, 'overlay'), clip, explain: `Adicionando ${label}` });
     select([clip.id]);
+    st.setPlayhead(clip.start + Math.min(0.5, clip.duration / 2)); // depois da entrada: já aparece no preview
   };
 }
 

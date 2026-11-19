@@ -2,7 +2,8 @@
 
 > Editor de vídeo com IA: o usuário descreve o vídeo, envia material + vídeo-exemplo e a
 > IA edita **ao vivo** (timeline/preview mudando passo a passo), com chat para correções.
-> Design herdado do **Radar Local** (laranja `#D9641E`, marrom quente no escuro, Poppins).
+> Design v2 "app de banco premium" (pedido do Bruno: nível PicPay) sobre a base do Radar Local:
+> laranja `#F2681F`, blocos cinza arredondados, Plus Jakarta Sans — ver `docs/superpowers/specs/2026-11-19-design-v2.md`.
 > Spec: `docs/superpowers/specs/2026-11-18-editorpro-design.md`.
 > **Regra do Bruno:** ao fim de cada fase, pare e confira o plano (checkpoint).
 

@@ -51,7 +51,10 @@ function describeContext(c: unknown, p: Project): string {
     const s = p.captions.segments.find((x) => x.id === c.segmentId);
     parts.push(`legenda ${c.segmentId}${s ? ` ("${s.text.slice(0, 80)}", ${f(s.start)}–${f(s.end)} s)` : ''}`);
   }
-  if (typeof c.markerId === 'string') parts.push(`marcador ${c.markerId}`);
+  if (typeof c.markerId === 'string') {
+    const m = p.markers?.find((x) => x.id === c.markerId);
+    parts.push(m ? `${m.kind === 'comment' ? 'comentário de revisão' : 'marcador'} ${m.id} em ${f(m.t)}${m.end !== undefined ? `–${f(m.end)}` : ''} s${m.label ? `: "${m.label.slice(0, 160)}"` : ''}${m.kind === 'comment' ? ' (ao atender, marque com update_marker {"resolved": true})' : ''}` : `marcador ${c.markerId}`);
+  }
   const label = str(c.label, 120);
   return parts.length ? parts.join(' / ') : label ?? '';
 }

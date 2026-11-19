@@ -145,3 +145,7 @@
   .ep-ch-ctx button { width:32px; height:32px; }
   .ep-ch-comments { min-height:44px; font-size:13.5px; }
 }
+.ep-ch-applyone { align-self:flex-start; display:inline-flex; align-items:center; gap:6px; border:0; background:var(--green); color:#fff; border-radius:999px; padding:7px 13px; font:inherit; font-size:12.5px; font-weight:700; cursor:pointer; box-shadow:0 4px 12px rgba(217,100,30,.25); }
+.ep-root.dark .ep-ch-applyone { background:#A84D15; }
+.ep-ch-applyone:disabled { opacity:.5; cursor:default; }
+@media (pointer: coarse) { .ep-ch-applyone { min-height:44px; font-size:13.5px; padding:9px 16px; } }

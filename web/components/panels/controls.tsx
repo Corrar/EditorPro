@@ -49,6 +49,8 @@ export function Slider({
         style={{ ['--p' as string]: `${Math.max(0, Math.min(100, pct))}%` }}
         onChange={(e) => onChange(Number(e.target.value), g.begin())}
         onPointerUp={g.end} onKeyUp={g.end} onBlur={g.end}
+        // setas/Home/End ajustam o valor aqui — não deixam os atalhos globais da timeline moverem o playhead
+        onKeyDown={(e) => { if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(e.key)) e.stopPropagation(); }}
       />
     </label>
   );
