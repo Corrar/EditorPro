@@ -244,3 +244,13 @@
 .ep-mdl-chips .ep-ch-chip.ep-pill2 { background:var(--card); height:36px; font-size:13px; }
 .ep-ch-text, .ep-aip-text { white-space:pre-wrap; }
 @media (pointer: coarse) { .ep-mdl-chip { height:44px; } .ep-mdl-chip button { width:36px; height:36px; } .ep-mdl-chips .ep-ch-chip.ep-pill2 { height:44px; } }
+
+/* campo: sem barra de rolagem/alça visível (no Android aparecia como uma barrinha solta ao lado do enviar) */
+.ep-ch-input textarea { scrollbar-width:none; overflow-y:auto; -webkit-appearance:none; appearance:none; box-shadow:none; border-radius:0; }
+.ep-ch-input textarea::-webkit-scrollbar { display:none; width:0; height:0; }
+.ep-ch-input textarea::-webkit-resizer { display:none; }
+/* enviar vazio = cinza neutro; com texto = laranja */
+.ep-ch-send:disabled { background:var(--tileActive, var(--tile)); color:var(--faint, #9a9a9a); opacity:1; }
+.ep-ch-input.busy .ep-ch-send:disabled { background:var(--green); color:#fff; }
+/* o anel de foco fica no contêiner do campo, não no textarea (evita a caixa/barra dentro do campo) */
+.ep-root .ep-ch-input textarea:focus, .ep-root .ep-ch-input textarea:focus-visible { outline:none !important; box-shadow:none !important; }
