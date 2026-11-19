@@ -1,4 +1,5 @@
 'use client';
+import { CaptionStyleGallery, FontPicker } from '@/components/library';
 import Icon from '@/components/ui/Icon';
 import { useEffect, useRef } from 'react';
 import { emit } from '@/lib/events';
@@ -62,16 +63,8 @@ export default function CaptionsTab() {
         </button>
       </div>
 
-      <Section title="Estilos">
-        <div className="ep-capgrid">
-          {CAPTION_PRESETS.map((p) => (
-            <button key={p.id} type="button" className={`ep-cap${st.preset === p.id ? ' on' : ''}`} onClick={() => setStyle(p.style)} title={`Aplicar estilo ${p.label}`}>
-              <span className="ep-cap-prev"><CaptionSample style={p.style} /></span>
-              <span className="ep-cap-l">{p.label}</span>
-            </button>
-          ))}
-        </div>
-      </Section>
+      <Section title="Estilos"><CaptionStyleGallery /></Section>
+      <Section title="Fonte das legendas"><FontPicker /></Section>
 
       <Section title="Ajustar estilo">
         <label className="ep-pfield">
