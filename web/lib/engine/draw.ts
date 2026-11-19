@@ -157,8 +157,17 @@ export function drawLayer(ctx: Ctx, layer: LayerItem, t: Seconds, el: MediaEleme
 
   /* correção de cor estilo DaVinci (sessão Cor; WebGL, canvas reaproveitado — desenhado logo abaixo) */
   if ('colorGrade' in clip && clip.colorGrade) {
-    const kk = Math.min(1, 1920 / Math.max(sw, sh));
-    const g = gradeLayer(src, clip.colorGrade, sw * kk, sh * kk);
+    // processa no tamanho em que vai ser desenhado (preview 540p não precisa de 1080p): reduz a fonte
+    // antes — o upload da textura em resolução cheia é o passo caro (≈2× mais rápido no celular)
+    const fitG = natural ? (('fit' in clip && clip.fit) || 'cover') : 'contain';
+    const kfitG = fitG === 'contain' ? Math.min(W / sw, H / sh) : Math.max(W / sw, H / sh);
+    const kk = Math.min(1, 1920 / Math.max(sw, sh), kfitG * Math.max(0.05, tf.scale) * 1.1);
+    if (kk < 0.9) {
+      const { c, ctx: pc } = scratch(clip, Math.max(2, Math.round(sw * kk)), Math.max(2, Math.round(sh * kk)), 3);
+      pc.drawImage(src, 0, 0, c.width, c.height);
+      src = c as CanvasImageSource; sw = c.width; sh = c.height;
+    }
+    const g = gradeLayer(src, clip.colorGrade, sw, sh);
     if (g) { src = g; sw = (g as HTMLCanvasElement).width; sh = (g as HTMLCanvasElement).height; }
   }
 

@@ -13,6 +13,7 @@ import { formatTime } from '@/lib/util';
 import { LiveMediaPool } from './livePool';
 import { PlaybackClock, QualityGovernor, frameInterval, stillTime } from './syncPolicy';
 import { nativePlan } from './hybrid';
+import { shaderKindsIn, warmIdle, warmShader, isWarm } from './warm';
 import { onLutsChanged, onCompareChanged } from '@/lib/color';
 import { hitTest, dragPatch, type Box } from './manipulate';
 import type { Clip, Project, TextClip } from '@/lib/types';
@@ -374,6 +375,8 @@ export default function Preview() {
       // ritmo: desenha no fps do projeto (tela de 90/120 Hz não precisa redesenhar o mesmo quadro 3–4x)
       if (now - lastDraw < frameInterval(st.project.fps)) return;
       lastDraw = now;
+      // a próxima transição em shader (até 1,5 s): compila agora, não no meio dela
+      for (const k of shaderKindsIn(st.project, t, t + 1.5)) if (!isWarm(k)) { warmShader(k); break; }
       const s = pool.sync(st.project, st.assets, t, true, st.project.fps, viewRef.current.playRate);
       lead = s.lead;
       // falta o quadro do vídeo (corte/seek ainda decodificando): mantém o último quadro bom
@@ -388,6 +391,14 @@ export default function Preview() {
   /* ---------- eventos / tela cheia ---------- */
   useEffect(() => on('ep:open-export', (d) => { setPlaying(false); setExportInit(d ?? {}); setExportOpen(true); }), [setPlaying]);
   useEffect(() => { requestStill(); }, [compare, split, requestStill]);
+  /* compila no ócio os shaders das transições do projeto (a 1ª compilação trava a página) */
+  const projForWarm = useEditor((s) => s.project);
+  useEffect(() => {
+    if (playing) return;
+    const id = window.setTimeout(() => { cancelWarm = warmIdle(shaderKindsIn(projForWarm)); }, 600);
+    let cancelWarm = () => {};
+    return () => { clearTimeout(id); cancelWarm(); };
+  }, [projForWarm, playing]);
   /* fecha o popover "Visualização" ao tocar fora */
   useEffect(() => {
     if (!viewOpen) return;

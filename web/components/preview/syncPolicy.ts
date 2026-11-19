@@ -104,7 +104,7 @@ export class PlaybackClock {
 /* ---------- qualidade com histerese ---------- */
 
 /** degraus do fator de resolução interna (1 = 720p no celular forte; 0.75 ≈ 540p) */
-export const QUALITY_STEPS = [1, 0.75] as const;
+export const QUALITY_STEPS = [1, 0.75, 0.5] as const;
 
 /**
  * Governa a resolução interna durante a reprodução. Só reduz um degrau se o custo
@@ -136,7 +136,9 @@ export class QualityGovernor {
     if (++this.n <= this.o.warmup) return null;
     this.ema = this.ema ? this.ema * 0.9 + costMs * 0.1 : costMs;
     if (now - this.lastChange < this.o.minGapMs) return null;
-    if (this.ema > this.o.slowMs && this.level < QUALITY_STEPS.length - 1) {
+    // 2º degrau (0,5) só com custo MUITO alto (ex.: correção de cor no canvas em aparelho fraco)
+    const limit = this.level === 0 ? this.o.slowMs : this.o.slowMs * 2;
+    if (this.ema > limit && this.level < QUALITY_STEPS.length - 1) {
       if (this.overSince < 0) this.overSince = now;
       this.underSince = -1;
       if (now - this.overSince >= this.o.holdMs) return this.change(this.level + 1, now);
