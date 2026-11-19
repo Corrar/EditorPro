@@ -66,6 +66,11 @@ export default function Preview() {
   const [fit, setFit] = useState({ w: 0, h: 0 });
   const [safe, setSafe] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  /** valores iniciais vindos do shell (pílula "1080p ▾" do celular) */
+  const [exportInit, setExportInit] = useState<{ quality?: 'draft' | 'hd' | 'fhd' | '4k' | 'full'; fps?: number }>({});
+  /* brilho sutil no quadro quando a IA aplica uma op ao vivo */
+  const liveApplied = useEditor((s) => (s.live.running ? s.live.done : 0));
+  const [glow, setGlow] = useState(0);
   const [fullscreen, setFullscreen] = useState(false);
   /** "tela cheia" por CSS (iPhone não tem Fullscreen API para elementos que não são <video>) */
   const [cssFull, setCssFull] = useState(false);
@@ -285,7 +290,16 @@ export default function Preview() {
   }, [playing, draw, setPlaying, setPlayhead, applySize, requestStill, showTime]);
 
   /* ---------- eventos / tela cheia ---------- */
-  useEffect(() => on('ep:open-export', () => { setPlaying(false); setExportOpen(true); }), [setPlaying]);
+  useEffect(() => on('ep:open-export', (d) => { setPlaying(false); setExportInit(d ?? {}); setExportOpen(true); }), [setPlaying]);
+  const glowTimer = useRef(0);
+  useEffect(() => {
+    if (!liveApplied) return;
+    // op aplicada: brilho de 700 ms (reinicia a animação a cada op)
+    setGlow((g) => g + 1);
+    clearTimeout(glowTimer.current);
+    glowTimer.current = window.setTimeout(() => setGlow(0), 700);
+  }, [liveApplied]);
+  useEffect(() => () => clearTimeout(glowTimer.current), []);
   useEffect(() => {
     const h = () => {
       const d = document as FsDoc;
@@ -397,11 +411,12 @@ export default function Preview() {
       <div className="ep-pv-box" ref={boxRef}>
         <div className="ep-pv-frame" ref={frameRef} style={{ width: fit.w, height: fit.h }} data-aspect={aspect}>
           <canvas
-            ref={canvasRef} className={`ep-pv-canvas${pointMode ? ' pointing' : ''}`} aria-label="Pré-visualização do vídeo"
+            ref={canvasRef} data-ep-preview="" className={`ep-pv-canvas${pointMode ? ' pointing' : ''}`} aria-label="Pré-visualização do vídeo"
             onClick={empty ? undefined : onCanvasClick} onPointerDown={empty ? undefined : onCanvasDown} onPointerMove={onCanvasMove}
             onPointerCancel={() => { if (pressRef.current) clearTimeout(pressRef.current.timer); pressRef.current = null; }}
             onContextMenu={(e) => { if (pressRef.current?.fired) e.preventDefault(); }}
           />
+          {glow > 0 && <i className="ep-pv-glow" key={glow} aria-hidden="true" />}
           {chatPoint && markerAt > 0 && (
             <div className="ep-pv-pin" style={{ left: `${chatPoint.x * 100}%`, top: `${chatPoint.y * 100}%` }} aria-hidden="true">
               <i /><span>{formatTime(chatPoint.t)}</span>
@@ -508,7 +523,7 @@ export default function Preview() {
         </div>
       </div>
       )}
-      {exportOpen && <ExportDialog onClose={() => setExportOpen(false)} />}
+      {exportOpen && <ExportDialog initial={exportInit} onClose={() => setExportOpen(false)} />}
     </div>
   );
 }

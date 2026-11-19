@@ -34,12 +34,19 @@ function fmtSize(bytes: number) {
   return `${Math.max(1, Math.round(bytes / 1e3))} KB`;
 }
 
-export default function ExportDialog({ onClose }: { onClose: () => void }) {
+export interface ExportInitial { quality?: ExportOptions['quality']; fps?: number }
+
+export default function ExportDialog({ onClose, initial }: { onClose: () => void; initial?: ExportInitial }) {
   const project = useEditor((s) => s.project);
   const assets = useEditor((s) => s.assets);
   const [format, setFormat] = useState<ExportOptions['format']>('mp4');
-  const [quality, setQuality] = useState<ExportOptions['quality']>('hd');
-  const [fps, setFps] = useState<number>(() => (FPS.includes(Math.round(project.fps)) ? Math.round(project.fps) : 30));
+  // valores iniciais vindos do shell (pílula "1080p ▾"); sem eles, os padrões
+  const [quality, setQuality] = useState<ExportOptions['quality']>(() =>
+    initial?.quality && ['draft', 'hd', 'fhd', '4k', 'full'].includes(initial.quality) ? initial.quality : 'hd');
+  const [fps, setFps] = useState<number>(() => {
+    if (initial?.fps && FPS.includes(Math.round(initial.fps))) return Math.round(initial.fps);
+    return FPS.includes(Math.round(project.fps)) ? Math.round(project.fps) : 30;
+  });
   const [m4a, setM4a] = useState(false);
   const [job, setJob] = useState<'video' | 'audio'>('video');
   const [phase, setPhase] = useState<Phase>('idle');
