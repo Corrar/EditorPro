@@ -175,7 +175,42 @@ function boxDescription(MP4Box: Any, entry: Any): Uint8Array | undefined {
  * offset/tamanho. Arquivo de 500 MB = poucos MB de memória. null se não indexável
  * (sem moov, MP4 fragmentado sem amostras no moov, sem vídeo).
  */
-export async function indexMp4Video(file: Blob, chunk = 4 << 20): Promise<VideoIndex | null> {
+export interface AudioIndex {
+  codec: string;
+  sampleRate: number;
+  channels: number;
+  duration: number;
+  /** AudioSpecificConfig (AAC) */
+  description?: Uint8Array;
+  samples: SampleRef[];
+}
+
+export interface Mp4Index {
+  video: VideoIndex | null;
+  audio: AudioIndex | null;
+  /** o arquivo declara trilha de áudio (mesmo que não indexável) */
+  hasAudioTrack: boolean;
+}
+
+function refsOf(mp4: Any, track: Any, movieTs: number, fileSize: number): SampleRef[] | null {
+  const trak = mp4.getTrackById(track.id);
+  const raw: Any[] = mp4.getTrackSamplesInfo?.(track.id) ?? trak?.samples ?? [];
+  if (!raw.length) return null;
+  const ts: number = track.timescale;
+  const shift = editListShift(trak?.edts?.elst?.entries, ts, movieTs);
+  const samples: SampleRef[] = raw.map((x) => ({
+    cts: x.cts / ts + shift, dts: x.dts / ts + shift, duration: x.duration / ts, sync: !!x.is_sync, offset: x.offset, size: x.size,
+  }));
+  if (samples.some((x) => !(x.size > 0) || !(x.offset >= 0) || x.offset + x.size > fileSize)) return null;
+  return samples;
+}
+
+/**
+ * Lê só as caixas de cabeçalho (moov) do MP4/MOV em blocos de 4 MB — pulando o mdat
+ * (celulares gravam o moov no fim) — e devolve as tabelas de amostras (vídeo e áudio) com
+ * offset/tamanho. Arquivo de 500 MB = poucos MB de memória. null se não for MP4 legível.
+ */
+export async function indexMp4(file: Blob, chunk = 4 << 20): Promise<Mp4Index | null> {
   const MP4Box: Any = await import('mp4box');
   const mp4 = MP4Box.createFile();
   let info: Any = null;
@@ -195,24 +230,97 @@ export async function indexMp4Video(file: Blob, chunk = 4 << 20): Promise<VideoI
     if (!info && !failed) mp4.flush();
   } catch { return null; }
   if (!info || failed) return null;
+  let video: VideoIndex | null = null;
   const vt = info.videoTracks?.[0];
-  if (!vt) return null;
-  const trak = mp4.getTrackById(vt.id);
-  const raw: Any[] = mp4.getTrackSamplesInfo?.(vt.id) ?? trak?.samples ?? [];
-  if (!raw.length) return null;
-  const entry: Any = trak?.mdia?.minf?.stbl?.stsd?.entries?.[0];
-  const ts: number = vt.timescale;
-  const shift = editListShift(trak?.edts?.elst?.entries, ts, info.timescale);
-  const samples: SampleRef[] = raw.map((x) => ({
-    cts: x.cts / ts + shift, dts: x.dts / ts + shift, duration: x.duration / ts, sync: !!x.is_sync, offset: x.offset, size: x.size,
-  }));
-  if (samples.some((x) => !(x.size > 0) || !(x.offset >= 0) || x.offset + x.size > file.size)) return null;
+  if (vt) {
+    const samples = refsOf(mp4, vt, info.timescale, file.size);
+    const trak = mp4.getTrackById(vt.id);
+    const entry: Any = trak?.mdia?.minf?.stbl?.stsd?.entries?.[0];
+    if (samples) video = {
+      codec: String(vt.codec), width: vt.video?.width ?? entry?.width, height: vt.video?.height ?? entry?.height,
+      duration: vt.duration ? vt.duration / vt.timescale : 0, rotation: matrixRotation(vt.matrix ?? trak?.tkhd?.matrix),
+      description: boxDescription(MP4Box, entry), samples,
+    };
+  }
+  let audio: AudioIndex | null = null;
+  const at = info.audioTracks?.[0];
+  if (at) {
+    const samples = refsOf(mp4, at, info.timescale, file.size);
+    const entry: Any = mp4.getTrackById(at.id)?.mdia?.minf?.stbl?.stsd?.entries?.[0];
+    if (samples) audio = {
+      codec: String(at.codec), sampleRate: at.audio?.sample_rate ?? 44100, channels: at.audio?.channel_count ?? 2,
+      duration: at.duration ? at.duration / at.timescale : 0, description: entry?.esds?.esd?.descs?.[0]?.descs?.[0]?.data, samples,
+    };
+  }
   mp4.stop?.();
+  return { video, audio, hasAudioTrack: !!at };
+}
+
+/** demux em memória → mesmo formato do índice (bytes já carregados); fallback p/ MP4 fragmentado */
+export function demuxedToIndex(dm: Demuxed): Mp4Index {
+  const ref = (x: DemuxSample): SampleRef => ({ cts: x.cts, dts: x.dts, duration: x.duration, sync: x.sync, offset: 0, size: x.data.byteLength, data: x.data });
   return {
-    codec: String(vt.codec), width: vt.video?.width ?? entry?.width, height: vt.video?.height ?? entry?.height,
-    duration: vt.duration ? vt.duration / ts : 0, rotation: matrixRotation(vt.matrix ?? trak?.tkhd?.matrix),
-    description: boxDescription(MP4Box, entry), samples,
+    video: dm.video ? { codec: dm.video.codec, width: dm.video.width, height: dm.video.height, duration: dm.video.duration, rotation: dm.video.rotation, description: dm.video.description, samples: dm.video.samples.map(ref) } : null,
+    audio: dm.audio ? { codec: dm.audio.codec, sampleRate: dm.audio.sampleRate, channels: dm.audio.channels, duration: dm.audio.duration, description: dm.audio.description, samples: dm.audio.samples.map(ref) } : null,
+    hasAudioTrack: !!dm.audio,
   };
+}
+
+/** só a trilha de vídeo (export) */
+export async function indexMp4Video(file: Blob, chunk = 4 << 20): Promise<VideoIndex | null> {
+  return (await indexMp4(file, chunk))?.video ?? null;
+}
+
+/**
+ * Bytes das amostras lidos sob demanda do Blob (janela de ~48 amostras por vez) e
+ * liberados assim que são consumidos: memória ~constante mesmo com arquivo de 500 MB.
+ */
+export class SampleReader {
+  private data = new Map<number, Uint8Array>();
+  private loading: Promise<void> | null = null;
+  failure: unknown = null;
+  constructor(private blob: Blob, private samples: SampleRef[]) {}
+
+  has(i: number) { return !!this.samples[i]?.data || this.data.has(i); }
+
+  /** bytes da amostra i (e libera a memória dela) */
+  take(i: number): Uint8Array {
+    const pre = this.samples[i].data;
+    if (pre) return pre;
+    const d = this.data.get(i)!;
+    this.data.delete(i);
+    return d;
+  }
+
+  /** carrega a janela a partir de i (se ainda não estiver carregando) */
+  load(i: number): Promise<void> {
+    if (this.loading) return this.loading;
+    let from = i;
+    while (from < this.samples.length && this.has(from)) from++;
+    const plan = readPlan(this.samples, from);
+    if (!plan) return Promise.resolve();
+    this.loading = (async () => {
+      const buf = new Uint8Array(await this.blob.slice(plan.start, plan.end).arrayBuffer());
+      for (let k = plan.from; k < plan.to; k++) {
+        const s = this.samples[k];
+        // cópia própria: libera o trecho inteiro (com o outro fluxo intercalado) quando a janela acaba
+        this.data.set(k, buf.slice(s.offset - plan.start, s.offset - plan.start + s.size));
+      }
+    })().catch((e) => { this.failure = e; }).finally(() => { this.loading = null; });
+    return this.loading;
+  }
+
+  /** lê (se preciso) e entrega a amostra i */
+  async get(i: number): Promise<Uint8Array> {
+    while (!this.has(i)) {
+      await this.load(i);
+      if (this.failure) throw this.failure;
+    }
+    return this.take(i);
+  }
+
+  /** descarta o que foi carregado (seek p/ outro ponto) */
+  reset() { this.data.clear(); }
 }
 
 /**

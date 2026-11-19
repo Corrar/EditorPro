@@ -10,7 +10,7 @@
    Devolve null quando o navegador/arquivo não suporta (o preview usa a original).
    ===================================================================== */
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
-import { demuxMp4, decoderConfigFor, matrixRotation } from './demux';
+import { demuxMp4, demuxedToIndex, decoderConfigFor, indexMp4, matrixRotation, SampleReader, type Mp4Index } from './demux';
 
 export interface ProxyOptions {
   /** lado MENOR do proxy em px ("540p"/"720p"); nunca amplia */
@@ -54,17 +54,41 @@ function skip(reason: string): null {
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
-export async function makePreviewProxy(file: Blob, opts: ProxyOptions = {}): Promise<Blob | null> {
+/** acima disto o demux EM MEMÓRIA (só p/ arquivo não indexável, ex.: MP4 fragmentado) não roda: fica a original */
+export function memoryDemuxCap(): number {
+  const mobile = typeof navigator !== 'undefined' && /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
+  return (mobile ? 150 : 300) * 1024 * 1024;
+}
+
+/** fila global: um proxy por vez (vários vídeos importados juntos não somam memória/decoder) */
+let queue: Promise<unknown> = Promise.resolve();
+
+export function makePreviewProxy(file: Blob, opts: ProxyOptions = {}): Promise<Blob | null> {
+  const run = queue.then(() => {
+    if (opts.signal?.aborted) throw abortErr(); // cancelado enquanto esperava: sai da fila sem ler nada
+    return makeProxyNow(file, opts);
+  });
+  queue = run.catch(() => undefined);
+  return run;
+}
+
+async function makeProxyNow(file: Blob, opts: ProxyOptions): Promise<Blob | null> {
   if (!canMakeProxy()) return skip('navegador sem WebCodecs');
   const { signal, onProgress } = opts;
   const maxShort = Math.max(144, Math.min(2160, opts.maxHeight ?? 540));
   /* ---------- demux ---------- */
-  const dm = await demuxMp4(file);
+  // índice (só o moov) + leitura das amostras sob demanda: memória ~constante, mesmo com arquivo de 1 GB
+  let idx: Mp4Index | null = await indexMp4(file).catch(() => null);
+  if (!idx?.video || (idx.hasAudioTrack && !idx.audio)) {
+    if (file.size > memoryDemuxCap()) return skip('arquivo grande e não indexável (sem leitura em memória)');
+    const dm = await demuxMp4(file);
+    idx = dm ? demuxedToIndex(dm) : null;
+  }
   if (signal?.aborted) throw abortErr();
-  if (!dm) return skip('arquivo não é MP4/MOV legível');
-  const vt = dm.video;
+  if (!idx) return skip('arquivo não é MP4/MOV legível');
+  const vt = idx.video;
   if (!vt || !vt.samples.length) return skip('sem trilha de vídeo');
-  const at = dm.audio;
+  const at = idx.audio;
   if (at && !at.codec.startsWith('mp4a')) return skip(`áudio ${at.codec} (só AAC é copiado)`);
   const vSamples = vt.samples;
   const aSamples = at?.samples ?? [];
@@ -136,13 +160,16 @@ export async function makePreviewProxy(file: Blob, opts: ProxyOptions = {}): Pro
   });
   decoder.configure(decCfg);
 
+  const vReader = new SampleReader(file, vSamples);
   try {
     for (let i = 0; i < vSamples.length; i++) {
       if (signal?.aborted) throw abortErr();
       if (failure) throw failure;
       const s = vSamples[i];
+      const data = await vReader.get(i);
+      if (i + 16 < vSamples.length && !vReader.has(i + 16)) void vReader.load(i + 16); // próxima janela em paralelo
       decoder.decode(new EncodedVideoChunk({
-        type: s.sync ? 'key' : 'delta', timestamp: Math.round(s.cts * 1e6), duration: Math.round(s.duration * 1e6), data: s.data,
+        type: s.sync ? 'key' : 'delta', timestamp: Math.round(s.cts * 1e6), duration: Math.round(s.duration * 1e6), data,
       }));
       // contrapressão: não enfileira o arquivo inteiro na memória da GPU
       while (decoder.decodeQueueSize > 6 || encoder.encodeQueueSize > 6) {
@@ -156,13 +183,15 @@ export async function makePreviewProxy(file: Blob, opts: ProxyOptions = {}): Pro
     if (failure) throw failure;
     if (audioCfg) {
       let last = -1;
-      for (const s of aSamples) {
+      const aReader = new SampleReader(file, aSamples);
+      for (let k = 0; k < aSamples.length; k++) {
+        const s = aSamples[k];
         // priming do AAC (edit list) deixa as 1ªs amostras antes do 0: descarta / encosta no 0
         if (s.cts + s.duration <= 0) continue;
         const ts = Math.max(0, Math.round(s.cts * 1e6));
         if (ts <= last) continue;
         last = ts;
-        muxer.addAudioChunkRaw(s.data, 'key', ts, Math.round(s.duration * 1e6), {
+        muxer.addAudioChunkRaw(await aReader.get(k), 'key', ts, Math.round(s.duration * 1e6), {
           decoderConfig: { codec: audioCfg.codec, numberOfChannels: audioCfg.numberOfChannels, sampleRate: audioCfg.sampleRate, description: audioCfg.description },
         });
       }
