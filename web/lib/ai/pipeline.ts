@@ -238,13 +238,22 @@ export async function sourceFrames(sources: MediaAsset[], allowSampling: boolean
 
 /* ---------- transcrição (Whisper no navegador) ---------- */
 
-/** mídias já transcritas (ou tentadas) nesta sessão — comandos de chat não retranscrevem */
-const triedTranscription = new Set<string>();
+/** mídias já transcritas nesta sessão (tempos DA MÍDIA): refazer a edição reaproveita, sem pular a legenda.
+ *  Falha NÃO entra aqui: a próxima tentativa transcreve de novo. */
+const transcribed = new Map<string, CaptionSegment[]>();
+const triedTranscription = { delete: (k: string) => transcribed.delete(k) };
 
 /** transcreve as fontes com Whisper e converte p/ tempos da timeline. null = pulada/falhou/desligada. */
 async function whisperCaptions(sources: MediaAsset[], language: string, opts: PipelineOptions, warnings: string[]): Promise<CaptionSegment[] | null> {
-  const media = sources.filter((a) => (a.kind === 'video' || a.kind === 'audio') && a.url && !triedTranscription.has(`${a.id}|${a.url}`));
-  if (!media.length) return null;
+  const all = sources.filter((a) => (a.kind === 'video' || a.kind === 'audio') && a.url);
+  if (!all.length) return null;
+  // já transcritas: só remapeia para a timeline atual (cortes/velocidade podem ter mudado)
+  const cached = all.filter((a) => transcribed.has(`${a.id}|${a.url}`));
+  const media = all.filter((a) => !transcribed.has(`${a.id}|${a.url}`));
+  if (!media.length) {
+    const segs = cached.flatMap((a) => captionsMediaToTimeline(store().project, a.id, transcribed.get(`${a.id}|${a.url}`)!));
+    return segs.sort((x, y) => x.start - y.start);
+  }
   const server = !!(await getStatus()).transcribe; // Whisper large no servidor: não baixa nada no aparelho
   if (!server && opts.whisper === false) {
     warnings.push('sem transcrição (a transcrição no aparelho está desligada no botão CC)');
@@ -266,10 +275,10 @@ async function whisperCaptions(sources: MediaAsset[], language: string, opts: Pi
   }
   const signal = opts.skippable?.('Pular transcrição');
   try {
-    const segs: CaptionSegment[] = [];
+    const segs: CaptionSegment[] = cached.flatMap((a) => captionsMediaToTimeline(store().project, a.id, transcribed.get(`${a.id}|${a.url}`)!));
     for (const a of media) {
-      triedTranscription.add(`${a.id}|${a.url}`); // não retranscreve a mesma mídia nesta sessão (deu certo, vazio ou falhou)
       const mediaSegs = await transcribeMedia(a, { language, choice, signal, onStatus: (t, f) => opts.onStatus?.(media.length > 1 ? `${t} ("${a.name}")` : t, f) });
+      transcribed.set(`${a.id}|${a.url}`, mediaSegs);
       segs.push(...captionsMediaToTimeline(store().project, a.id, mediaSegs));
     }
     return segs.sort((x, y) => x.start - y.start);

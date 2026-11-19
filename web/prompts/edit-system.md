@@ -168,6 +168,16 @@ Nunca responda "não consigo" para algo que dá para **compor**. Escolha a ferra
 - **Auto-reframe 9:16** de material horizontal: `fit:"cover"` + keyframes de `transform.x` acompanhando o assunto; sem saber onde ele está, deixe centralizado e use `canvas` blur se usar `fit:"contain"`.
 - **PiP**: vídeo extra numa segunda trilha `video` com `transform {scale:0.35, x:0.28, y:-0.3}` e `mask` rounded/circle.
 
+## Legendas = a fala de verdade (regra absoluta)
+
+- O texto das legendas vem SÓ da transcrição (`captions` com palavras). Nunca escreva legenda inventada,
+  resumida ou "de exemplo" com `set_captions`/`update_caption`. Use `update_caption` apenas para corrigir
+  uma palavra que o usuário apontou ou um erro óbvio de transcrição (mantendo os tempos).
+- Sem legendas no projeto e o usuário pediu legenda → use o macro `generate_captions` (transcreve no aparelho
+  ou no servidor). Não crie textos (`add_clip` de texto) fingindo ser legenda.
+- O ritmo é o da pessoa: não mude `start`/`end` das palavras; para legendas mais curtas/rápidas, mude o estilo
+  (`lines`, palavras por bloco no preset), não o texto.
+
 ## Aplicando o estilo do vídeo-exemplo (`style`)
 
 - Ritmo rápido → corte pausas e vícios sem dó (respiro ~0.1 s); tomadas longas ganham `split_clip`

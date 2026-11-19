@@ -118,7 +118,14 @@ export async function POST(req: Request) {
     });
 
     const reply = (isObj(raw) && str(raw.reply, 800)) || 'Pronto, apliquei as mudanças.';
-    const { ops, dropped, sfx, deferred } = sanitizeOps(isObj(raw) ? raw.ops : raw, project, assets, MAX_AI_OPS);
+    const san = sanitizeOps(isObj(raw) ? raw.ops : raw, project, assets, MAX_AI_OPS);
+    const { dropped, sfx } = san;
+    let { ops, deferred } = san;
+    // legenda é SÓ a fala transcrita: sem transcrição no projeto, set_captions do Claude (texto inventado) vira transcrição real
+    if (!project.captions.segments.length && ops.some((o) => o.op === 'set_captions')) {
+      ops = ops.filter((o) => o.op !== 'set_captions');
+      if (!(deferred ?? []).some((d) => d.kind === 'captions')) deferred = [...(deferred ?? []), { kind: 'captions' as const }];
+    }
     if (dropped.length) console.warn('[ai/edit] ops descartadas:', dropped.map((d) => d.reason));
     const comments = isObj(raw) && Array.isArray(raw.comments)
       ? raw.comments.filter(isObj).map((c) => ({ markerId: str(c.markerId, 80) ?? '', reply: str(c.reply, 300) ?? '' })).filter((c) => c.markerId && c.reply)
