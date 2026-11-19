@@ -4,7 +4,9 @@ import { useEffect, useRef } from 'react';
 import { useEditor } from '@/lib/store';
 import { projectDuration } from '@/lib/ops';
 import { TOOL_LABEL, TRIM_TOOLS, useTimelineUi, type EditTool } from '@/lib/timeline/ui';
-import { clipRangeAt, editPointNear, shuttleNext } from '@/lib/timeline/nav';
+import { clipRangeAt, editPointNear, nextClipAt, shuttleNext } from '@/lib/timeline/nav';
+import { expandGroups } from '@/lib/timeline/edit';
+import { expandLinks } from '@/lib/timeline/trim';
 import { nudgeSelection, splitAll, toggleLink } from '@/lib/timeline/actions';
 import { emit } from '@/lib/events';
 
@@ -124,6 +126,10 @@ export function useShortcuts(actions: ShortcutActions) {
         if (r) ui.set({ range: r, rangePop: null });
       } else if (kl === 'z' && e.shiftKey) {
         a.fit();
+      } else if (kl === 'v') {
+        const id = nextClipAt(st.project, st.playhead, st.selection);
+        if (id) st.select(expandLinks(st.project, expandGroups(st.project, [id])));
+        else emit('ep:toast', { text: 'Nenhum clipe sob o cursor', kind: 'info' });
       } else if (kl === 'n') {
         ui.set({ snapping: !ui.snapping });
         emit('ep:toast', { text: ui.snapping ? 'Ímã desligado' : 'Ímã ligado', kind: 'info' });

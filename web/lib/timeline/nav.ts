@@ -61,3 +61,21 @@ export function clipRangeAt(p: Project, t: Seconds, selection: Id[]): { start: S
   }
   return null;
 }
+
+/** clipes sob o tempo t (de cima p/ baixo, trilhas visíveis e não travadas) */
+export function clipsAt(p: Project, t: Seconds): Id[] {
+  const out: Id[] = [];
+  for (const tr of p.tracks) {
+    if (tr.hidden || tr.locked) continue;
+    for (const c of tr.clips) if (!c.locked && t >= c.start - EPS && t < clipEnd(c) - EPS) out.push(c.id);
+  }
+  return out;
+}
+
+/** V: seleciona o clipe sob o cursor; repetir alterna entre os clipes empilhados ali */
+export function nextClipAt(p: Project, t: Seconds, selection: Id[]): Id | null {
+  const ids = clipsAt(p, t);
+  if (!ids.length) return null;
+  const cur = ids.findIndex((id) => selection.includes(id));
+  return ids[(cur + 1) % ids.length];
+}
