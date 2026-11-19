@@ -18,6 +18,7 @@ import { useEditor } from '@/lib/store';
 import type { AspectRatio } from '@/lib/types';
 import Home, { type WizardInput } from './Home';
 import MobileNav from './MobileNav';
+import MobileToolbar from './MobileToolbar';
 import SettingsModal from './SettingsModal';
 import Sidebar from './Sidebar';
 import Toasts from './Toasts';
@@ -39,6 +40,7 @@ export default function EditorShell() {
   const [tool, setTool] = useState<ToolId>('media');
   const [sideOpen, setSideOpen] = useState(true);
   const [chatOpen, setChatOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [sbMin, setSbMin] = useState(false);
   const [settings, setSettings] = useState(false);
   const [focusWizard, setFocusWizard] = useState(false);
@@ -240,7 +242,8 @@ export default function EditorShell() {
             )}
             {view === 'editor' && <Workspace tool={tool} sideOpen={sideOpen} onCloseSide={() => setSideOpen(false)} chatOpen={chatOpen} onChat={openChat} onHome={goHome} />}
           </div>
-          <MobileNav {...nav} chatOpen={chatOpen} onChat={openChat} />
+          <MobileNav {...nav} chatOpen={chatOpen} onChat={openChat} menuOpen={menuOpen} onMenuOpen={setMenuOpen} />
+          {view === 'editor' && !chatOpen && <MobileToolbar tool={tool} toolOpen={sideOpen} onTool={pickTool} onChat={openChat} onMenu={() => setMenuOpen(true)} />}
         </div>
       )}
       {settings && <SettingsModal dark={dark} onTheme={toggleTheme} onClose={() => setSettings(false)} />}
