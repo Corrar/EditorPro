@@ -12,7 +12,11 @@ import { emit, on } from '@/lib/events';
 import { useAIChat, type RunState } from '@/lib/ai/chatStore';
 import type { ChatMessage } from '@/lib/types';
 
-const SUGGESTIONS = ['Legendas estilo TikTok', 'Cortar silêncios', 'Deixar mais dinâmico', 'Adicionar título', 'Cores cinematográficas'];
+const SUGGESTIONS = [
+  'Legendas estilo TikTok', 'Cortar silêncios', 'Cortar vícios de linguagem', 'Deixar mais dinâmico', 'Melhores momentos em 30 s',
+  'Sincronizar cortes na batida', 'Auto-reframe seguindo o rosto', 'Gancho com zoom e flash', 'Criar capítulos',
+  'Traduzir legendas para inglês', 'Cores cinematográficas',
+];
 
 function Icon({ d, size = 16 }: { d: string; size?: number }) {
   return (
@@ -29,6 +33,8 @@ const I = {
   check: 'M5 12.5l4.2 4.2L19 7',
   x: 'M6 6l12 12M18 6L6 18',
   skip: 'M5 12h14',
+  target: 'M12 2v4M12 18v4M2 12h4M18 12h4M12 8a4 4 0 100 8 4 4 0 000-8z',
+  note: 'M4 5h16v11H8l-4 4z',
 };
 
 function Steps({ run }: { run: RunState }) {
@@ -106,7 +112,10 @@ export default function ChatPanel() {
   const messages = useEditor((s) => s.messages);
   const project = useEditor((s) => s.project);
   const assetCount = useEditor((s) => Object.keys(s.assets).length);
-  const { status, busy, runs, loadStatus, send, undoRun, answer, skip, whisper, setWhisper } = useAIChat();
+  const { status, busy, runs, loadStatus, send, undoRun, answer, skip, whisper, setWhisper, comments } = useAIChat();
+  const chatContext = useEditor((s) => s.chatContext);
+  const setChatContext = useEditor((s) => s.setChatContext);
+  const pendingComments = useEditor((s) => (s.project.markers ?? []).filter((m) => m.kind === 'comment' && !m.resolved).length);
   const [text, setText] = useState('');
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -200,7 +209,10 @@ export default function ChatPanel() {
             if (m.role === 'user') {
               return (
                 <div key={m.id} className="ep-ch-msg me">
-                  <div className="ep-ch-bubble">{m.text}</div>
+                  <div className="ep-ch-bubble">
+                    {m.context ? <span className="ep-ch-ctxtag"><Icon d={I.target} size={11} /> {m.context.label}</span> : null}
+                    {m.text}
+                  </div>
                 </div>
               );
             }
@@ -215,6 +227,18 @@ export default function ChatPanel() {
       </div>
 
       <div className="ep-ch-foot">
+        {pendingComments ? (
+          <button className="ep-ch-comments" disabled={busy} onClick={() => comments()}>
+            <Icon d={I.note} size={14} /> Aplicar comentários <b>{pendingComments}</b>
+          </button>
+        ) : null}
+        {chatContext ? (
+          <div className="ep-ch-ctx" role="status">
+            <Icon d={I.target} size={13} />
+            <span>Apontando para: <b>{chatContext.label}</b></span>
+            <button aria-label="Limpar o alvo" title="Limpar" onClick={() => setChatContext(undefined)}><Icon d={I.x} size={12} /></button>
+          </div>
+        ) : null}
         <div className="ep-ch-chips" role="list">
           {SUGGESTIONS.map((s) => (
             <button key={s} role="listitem" className="ep-ch-chip" disabled={busy} onClick={() => submit(s)}>
@@ -231,7 +255,7 @@ export default function ChatPanel() {
             ref={inputRef}
             rows={1}
             value={text}
-            placeholder={busy ? 'A IA está editando…' : 'Peça uma mudança…'}
+            placeholder={busy ? 'A IA está editando…' : chatContext ? `O que fazer em "${chatContext.label}"?` : 'Peça uma mudança…'}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {

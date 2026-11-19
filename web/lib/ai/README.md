@@ -10,7 +10,8 @@ padrão `claude-opus-5-5`). Sem chave → **modo demo** local. O Claude só rece
 |---|---|---|
 | `GET status` | — | `{configured, provider: 'anthropic'\|'demo', model?}` |
 | `POST analyze-reference` | `{frames: [{t, data, mediaType}], metrics: {duration, cuts, avgShotLength, pacing, aspect}}` | `{style: StyleProfile}` (métricas medidas prevalecem) |
-| `POST edit` | `{project, assets, messages, userText, mode: 'first'\|'chat', frames}` | `{reply, ops, dropped}` — ops já sanitizadas |
+| `POST edit` | `{project, assets, messages, userText, mode: 'first'\|'chat'\|'comments', frames, context?}` | `{reply, ops, dropped, comments}` — ops já sanitizadas |
+| `POST translate` | `{segments: [{id, text}], to, from?}` | `{segments}` |
 
 Chamadas: `client.beta.messages.stream` + `finalMessage()`, saída estruturada (`betaZodOutputFormat`),
 `effort` high (1ª edição) / medium (chat, estilo), `fallbacks: "default"` (recusa), prompt de sistema
@@ -25,6 +26,15 @@ Prompts em `web/prompts/*.md` (incluídos no bundle via `outputFileTracingInclud
 - `whisper.ts` + `whisper.worker.ts` — WebGPU (f16) → WASM; celular/aparelho fraco = `whisper-tiny` (~41 MB), desktop = `whisper-base` (~77 MB); áudio em pedaços de ~60 s cortados no silêncio; transformers.js carregado do CDN (versão fixa) dentro do worker.
 - `words.ts` — palavras do Whisper → frases; `validate.ts`, `sanitize.ts`, `timemap.ts`, `summary.ts`, `schemas.ts` (zod).
 - `demo.ts` (puro) + `analysis.ts` (navegador) — silêncios por RMS, ritmo do exemplo, plano da 1ª edição, comandos do chat.
+
+## Recursos estilo CapCut (`features.ts`, puro + `reframe.ts`/`analysis.ts` no navegador)
+- **Cortar vícios** (né/tipo/éé/hum…) por ids de palavra do Whisper → `remove_words` (exato, grátis, nos dois modos).
+- **Destaques** (melhores trechos pela transcrição até N s), **capítulos** (`add_marker` kind `chapter`), **gancho** (título + zoom + flash).
+- **Batidas**: usa `asset.beats` ou detecta no navegador (`detectBeats`) e guarda no asset; **sincronizar cortes na batida** e **marcar batidas**.
+- **Auto-reframe**: MediaPipe FaceDetector (CDN, versão fixa) nos quadros amostrados; sem rosto, "centro de detalhe"; keyframes de `transform.x` (engine: `cx = W/2 + x·W`).
+- **Traduzir legendas**: rota `POST /api/ai/translate` (Claude); no demo avisa que precisa da chave.
+- Palavras ganham ids `w00001…` em todo `set_captions`; o resumo manda `[w00012 4.20-4.45] né` ao Claude.
+- **Apontar para qualquer coisa**: `store.chatContext` vira chip acima do campo e vai junto do pedido (`context`); **Aplicar comentários** (`markers` kind `comment`) → Claude/demo aplica, marca `resolved` e responde cada um.
 
 ## UI
 `components/chat/ChatPanel.tsx` (default export) — coluna no desktop ou bottom-sheet no celular

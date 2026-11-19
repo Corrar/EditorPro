@@ -50,13 +50,13 @@ function buildMock() {
     { id: 'a_entrev', kind: 'video', role: 'source', name: 'entrevista.mp4', mime: 'video/mp4', size: 1, duration: 30, width: 1080, height: 1920 },
     { id: 'a_cidade', kind: 'video', role: 'broll', name: 'cidade-noite.mov', mime: 'video/mp4', size: 1, duration: 12, width: 1080, height: 1920, thumbnails: frames(220, 10, 'C') },
     { id: 'a_logo', kind: 'image', role: 'broll', name: 'logo.png', mime: 'image/png', size: 1, duration: 0, width: 512, height: 512, thumbnails: frames(30, 1, 'L') },
-    { id: 'a_trilha', kind: 'audio', role: 'music', name: 'trilha-energia.mp3', mime: 'audio/mpeg', size: 1, duration: 60, waveform: wave(60) },
+    { id: 'a_trilha', kind: 'audio', role: 'music', name: 'trilha-energia.mp3', mime: 'audio/mpeg', size: 1, duration: 60, waveform: wave(60), beats: Array.from({ length: 120 }, (_, i) => +(i * 0.5).toFixed(2)) },
     { id: 'a_voz', kind: 'audio', role: 'source', name: 'narração.wav', mime: 'audio/wav', size: 1, duration: 25 },
   ];
   const A = Object.fromEntries(assets.map((a) => [a.id, a]));
   const base = createProject({ name: 'Mock da timeline' });
   const ops: EditOp[] = [
-    { op: 'add_clip', trackId: 'track_video_1', clip: { ...makeVideoClip(A.a_praia, 0, { duration: 4.5, in: 1, label: 'gancho' }), id: 'c_v1' } },
+    { op: 'add_clip', trackId: 'track_video_1', clip: { ...makeVideoClip(A.a_praia, 0, { duration: 4.5, in: 1, label: 'gancho', keyframes: [{ t: 0.5, transform: { scale: 1 } }, { t: 3, transform: { scale: 1.3 } }] }), id: 'c_v1' } },
     { op: 'add_clip', trackId: 'track_video_1', clip: { ...makeVideoClip(A.a_entrev, 4.5, { duration: 6, in: 3, transitionIn: { kind: 'crossfade', duration: 0.4 } }), id: 'c_v2' } },
     { op: 'add_clip', trackId: 'track_video_1', clip: { ...makeVideoClip(A.a_praia, 10.5, { duration: 5, in: 9, speed: 1.5, effects: [{ kind: 'glitch', intensity: 0.6 }] }), id: 'c_v3' } },
     { op: 'add_clip', trackId: 'track_video_1', clip: { ...makeImageClip(A.a_logo, 15.5, 2.5), id: 'c_img' } },
@@ -85,6 +85,12 @@ function buildMock() {
       ],
     },
   ];
+  ops.push(
+    { op: 'add_marker', marker: { id: 'mk_cap', t: 4.5, kind: 'chapter', label: 'Dicas', color: '#3B7DD8' } },
+    { op: 'add_marker', marker: { id: 'mk_u', t: 10.5, kind: 'user', label: 'virada', color: '#C2477A' } },
+    { op: 'add_marker', marker: { id: 'cm_1', t: 2.2, kind: 'comment', label: 'Deixar o gancho mais rápido', resolved: false } },
+    { op: 'add_marker', marker: { id: 'cm_2', t: 13, end: 15, kind: 'comment', label: 'Trocar a música aqui', resolved: true } },
+  );
   const { project, errors } = applyOps(base, ops);
   if (errors.length) console.warn(errors);
   return { project, assets };
