@@ -545,6 +545,8 @@ export function planFirstEdit(input: FirstEditInput): DemoResult {
   const fast = intent.dynamic || style?.pacing === 'fast' || style?.pacing === 'very-fast';
   const ops: EditOp[] = [];
   const said: string[] = [];
+  /** avisos que o usuário PRECISA ver (aparecem mesmo sem edição) */
+  const notes: string[] = [];
   let p = input.project;
   const push = (more: EditOp[]) => {
     if (!more.length) return;
@@ -627,7 +629,7 @@ export function planFirstEdit(input: FirstEditInput): DemoResult {
     const t = transitionOps(p, tr.kind, tr.name);
     push(t);
     if (t.length) said.push(`transições ${tr.name}`);
-    else if (intent.transition) said.push('a transição aparece entre cortes — o vídeo ficou com uma tomada só (peça "cortar silêncios" ou envie mais clipes)');
+    else if (intent.transition) notes.push('A transição aparece entre cortes — o vídeo ficou com uma tomada só (peça "cortar silêncios" ou envie mais clipes).');
   }
 
   // 8) música de fundo (se o usuário enviou)
@@ -646,7 +648,7 @@ export function planFirstEdit(input: FirstEditInput): DemoResult {
       said.push('música de fundo');
     }
   } else if (!music && intent.wantsMusic) {
-    said.push('você pediu música, mas não recebi nenhuma trilha — envie uma pelo 📎 (Mídia para o projeto) e eu coloco baixinha, abaixando na fala');
+    notes.push('Você pediu música, mas não recebi nenhuma trilha — envie uma pelo 📎 (Mídia para o projeto) e diga "coloca a música": eu coloco baixinha, abaixando na fala.');
   }
 
   // 9) CTA no final
@@ -658,9 +660,10 @@ export function planFirstEdit(input: FirstEditInput): DemoResult {
     }
   }
 
-  const reply = ops.length
+  const base = ops.length
     ? `Pronto! Editei no modo demonstração: ${said.join(', ')}.${said.includes('legendas de exemplo nos trechos de fala') ? ' As legendas são de exemplo (a transcrição foi pulada).' : ''} Me diga o que ajustar (ex.: "legenda maior", "tira o zoom", "corta os primeiros 2 s").`
     : 'Não encontrei nada para editar ainda. Envie o material bruto (vídeo) e descreva o que você quer.';
+  const reply = notes.length ? `${base}\nObs.: ${notes.join(' ')}` : base;
   return { reply, ops };
 }
 

@@ -196,6 +196,13 @@ describe('bugs da QA', () => {
     expect(parseBrief('vídeo calmo com uma transição e música').transition).toEqual({ kind: 'crossfade', name: 'suaves' });
     expect(parseBrief('reels dinâmico com transições').transition?.kind).toBe('zoom-in');
     expect(parseBrief('vídeo com música').wantsMusic).toBe(true);
+    // adjetivos/sinônimos não quebram o pedido de música; o aviso aparece mesmo sem nenhuma edição
+    for (const b of ['Vídeo dinâmico para Reels com música animada', 'com música calma', 'com som de fundo', 'trilha sonora animada', 'quero musiquinha', 'música de fundo e legendas', 'Música animada!']) {
+      expect(parseBrief(b).wantsMusic, b).toBe(true);
+      const r = planFirstEdit({ project: base(), assets: { a1: src }, brief: b, silencesByAsset: {} } as never);
+      expect(r.reply, b).toMatch(/Obs\.: .*não recebi nenhuma trilha/);
+    }
+    expect(parseBrief('vídeo sem música').wantsMusic).toBe(false);
     const plan = planFirstEdit({ project: base(), assets: { a1: src }, brief: 'vídeo com uma transição e música', silencesByAsset: { a1: [{ start: 8, end: 10 }] } } as never);
     expect(plan.reply).toMatch(/não recebi nenhuma trilha/);
     const s = sanitizeOps(plan.ops, base(), { a1: src });
