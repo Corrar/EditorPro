@@ -15,7 +15,7 @@ import { sourceTime, clipSpeed, trackLayers } from '@/lib/engine/timing';
 import { clipGainAt } from '@/lib/engine/audio';
 import { buildAudioChain, chainKey, needsAudioChain, type FxChain } from '@/lib/engine/audioFx';
 import { nativeGeometry, geometryTransform, geometryClip, layerFilter, type NativePlan } from './hybrid';
-import { driftDecision, frameReady, prerollPlan, warmPosition, type FrameProof, type LeadState } from './syncPolicy';
+import { driftDecision, staleIdle, frameReady, prerollPlan, warmPosition, type FrameProof, type LeadState } from './syncPolicy';
 
 /** roteamento de um elemento pelo grafo WebAudio (efeitos de voz / tom) */
 interface Route { source: MediaElementAudioSourceNode; gain: GainNode; chain: FxChain | null; key: string }
@@ -241,6 +241,16 @@ export class LiveMediaPool implements MediaSources {
     let lead: LeadState | null = null;
     let pending = false;
 
+    // livres de mídia removida ou de fonte trocada (proxy pronto): destrói (libera o decodificador)
+    for (const [assetId, list] of [...this.idle]) {
+      const a = assets[assetId];
+      const cur = a?.url ? mediaUrl(a) : null;
+      const stale = staleIdle(list.map((el) => ({ el, url: el.dataset.url ?? '' })), cur);
+      if (!stale.length) continue;
+      stale.forEach(({ el }) => this.destroy(el));
+      const rest = list.filter((el) => !stale.some((x) => x.el === el));
+      if (rest.length) this.idle.set(assetId, rest); else this.idle.delete(assetId);
+    }
     // libera ANTES de pegar elementos: depois de um corte (split/ripple) os pedaços ganham ids
     // novos; o elemento do clipe antigo (já carregado, no quadro certo) volta ao pool livre e é
     // reaproveitado pelo pedaço novo — em vez de criar um <video> do zero (quadro preto/travada).
@@ -354,6 +364,11 @@ export class LiveMediaPool implements MediaSources {
     el.volume = 1;
     r.gain.gain.setTargetAtTime(Math.max(0, gain), this.actx!.currentTime, 0.015);
     return true;
+  }
+
+  /** iOS/Android suspendem o AudioContext (chamada, outro app, tela bloqueada): retoma no gesto de play */
+  resumeAudio() {
+    if (this.actx && this.actx.state !== 'running' && this.actx.state !== 'closed') void this.actx.resume().catch(() => {});
   }
 
   get isUnlocked() {

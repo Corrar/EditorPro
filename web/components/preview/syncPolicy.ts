@@ -230,3 +230,12 @@ export function frameInterval(fps: number | undefined): number {
   const f = Math.min(60, Math.max(12, fps || 30));
   return 1000 / f - 4;
 }
+
+/**
+ * Elementos livres que não servem mais (mídia removida ou fonte trocada — ex.: o proxy
+ * ficou pronto): devem ser destruídos para liberar o decodificador (escasso no Android).
+ */
+export function staleIdle<T extends { url: string }>(list: T[], currentUrl: string | null): T[] {
+  if (currentUrl === null) return list.slice();
+  return list.filter((e) => e.url !== currentUrl);
+}

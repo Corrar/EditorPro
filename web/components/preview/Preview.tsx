@@ -50,6 +50,8 @@ export default function Preview() {
   const projW = useEditor((s) => s.project.width);
   const projH = useEditor((s) => s.project.height);
   const projAspect = useEditor((s) => s.project.aspect);
+  /* fundo do quadro = cor de fundo do projeto (no modo nativo as faixas do 'contain' mostram o fundo do quadro) */
+  const frameBg = useEditor((s) => (s.project.canvas?.type === 'color' && s.project.canvas.color) || s.project.background || '#000');
   const duration = useEditor((s) => projectDuration(s.project));
   const playing = useEditor((s) => s.playing);
   const setPlaying = useEditor((s) => s.setPlaying);
@@ -375,7 +377,7 @@ export default function Preview() {
     return () => { window.removeEventListener('keydown', h); document.body.style.overflow = prev; };
   }, [cssFull]);
 
-  const togglePlay = () => { unlock(); setPlaying(!useEditor.getState().playing); };
+  const togglePlay = () => { unlock(); poolRef.current?.resumeAudio(); setPlaying(!useEditor.getState().playing); };
 
   const pointAt = (clientX: number, clientY: number) => {
     const cv = canvasRef.current;
@@ -448,7 +450,7 @@ export default function Preview() {
   return (
     <div className={`ep-pv${fullscreen ? ' is-full' : ''}${cssFull ? ' is-cssfull' : ''}`}>
       <div className="ep-pv-box" ref={boxRef}>
-        <div className="ep-pv-frame" ref={frameRef} style={{ width: fit.w, height: fit.h }} data-aspect={aspect}>
+        <div className="ep-pv-frame" ref={frameRef} style={{ width: fit.w, height: fit.h, background: frameBg }} data-aspect={aspect}>
           <div ref={hostRef} className="ep-pv-host" aria-hidden="true" />
           <canvas
             ref={canvasRef} data-ep-preview="" className={`ep-pv-canvas${pointMode ? ' pointing' : ''}`} aria-label="Pré-visualização do vídeo"
