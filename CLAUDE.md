@@ -37,7 +37,9 @@
 
 ## Módulos (cada um com dono; não editar pasta alheia)
 - Timeline: `components/timeline/**`, `lib/timeline/**`, `styles/timeline.css`
-- Engine/Preview/Export: `lib/engine/**`, `lib/export/**`, `components/preview/**`, `styles/preview.css`
+- Engine/Preview: `lib/engine/**`, `components/preview/**`, `styles/preview.css`
+- Export (sessão própria desde 2026-11-19; export rápido via WebCodecs + correção do MP4 preto no Android): `lib/export/**`
+- QA (regressão Playwright em desktop/Pixel 7/iPhone SE; só reporta bugs, não corrige): `e2e/**`
 - IA/Chat: `app/api/**`, `lib/ai/**`, `components/chat/**`, `styles/chat.css`, `prompts/**`
 - Shell/Mídia/Painéis/Persistência: `components/{shell,media,panels}/**`, `lib/{media,persist}/**`,
   `app/page.tsx`, `styles/{shell,media,panels}.css`
@@ -57,7 +59,7 @@
   quando houver salvar na nuvem (projetos em Neon, mídia/efeitos em R2) — hoje tudo fica no navegador.
 
 ## Branches
-- Integração: `claude/ai-video-editor-r0tr67` (branch padrão do repo e produção na Vercel). Sessões de módulo: `claude/ai-video-editor-r0tr67-<módulo>`.
+- Integração: `claude/ai-video-editor-r0tr67` (branch padrão do repo e produção na Vercel). Sessões de módulo: `claude/ai-video-editor-r0tr67-<módulo>` (timeline, engine, ai, shell, library, export, qa — todas com deploy desligado no `web/vercel.json`).
 - **Autorização do Bruno (2026-11-19): abrir PR e fazer merge sem perguntar.** Fluxo: merge local de teste das branches de
   módulo → tsc + vitest + build + E2E (Playwright) → PR por módulo (rascunho → pronto) → merge pelo GitHub (método merge).
   Se o GitHub acusar conflito que o git local não tem, mesclar localmente na integração e pushar (o PR fecha como mesclado).
