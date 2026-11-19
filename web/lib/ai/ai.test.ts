@@ -537,3 +537,47 @@ describe('cursor da IA: ordem e balão', () => {
     expect(stepDelay(false, 260)).toBe(260);
   });
 });
+
+describe('vídeo modelo', () => {
+  const fastStyle = { summary: 'x', pacing: 'very-fast', avgShotLength: 0.8, aspect: '9:16', transitions: ['cut', 'whip'], zoomPunchIns: true, colorPreset: 'warm', captions: { present: true, preset: 'bold-pop', maxWords: 2, uppercase: true }, textOverlays: { present: true, examples: ['OFERTA'] } } as never;
+  it('describeStyle resume ritmo, legendas, cores, zooms, transições e textos', async () => {
+    const { describeStyle } = await import('./model');
+    const d = describeStyle(fastStyle, 'modelo.mp4');
+    expect(d).toContain('Estilo do modelo “modelo.mp4”');
+    expect(d).toMatch(/Ritmo: muito rápido — 1,3 cortes por segundo/);
+    expect(d).toMatch(/Legendas: sim .*2 palavras por vez, maiúsculas/);
+    expect(d).toContain('Cores/look: quentes');
+    expect(d).toContain('chicote');
+    expect(d).toContain('OFERTA');
+  });
+  it('escopo e "aplicar já" a partir do texto', async () => {
+    const { styleScopeFromText, wantsApplyNow } = await import('./model');
+    expect(styleScopeFromText('só as legendas')).toBe('captions');
+    expect(styleScopeFromText('só o ritmo de cortes')).toBe('pacing');
+    expect(styleScopeFromText('só as cores')).toBe('colors');
+    expect(wantsApplyNow('deixa igual a esse')).toBe(true);
+    expect(wantsApplyNow('')).toBe(false);
+    expect(wantsApplyNow('olha esse vídeo')).toBe(false);
+  });
+  it('styleOps (demo) corta no ritmo do modelo, aplica legenda, cor e transição', async () => {
+    const { styleOps } = await import('./model');
+    const p = base(); // 1 clipe de 20 s
+    const all = styleOps(p, fastStyle, 'all');
+    const s = sanitizeOps(all.ops, p, assets);
+    const vids = s.project.tracks.flatMap((t) => t.clips).filter((c) => c.type === 'video') as VideoClip[];
+    expect(vids.length).toBeGreaterThan(15);
+    expect(vids.every((c) => c.colorPreset === 'warm')).toBe(true);
+    expect(vids.slice(1).some((c) => c.transitionIn?.kind === 'whip')).toBe(true);
+    expect(s.project.captions.style).toMatchObject({ maxWords: 2, uppercase: true });
+    expect(projectDuration(s.project)).toBeCloseTo(20, 1);
+    const onlyColors = styleOps(p, fastStyle, 'colors');
+    expect(onlyColors.ops.every((o) => o.op === 'update_clip')).toBe(true);
+  });
+  it('cor média vira preset de cor', async () => {
+    const { colorPresetFromStats } = await import('./demo');
+    expect(colorPresetFromStats({ r: 0.5, g: 0.5, b: 0.5, sat: 0.03, lum: 0.5 })).toBe('bw');
+    expect(colorPresetFromStats({ r: 0.7, g: 0.5, b: 0.4, sat: 0.3, lum: 0.55 })).toBe('warm');
+    expect(colorPresetFromStats({ r: 0.4, g: 0.5, b: 0.6, sat: 0.3, lum: 0.5 })).toBe('cool');
+    expect(colorPresetFromStats(undefined)).toBeUndefined();
+  });
+});
