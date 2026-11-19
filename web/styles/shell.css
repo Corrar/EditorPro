@@ -636,7 +636,7 @@
 .ep-aicursor-arrow { display:block; margin:-2px 0 0 -2px; filter:drop-shadow(0 2px 4px rgba(0,0,0,.35)); }
 .ep-aicursor-arrow path { fill:var(--green, #F2681F); stroke:#fff; stroke-width:1.6; stroke-linejoin:round; }
 .ep-aicursor-tag { position:absolute; left:16px; top:18px; padding:3px 8px; border-radius:8px 8px 8px 3px; background:var(--green, #F2681F); color:#fff; font:800 11px/1.2 var(--font, inherit); white-space:nowrap; box-shadow:0 4px 12px rgba(242,104,31,.35); }
-.ep-aicursor-bubble { position:absolute; left:16px; top:42px; max-width:min(240px, 62vw); padding:7px 11px; border-radius:12px; background:rgba(20,20,22,.88); color:#fff; font:600 12.5px/1.3 var(--font, inherit); box-shadow:0 8px 22px rgba(0,0,0,.28); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); animation:toastIn .2s ease both; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+.ep-aicursor-bubble { position:absolute; left:16px; top:42px; width:max-content; max-width:min(240px, 62vw); padding:7px 11px; border-radius:12px; background:rgba(20,20,22,.88); color:#fff; font:600 12.5px/1.3 var(--font, inherit); box-shadow:0 8px 22px rgba(0,0,0,.28); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); animation:toastIn .2s ease both; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
 .ep-aicursor.flip .ep-aicursor-tag { left:auto; right:6px; border-radius:8px 8px 3px 8px; }
 .ep-aicursor.flip .ep-aicursor-bubble { left:auto; right:6px; }
 .ep-aicursor-click { position:absolute; width:36px; height:36px; margin:-18px 0 0 -18px; border-radius:50%; border:2.5px solid var(--green, #F2681F); animation:epAiClick .6s ease-out forwards; }
