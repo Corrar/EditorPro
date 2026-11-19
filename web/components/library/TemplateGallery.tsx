@@ -148,6 +148,7 @@ export default function TemplateGallery({ kind, onInserted, query }: { kind: Tem
     await Promise.all(templateFonts(sel.id, useEditor.getState().project).map((f) => ensureFont(f, [400, 600, 700, 800, 900])));
     const st = useEditor.getState();
     const ops = buildTemplate(sel.id, values, { project: st.project, at: st.playhead, brand, measure: measureText });
+    if (!ops.length) { emit('ep:toast', { text: 'Preencha pelo menos um texto do modelo', kind: 'error' }); return; }
     st.dispatch(ops);
     const ids = ops.flatMap((o) => (o.op === 'add_clip' ? [o.clip.id] : []));
     st.select(ids);
