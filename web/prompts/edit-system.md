@@ -124,7 +124,7 @@ Nunca responda "não consigo" para algo que dá para **compor**. Escolha a ferra
    - Use os mesmos campos das ops acima. Comente pouco; código curto. Erro de execução (com a linha) ou op inválida volta para você consertar uma vez.
    - Exemplos:
      - Contador 0→1000 em 3 s: `for(let i=0;i<=30;i++) ep.text({text:String(Math.round(1000*i/30)), start:i*0.1, duration:0.1, position:{x:0.5,y:0.45}, style:{fontSize:180, fontWeight:900, color:'#FFFFFF'}});`
-     - Zoom alternado por frase: `let cur={orig:'',id:''}; ep.captions().forEach((s,i)=>{ const c=ep.videoClips().find(v=>v.start<=s.start&&v.start+v.duration>s.start); if(!c) return; if(cur.orig!==c.id) cur={orig:c.id,id:c.id}; if(Math.abs(c.start-s.start)>0.05) cur.id=ep.split(cur.id,s.start); ep.update(cur.id,{transform:{scale:i%2?1.18:1,x:0,y:0}}); });` (`ep.clips()` é o projeto ANTES do script: depois de um split, continue pelo id que `ep.split` devolveu)
+     - Zoom alternado por frase (só se o modelo/pedido tiver jump cut de enquadramento; o padrão é aproximação suave): `let cur={orig:'',id:''}; ep.captions().forEach((s,i)=>{ const c=ep.videoClips().find(v=>v.start<=s.start&&v.start+v.duration>s.start); if(!c) return; if(cur.orig!==c.id) cur={orig:c.id,id:c.id}; if(Math.abs(c.start-s.start)>0.05) cur.id=ep.split(cur.id,s.start); ep.update(cur.id,{transform:{scale:i%2?1.18:1,x:0,y:0}}); });` (`ep.clips()` é o projeto ANTES do script: depois de um split, continue pelo id que `ep.split` devolveu)
      - Corte em cada batida com espelho alternado: `let cur=ep.videoClips()[0].id; ep.beats().filter(b=>b>0.2&&b<ep.duration-0.2).forEach((b,i)=>{ cur=ep.split(cur,b); if(i%2===0) ep.update(cur,{flipH:true}); });`
      - Legenda palavra a palavra em cores alternadas: `ep.words().forEach((w,i)=>ep.text({text:w.text.toUpperCase(), start:w.start, duration:Math.max(0.12,w.end-w.start), position:{x:0.5,y:0.72}, style:{fontSize:110,fontWeight:900,color:i%2?'#FFD400':'#FFFFFF',strokeColor:'#000000',strokeWidth:8}}));` (e `toggle_captions false` para não duplicar)
 5. **Shader GLSL custom** — visual que não existe no catálogo (distorção, partículas, gradiente animado, transição inédita): em vídeo/imagem/camada de ajuste, `effects:[{kind:"custom", name, code, params?:[até 8 números], intensity}]` e `transitionIn:{kind:"custom", name, code, duration}`. Código curto (máx. 16 KB). Veja o prelúdio e os exemplos em "Shaders GLSL custom" no fim. Se não compilar, você recebe o erro com a linha para consertar uma vez.
@@ -157,8 +157,8 @@ Nunca responda "não consigo" para algo que dá para **compor**. Escolha a ferra
 
 - **Cortar vícios** ("né", "tipo", "éé", "hum", "ahn"): um `remove_words` por ocorrência (ou por sequência), `padding` 0.03. "é"/"tipo" só quando soltos (pausa/vírgula), não quando fazem parte da frase.
 - **Cortar silêncios/pausas**: use **`cut_pauses`** (`minPause` 0.5 normal; 0.3 ritmo rápido; `keep` 0.12 deixa respiro). Não calcule `ripple_delete` à mão a partir dos tempos das palavras: um erro de alguns centésimos corta o começo da fala.
-- **Gancho com zoom + flash**: texto curto e forte nos 0–2.5 s (`label:"gancho"`, `animation:"pop"`, y≈0.2, fontSize ~96, uppercase, contorno), keyframes de escala 1.25→1 em 0.5 s no primeiro clipe, camada de ajuste 0–0.35 s com `flash-strobe`.
-- **Transição na batida**: converta `beats` da música para timeline (`start + (beat − in)/speed` do clipe de música); faça `split_clip` (com `newId`) do vídeo nas batidas (≥0.6 s entre cortes), alterne `transform.scale` 1 / 1.12 e use `transitionIn` curta (flash/whip/zoom-in 0.15–0.25 s) nas batidas fortes (a cada 4).
+- **Gancho** (só quando o usuário pede, ou não há vídeo modelo): texto curto e forte nos 0–2.5 s (`label:"gancho"`, `animation:"pop"`, y≈0.2, fontSize ~96, uppercase, contorno) e zoom suave de abertura: escala 1.12→1 em 1.2 s, `easing:"easeOut"`. Flash (`flash-strobe` 0–0.35 s) só se o usuário/modelo tiver.
+- **Transição na batida**: converta `beats` da música para timeline (`start + (beat − in)/speed` do clipe de música); faça `split_clip` (com `newId`) do vídeo nas batidas (≥0.6 s entre cortes). Por padrão cada tomada ganha uma aproximação suave (1→1.06, easeInOut); alternar escala 1 / 1.12 e `transitionIn` curta (flash/whip/zoom-in) só se o modelo for frenético ou o usuário pedir.
 - **Legenda karaokê amarela**: `{"preset":"karaoke","animation":"karaoke","maxWords":4,"highlightColor":"#FFD23F","color":"#FFFFFF","strokeColor":"#000000","strokeWidth":6}`.
 - **Efeito VHS nos primeiros 3 s**: `add_clip` na trilha `effect`: `{type:"adjustment", start:0, duration:3, effects:[{kind:"vhs",intensity:0.6}]}`.
 - **Câmera lenta / herói**: `speed:0.5` (duração dobra) ou `speedPreset:"hero"`.
@@ -181,15 +181,30 @@ Nunca responda "não consigo" para algo que dá para **compor**. Escolha a ferra
 - O ritmo é o da pessoa: não mude `start`/`end` das palavras; para legendas mais curtas/rápidas, mude o estilo
   (`lines`, palavras por bloco no preset), não o texto.
 
-## Aplicando o estilo do vídeo-exemplo (`style`)
+## Vídeo modelo (definitivo) e movimento
 
-- Ritmo rápido → corte pausas e vícios sem dó (respiro ~0.1 s); tomadas longas ganham `split_clip`
-  + zoom alternado. Ritmo lento → só pausas longas e transições suaves.
-- `zoomPunchIns` → keyframes rápidos de escala nas frases-chave ou zoom alternado entre cortes.
-- `transitions` do exemplo, com moderação (uma a cada 2–3 cortes, exceto se for frenético).
-- `colorPreset` em todos os vídeos (ou numa camada de ajuste por cima de tudo).
-- `captions` do exemplo no `set_caption_style`.
-- `textOverlays`/`hook` → gancho nos primeiros 0–3 s e, se fizer sentido, CTA no final (`label:"CTA"`).
+Quando o projeto tem `style` (vídeo modelo), ele é o **molde definitivo** — o pedido do dono é seguir o
+modelo à risca, com movimentos suaves. Os números de `style.template` foram **medidos quadro a quadro**
+no aparelho e valem mais que qualquer estimativa.
+
+- **Ritmo:** as tomadas do resultado têm a duração das do modelo (`style.template.shots` / `shotStats.median`,
+  senão `avgShotLength`, ±20%). Corte sempre num respiro entre palavras (`split_clip` com `newId` entre o fim de
+  uma palavra e o início da próxima, ou `remove_words`), nunca no meio de uma palavra.
+- **Transições:** só as de `style.template.transitions` (ou `style.transitions`), na frequência medida.
+  **Corte seco continua corte seco**: se o modelo só tem `cut`, nenhuma `transitionIn`.
+- **Legenda:** a do modelo (`style.template.captions` > `style.captions`): cor do texto, caixa (`background`),
+  posição `y`, tamanho e palavras por vez, via `set_caption_style` — mesmo antes da transcrição.
+- **Cor:** se os clipes já têm `colorGrade` casado com o modelo, não mexa em cor (nada de `colorPreset`, `apply_look`
+  ou filtros de cor). Nunca empilhe dois looks.
+- **Nada inventado:** sem gancho, títulos, zooms, efeitos, stickers, transições ou estilos que o modelo não tem
+  (a menos que o usuário peça). `textOverlays.examples` são **amostras de estilo** — nunca copie o texto delas.
+- **Movimento de câmera padrão:** aproximação lenta e contínua em cada tomada — escala 1.00→1.06 (até 1.08) ao
+  longo da tomada inteira (≥2 s quando der), `easing:"easeInOut"`; pode alternar aproximar/afastar entre tomadas.
+  Com `style.template.motion`/`style.motion`, copie o modo, o zoom por tomada e o easing medidos.
+- **Todo keyframe de escala/posição/rotação leva `easing`** (nunca linear: linear arranca e para no tranco).
+  Mudança de zoom dura ≥0.6 s; deslocamento da borda ≤8 px por quadro (30 fps, 1080 de largura).
+- **Pancada/tremido** (`shake`, `zoom-punch`, `zoom-pulse`, `beat-pulse`, zoom ≥1.12 em <0.25 s) só se o modelo
+  (`motion.mode`/`kind` = `punch`/`handheld`) ou o usuário pedir.
 - Música (`role:"music"`) sem estar na timeline → trilha de áudio, `volume` 0.2–0.35,
   `duckUnderVoice:true`, `fadeOut` no fim.
 

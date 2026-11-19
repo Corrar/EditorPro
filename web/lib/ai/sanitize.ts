@@ -7,7 +7,7 @@ import type {
   AspectRatio, AudioEffect, AudioEffectKind, BlendMode, CaptionPreset, CaptionSegment, CaptionStyle, CaptionWord, ChromaKey,
   ClipAnimation, ColorPreset, Crop, Easing, Filter, FilterKind, FitMode, Keyframe, Mask, MaskShape, ShapeKind, SpeedPoint,
   SpeedPreset, StyleProfile, TextAnimation, TextStyle, Transform, Transition, TransitionKind, VisualEffect, VisualEffectKind,
-  ColorGrade, ColorWheel, CurvePoint, HslBand, MaskKeyframe,
+  ColorGrade, ColorWheel, CurvePoint, HslBand, MaskKeyframe, MotionMode, ReferenceTemplate, ShotMotion, StyleMotion,
 } from '../types';
 import { uid } from '../util';
 // listas derivadas dos catálogos dos donos (engine/biblioteca) — ver catalogs.ts
@@ -138,11 +138,46 @@ export function sanitizeKeyframes(v: unknown, clipDuration: number): Keyframe[] 
     const transform = sanitizeTransform(k.transform);
     const props = sanitizeKeyframeProps(k.props);
     if (t === undefined || (!transform && !props)) continue;
-    const easing = oneOf(k.easing, EASINGS);
+    // keyframe de câmera (escala/posição/rotação) da IA sem easing: easeInOut (linear arranca e para no tranco)
+    const camera = !!transform && (['scale', 'x', 'y', 'rotation'] as const).some((key) => typeof transform[key] === 'number');
+    const easing = oneOf(k.easing, EASINGS) ?? (camera ? 'easeInOut' : undefined);
     out.push({ t: r3(t), transform: transform ?? {}, ...(props ? { props } : {}), ...(easing ? { easing } : {}) });
   }
   out.sort((a, b) => a.t - b.t);
   return out.slice(0, 64);
+}
+
+/** zoom mínimo de uma mudança de escala "suave" (s) e variação máxima de escala por segundo */
+export const MIN_ZOOM_RAMP = 0.6;
+/** 0,14/s com easing cúbico (pico 3× a média) = ~7,5 px/quadro de borda a 30 fps em 1080 */
+export const MAX_SMOOTH_SCALE_RATE = 0.14;
+
+/**
+ * Suaviza o movimento de câmera da IA (quando o modelo/pedido NÃO é zoom em pancada):
+ * trechos de escala com |Δscale|/Δt > MAX_SMOOTH_SCALE_RATE ou mais curtos que 0,4 s são esticados
+ * (o keyframe de chegada vai para frente, sem passar do fim do clipe nem do próximo keyframe de escala)
+ * e ganham easeInOut. Puro; não mexe em props.
+ */
+export function smoothKeyframes(kfs: Keyframe[], clipDuration: number): Keyframe[] {
+  const out = kfs.map((k) => ({ ...k, transform: { ...k.transform } })).sort((a, b) => a.t - b.t);
+  const idx = out.map((k, i) => (typeof k.transform.scale === 'number' ? i : -1)).filter((i) => i >= 0);
+  for (let j = 1; j < idx.length; j++) {
+    const a = out[idx[j - 1]], c = out[idx[j]];
+    const ds = Math.abs((c.transform.scale as number) - (a.transform.scale as number));
+    if (ds < 1e-4) continue;
+    const span = c.t - a.t;
+    const need = Math.max(0.4, MIN_ZOOM_RAMP * Math.min(1, ds / 0.06), ds / MAX_SMOOTH_SCALE_RATE);
+    if (span >= need - 1e-6) { c.easing ??= 'easeInOut'; continue; }
+    const next = j + 1 < idx.length ? out[idx[j + 1]].t - 0.05 : clipDuration;
+    const target = Math.min(a.t + need, next, clipDuration);
+    if (target > c.t) {
+      // keyframe só de escala: anda; com outras props, o trecho mantém o tempo e só ganha easing
+      const onlyScale = !c.props && Object.keys(c.transform).every((key) => key === 'scale');
+      if (onlyScale) c.t = r3(target);
+    }
+    c.easing = 'easeInOut';
+  }
+  return out.sort((a, b) => a.t - b.t);
 }
 
 export function sanitizeFilters(v: unknown): Filter[] | undefined {
@@ -282,6 +317,96 @@ export function sanitizeStyleProfile(v: unknown): StyleProfile | undefined {
     const s = v.structure.map((x) => str(x, 40)).filter((x): x is string => !!x).slice(0, 10);
     if (s.length) out.structure = s;
   }
+  const motion = sanitizeStyleMotion(v.motion); if (motion) out.motion = motion;
+  const template = sanitizeTemplate(v.template); if (template) out.template = template;
+  return out;
+}
+
+export const MOTION_MODES: MotionMode[] = ['static', 'smooth-push', 'push-pull', 'punch', 'pan', 'handheld', 'mixed'];
+
+export function sanitizeStyleMotion(v: unknown): StyleMotion | undefined {
+  if (!isObj(v)) return undefined;
+  const kind = oneOf(v.kind, MOTION_MODES);
+  if (!kind) return undefined;
+  const out: StyleMotion = { kind };
+  const z = clampNum(v.zoomPerShot, 0.7, 1.6); if (z !== undefined) out.zoomPerShot = r3(z);
+  const e = oneOf(v.easing, EASINGS); if (e) out.easing = e;
+  const pr = clampNum(v.punchRate, 0, 600); if (pr !== undefined) out.punchRate = r3(pr);
+  return out;
+}
+
+const HEX6 = /^#[0-9a-f]{6}$/i;
+const hex = (v: unknown) => (typeof v === 'string' && HEX6.test(v) ? v.toUpperCase() : undefined);
+const unit = (v: unknown) => clampNum(v, 0, 1);
+
+/** molde medido do vídeo modelo: tudo limitado (listas, faixas, cores) */
+export function sanitizeTemplate(v: unknown): ReferenceTemplate | undefined {
+  if (!isObj(v) || !isObj(v.motion) || !isObj(v.color)) return undefined;
+  const shots = (Array.isArray(v.shots) ? v.shots : []).filter(isObj).slice(0, 400)
+    .map((s) => ({ start: clampNum(s.start, 0, 36000), end: clampNum(s.end, 0, 36000) }))
+    .filter((s): s is { start: number; end: number } => s.start !== undefined && s.end !== undefined && s.end > s.start)
+    .map((s) => ({ start: r3(s.start), end: r3(s.end) }));
+  if (!shots.length) return undefined;
+  const st = isObj(v.shotStats) ? v.shotStats : {};
+  const durs = shots.map((s) => s.end - s.start).sort((a, b) => a - b);
+  const q = (f: number) => durs[Math.min(durs.length - 1, Math.floor(f * durs.length))];
+  const shotStats = {
+    median: r3(clampNum(st.median, 0.05, 600) ?? q(0.5)),
+    p10: r3(clampNum(st.p10, 0.05, 600) ?? q(0.1)),
+    p90: r3(clampNum(st.p90, 0.05, 600) ?? q(0.9)),
+  };
+  const m = v.motion;
+  const perShot: ShotMotion[] = (Array.isArray(m.perShot) ? m.perShot : []).filter(isObj).slice(0, 400).flatMap((s) => {
+    const start = clampNum(s.start, 0, 36000), end = clampNum(s.end, 0, 36000);
+    if (start === undefined || end === undefined || end <= start) return [];
+    return [{
+      start: r3(start), end: r3(end),
+      zoomTotal: r3(clampNum(s.zoomTotal, 0.5, 2) ?? 1),
+      panX: r3(clampNum(s.panX, -1, 1) ?? 0),
+      panY: r3(clampNum(s.panY, -1, 1) ?? 0),
+      peakOverMean: r3(clampNum(s.peakOverMean, 0, 100) ?? 1),
+      easing: oneOf(s.easing, EASINGS) ?? 'easeInOut',
+      punches: Math.round(clampNum(s.punches, 0, 100) ?? 0),
+    }];
+  });
+  const motion: ReferenceTemplate['motion'] = {
+    mode: oneOf(m.mode, MOTION_MODES) ?? 'static',
+    avgZoomPerShot: r3(clampNum(m.avgZoomPerShot, 0.7, 1.6) ?? 1),
+    easing: oneOf(m.easing, EASINGS) ?? 'easeInOut',
+    perShot,
+  };
+  const dir = oneOf(m.direction, ['in', 'out', 'alternate'] as const); if (dir) motion.direction = dir;
+  const pf = unit(m.punchFrequency); if (pf !== undefined) motion.punchFrequency = r3(pf);
+  const transitions = (Array.isArray(v.transitions) ? v.transitions : []).filter(isObj).slice(0, 12).flatMap((t) => {
+    const kind = oneOf(t.kind, TRANSITIONS);
+    return kind ? [{ kind, duration: r3(clampNum(t.duration, 0, 3) ?? 0), frequency: r3(unit(t.frequency) ?? 0) }] : [];
+  });
+  const c = v.color;
+  const color: ReferenceTemplate['color'] = {
+    r: r3(unit(c.r) ?? 0.5), g: r3(unit(c.g) ?? 0.5), b: r3(unit(c.b) ?? 0.5), sat: r3(unit(c.sat) ?? 0.3), lum: r3(unit(c.lum) ?? 0.5),
+  };
+  const sd = unit(c.lumSd); if (sd !== undefined) color.lumSd = r3(sd);
+  if (Array.isArray(c.hist16) && c.hist16.length === 3) {
+    const h = c.hist16.map((ch) => (Array.isArray(ch) ? ch.slice(0, 16).map((x) => r3(unit(x) ?? 0)) : []));
+    if (h.every((ch) => ch.length === 16)) color.hist16 = h;
+  }
+  const out: ReferenceTemplate = { shots, shotStats, motion, transitions: transitions.length ? transitions : [{ kind: 'cut', duration: 0, frequency: 1 }], color };
+  if (isObj(v.captions) && isObj(v.captions.region)) {
+    const y0 = unit(v.captions.region.y0), y1 = unit(v.captions.region.y1);
+    const textColor = hex(v.captions.textColor);
+    if (y0 !== undefined && y1 !== undefined && y1 > y0 && textColor) {
+      const cap: NonNullable<ReferenceTemplate['captions']> = {
+        region: { y0: r3(y0), y1: r3(y1) },
+        textColor,
+        boxColor: hex(v.captions.boxColor) ?? null,
+        heightPx1920: Math.round(clampNum(v.captions.heightPx1920, 10, 600) ?? 80),
+      };
+      const up = bool(v.captions.uppercase); if (up !== undefined) cap.uppercase = up;
+      const w = clampNum(v.captions.wordsPerChunk, 1, 12); if (w !== undefined) cap.wordsPerChunk = Math.round(w);
+      out.captions = cap;
+    }
+  }
+  const cob = unit(v.cutsOnBeats); if (cob !== undefined) out.cutsOnBeats = r3(cob);
   return out;
 }
 

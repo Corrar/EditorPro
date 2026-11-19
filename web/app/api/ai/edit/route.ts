@@ -66,6 +66,26 @@ function describeContext(c: unknown, p: Project): string {
   return parts.length ? parts.join(' / ') : label ?? '';
 }
 
+/** tarefa da 1ª edição: com vídeo modelo, ele é o MOLDE DEFINITIVO (nada de inventar gancho/zoom/efeito/transição) */
+function firstEditTask(p: Project): string {
+  const hasCaptions = p.captions.segments.length > 0;
+  const capLine = hasCaptions ? ' Aplique as legendas no estilo certo.' : '';
+  if (!p.style) {
+    return `PRIMEIRA EDIÇÃO: transforme o material bruto no vídeo descrito no brief. Use a transcrição (palavras com ids e tempos) para cortar silêncios, erros, repetições e vícios com remove_words/ripple_delete e para achar frases fortes.${capLine} Gancho, zooms suaves, cor, efeitos e transições só onde ajudam o vídeo.`;
+  }
+  const graded = p.tracks.some((t) => t.clips.some((c) => (c.type === 'video' || c.type === 'image') && c.colorGrade && Object.keys(c.colorGrade).length));
+  return [
+    'PRIMEIRA EDIÇÃO — MODELO DEFINITIVO: o `style` do projeto (vídeo modelo) é o molde. Replique-o com fidelidade; o brief diz o conteúdo/objetivo, o modelo diz COMO editar.',
+    '- Ritmo: corte nos respiros da fala (remove_words / split_clip com newId entre palavras) para as tomadas ficarem com a duração das do modelo (`style.template.shots`/`shotStats`, senão `avgShotLength`, ±20%).',
+    '- Movimento: o de `style.template.motion` / `style.motion` em CADA tomada (keyframes de escala com easing). Sem medição: aproximação lenta 1.00→1.06 por tomada, easeInOut. Pancada (zoom rápido) só se o modelo tiver.',
+    '- Transições: só as do modelo (`style.template.transitions`); corte seco continua corte seco.',
+    hasCaptions ? '- Legendas: a cor, caixa, posição, tamanho e palavras por vez do modelo (`style.template.captions` > `style.captions`) via set_caption_style.' : '- Legendas: ainda sem transcrição — se o modelo tem legenda, deixe o estilo pronto com set_caption_style (cor, caixa, posição, palavras por vez do modelo).',
+    graded ? '- Cor: JÁ casada com o modelo (os clipes têm colorGrade). Não aplique colorPreset, apply_look nem filtros de cor.' : '- Cor: a do modelo (`style.template.color` / `style.colorPreset`), sem empilhar dois looks.',
+    '- NÃO acrescente gancho, títulos, zooms, efeitos, transições, stickers ou estilos de legenda que o modelo não tem, a menos que o brief peça. Os `textOverlays.examples` do modelo são amostras de estilo: nunca copie o texto.',
+    '- Use a transcrição (palavras com ids e tempos) para cortar silêncios, erros, repetições e vícios.',
+  ].join('\n');
+}
+
 function looksLikeProject(p: unknown): p is Project {
   return isObj(p) && Array.isArray(p.tracks) && isObj(p.captions) && Array.isArray((p.captions as Record<string, unknown>).segments);
 }
@@ -89,8 +109,11 @@ export async function POST(req: Request) {
       const img = typeof f.data === 'string' ? imageBlock(f.data, typeof f.mediaType === 'string' ? f.mediaType : 'image/jpeg') : null;
       if (!img) continue;
       const t = num(f.t);
+      const isModel = typeof f.assetId === 'string' && (f.assetId === project.referenceAssetId || assets[f.assetId]?.role === 'reference');
       const label = f.assetId === 'resultado'
         ? `Quadro do RESULTADO (como ficou a edição) em ${t !== undefined ? t.toFixed(2) : '?'} s da timeline:`
+        : isModel
+        ? `Quadro do MODELO (vídeo de referência — copie o estilo, nunca o conteúdo) em ${t !== undefined ? t.toFixed(1) : '?'} s:`
         : `Miniatura do material "${str(f.assetId, 80) ?? '?'}" em ${t !== undefined ? t.toFixed(1) : '?'} s da mídia:`;
       content.push({ type: 'text', text: label }, img);
     }
@@ -101,7 +124,7 @@ export async function POST(req: Request) {
       : reviewMode
         ? 'CONFERÊNCIA DO RESULTADO: veja os quadros do RESULTADO renderizado e compare com o pedido do usuário. Se estiver certo, devolva ops: [] e ok: true. Se houver problema visível (texto cortado/ilegível/fora do quadro, cor ou posição errada, efeito invisível ou exagerado), devolva só as ops de ajuste e ok: false. Não refaça o que já está bom.'
         : first
-      ? 'PRIMEIRA EDIÇÃO: transforme o material bruto no vídeo descrito no brief, aplicando o estilo do vídeo-exemplo (se houver). Use a transcrição (palavras com ids e tempos) para cortar silêncios, erros, repetições e vícios com remove_words/ripple_delete e para achar frases fortes. Aplique legendas no estilo certo, gancho, zooms, cor, efeitos e transições.'
+      ? firstEditTask(project)
       : commentsMode
         ? 'APLICAR COMENTÁRIOS: atenda cada comentário de revisão no tempo indicado, marque cada um com update_marker {"resolved": true} e devolva "comments" com uma resposta curta por comentário.'
         : 'AJUSTE PELO CHAT: faça exatamente o que o usuário pediu, sem refazer o resto.';

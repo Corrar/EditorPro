@@ -37,11 +37,11 @@ describe('silêncio com limiar ajustável', () => {
 });
 
 describe('zoom na ênfase', () => {
-  it('punch-ins nas frases fortes, um update_clip com keyframes válidos', () => {
+  it('(pedido de pancada) punch-ins nas frases fortes, um update_clip com keyframes válidos', () => {
     let p = base();
     const segs = Array.from({ length: 8 }, (_, i) => ({ id: `s${i}`, start: i * 2.4, end: i * 2.4 + 2, text: i === 3 ? 'Isso mudou TUDO!' : i === 5 ? 'Foram 300 clientes' : 'frase comum aqui' }));
     p = applyOps(p, [{ op: 'set_captions', segments: segs, language: 'pt-BR' } as EditOp]).project;
-    const { ops, count } = emphasisZoomOps(p);
+    const { ops, count } = emphasisZoomOps(p, 8, undefined, true);
     expect(count).toBeGreaterThanOrEqual(2);
     expect(ops).toHaveLength(1);
     const s = sanitizeOps(ops, p, { a1: src });

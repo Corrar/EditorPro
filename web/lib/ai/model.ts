@@ -7,10 +7,9 @@
    ===================================================================== */
 import { applyOps, type EditOp } from '../ops';
 import type { CaptionStyle, Project, StyleProfile } from '../types';
-import { colorOps, norm, transitionOps, videoClipsOf, zoomOps } from './demo';
+import { colorOps, norm, videoClipsOf } from './demo';
+import { templateCaptionStyle, templateOps } from './template';
 import { captionPresetDef } from '../library';
-import { uid } from '../util';
-import { r3 } from './sanitize';
 
 export type StyleScope = 'all' | 'captions' | 'pacing' | 'colors';
 
@@ -46,7 +45,10 @@ export function describeStyle(s: StyleProfile, name?: string): string {
     }
   }
   lines.push(`• Cores/look: ${s.colorPreset ? COLORS[s.colorPreset] ?? s.colorPreset : 'naturais'}`);
-  lines.push(`• Zooms: ${s.zoomPunchIns ? 'punch-ins rápidos nas frases' : 'quase sem zoom'}`);
+  const MOVES: Record<string, string> = { static: 'câmera parada (sem zoom)', 'smooth-push': 'aproximação lenta e suave', 'push-pull': 'aproxima e afasta, suave', punch: 'zoom em pancada', pan: 'movimento lateral', handheld: 'câmera na mão', mixed: 'movimento misto' };
+  const mv = s.template?.motion ?? (s.motion ? { mode: s.motion.kind, avgZoomPerShot: s.motion.zoomPerShot ?? 1 } : undefined);
+  if (mv) lines.push(`• Movimento: ${MOVES[mv.mode] ?? mv.mode}${Math.abs(mv.avgZoomPerShot - 1) > 0.01 ? ` (${n(Math.abs(mv.avgZoomPerShot - 1) * 100, 0)}% por tomada)` : ''}`);
+  else lines.push(`• Zooms: ${s.zoomPunchIns ? 'punch-ins rápidos nas frases' : 'não medido — uso aproximação lenta e suave'}`);
   const tr = [...new Set(s.transitions.map((t) => TRANSITIONS[t] ?? t))];
   if (tr.length) lines.push(`• Transições: ${tr.join(', ')}`);
   if (s.textOverlays) lines.push(`• Textos na tela: ${s.textOverlays.present ? `sim${s.textOverlays.examples?.length ? ` (ex.: “${s.textOverlays.examples.slice(0, 2).join('”, “')}”)` : ''}` : 'não'}`);
@@ -82,13 +84,14 @@ export function modelRequestText(scope: StyleScope): string { return SCOPE_TEXT[
 export const SCOPE_LABELS: Record<Exclude<StyleScope, 'all'>, string> = { captions: 'Só as legendas', pacing: 'Só o ritmo de cortes', colors: 'Só as cores' };
 
 /**
- * Modo demo: aplica o estilo do modelo no projeto.
- * - ritmo: divide as tomadas longas no tamanho médio do modelo e alterna o enquadramento (jump cut),
- *   + transição do modelo nos cortes
- * - legendas: estilo do modelo (preset/maiúsculas/palavras por vez)
- * - cores: preset de cor do modelo
+ * Modo demo: aplica o estilo do modelo no projeto (o modelo é o molde DEFINITIVO).
+ * - ritmo: corta no tamanho das tomadas do modelo, nos respiros da fala (templateOps), com o
+ *   movimento de câmera dele (suave por padrão; pancada só se o modelo tiver) e só as transições dele
+ * - legendas: estilo do modelo (medido > descrito)
+ * - cores: `graded` = a cor já foi casada (colorGrade) → tira presets antigos (não empilha dois looks);
+ *   sem grade, usa o preset do perfil
  */
-export function styleOps(p: Project, s: StyleProfile, scope: StyleScope = 'all'): { ops: EditOp[]; said: string[] } {
+export function styleOps(p: Project, s: StyleProfile, scope: StyleScope = 'all', opts: { graded?: boolean } = {}): { ops: EditOp[]; said: string[] } {
   const ops: EditOp[] = [];
   const said: string[] = [];
   let sim = p;
@@ -100,40 +103,29 @@ export function styleOps(p: Project, s: StyleProfile, scope: StyleScope = 'all')
   };
 
   // cores antes dos cortes: os pedaços herdam a cor (menos passos ao vivo)
-  if ((scope === 'all' || scope === 'colors') && s.colorPreset && s.colorPreset !== 'none') {
-    push(colorOps(sim, s.colorPreset, COLORS[s.colorPreset] ?? s.colorPreset), `cores ${COLORS[s.colorPreset] ?? s.colorPreset}`);
-  } else if (scope === 'colors') said.push('o modelo usa cores naturais — não mudei nada');
+  if (scope === 'all' || scope === 'colors') {
+    if (opts.graded) {
+      const stale = videoClipsOf(sim).filter((c) => !c.locked && c.colorPreset && c.colorPreset !== 'none');
+      push(stale.map((c) => ({ op: 'update_clip' as const, clipId: c.id, patch: { colorPreset: 'none' as const }, explain: 'Tirando o look antigo (a cor agora vem do modelo)' })));
+    } else if (s.colorPreset && s.colorPreset !== 'none') {
+      push(colorOps(sim, s.colorPreset, COLORS[s.colorPreset] ?? s.colorPreset), `cores ${COLORS[s.colorPreset] ?? s.colorPreset}`);
+    } else if (scope === 'colors') said.push('o modelo usa cores naturais — não mudei nada');
+  }
 
   if (scope === 'all' || scope === 'pacing') {
-    const want = Math.max(0.6, Math.min(4, s.avgShotLength || 2));
-    // no máximo ~20 cortes espalhados pelo vídeo todo (vídeo longo = tomadas um pouco maiores)
-    const total = videoClipsOf(sim).reduce((n, c) => n + c.duration, 0);
-    const target = Math.max(want, total / 21);
-    const splits: EditOp[] = [];
-    let budget = 20; // ~20 cortes bastam p/ sentir o ritmo (e cabem no limite de ops)
-    for (const c of videoClipsOf(sim)) {
-      if (c.locked || c.duration < target * 1.6) continue;
-      let cur = c.id;
-      for (let a = c.start + target; a < c.start + c.duration - target * 0.6 && budget > 0; a += target, budget--) {
-        const newId = uid('clip');
-        splits.push({ op: 'split_clip', clipId: cur, at: r3(a), newId, explain: `Corte no ritmo do modelo em ${a.toFixed(1).replace(".", ",")} s` } as EditOp);
-        cur = newId;
-      }
-    }
-    push(splits, splits.length ? `${splits.length} cortes no ritmo do modelo (a cada ${target.toFixed(1).replace(".", ",")} s)` : undefined);
-    const fast = s.pacing === 'fast' || s.pacing === 'very-fast';
-    if (s.zoomPunchIns || fast) push(zoomOps(sim, fast), 'enquadramento alternado (jump cut)');
-    const tr = s.transitions.find((k) => k !== 'cut');
-    if (tr) push(transitionOps(sim, tr, TRANSITIONS[tr] ?? tr), `transições de ${TRANSITIONS[tr] ?? tr}`);
-    if (!splits.length && !said.length) said.push('o vídeo já está no ritmo do modelo');
+    const t = templateOps(sim, s, { captions: false });
+    push(t.ops);
+    said.push(...t.said);
+    if (!t.ops.length && !said.length) said.push('o vídeo já está no ritmo do modelo');
   }
 
   if ((scope === 'all' || scope === 'captions') && s.captions) {
     if (!s.captions.present) {
-      if (sim.captions.enabled && scope === 'captions') push([{ op: 'toggle_captions', enabled: false, explain: 'O modelo não usa legendas' }], 'escondi as legendas (o modelo não tem)');
+      if (s.template && sim.captions.enabled && scope === 'captions') push([{ op: 'toggle_captions', enabled: false, explain: 'O modelo não usa legendas' }], 'escondi as legendas (o modelo não tem)');
     } else {
+      const measured = s.template ? templateCaptionStyle(s.template) : undefined;
       const { present: _p, ...rest } = s.captions;
-      const style = rest as Partial<CaptionStyle>;
+      const style = { ...(rest as Partial<CaptionStyle>), ...(measured ?? {}) };
       if (Object.keys(style).length) push([{ op: 'set_caption_style', style, explain: 'Legendas no estilo do modelo' }], 'legendas no estilo do modelo');
       if (sim.captions.segments.length && !sim.captions.enabled) push([{ op: 'toggle_captions', enabled: true, explain: 'Mostrando as legendas' }]);
       if (!sim.captions.segments.length) said.push('as legendas aparecem assim que forem geradas');

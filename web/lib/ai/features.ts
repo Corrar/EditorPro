@@ -126,10 +126,13 @@ export function highlightOps(p: Project, maxSec: number): { ops: EditOp[]; kept:
 /* ---------- zoom automático na ênfase ---------- */
 
 /**
- * Punch-in curto (1→1.18→1) no começo das frases mais fortes (ênfase marcada, "!", números,
- * palavras do brief), até `max` frases. Um update_clip por clipe com todos os punches.
+ * Zoom nas frases mais fortes (ênfase marcada, "!", números, palavras do brief), até `max` frases.
+ * Padrão SUAVE: aproximação 1→1.06 durante a frase inteira (easeInOut) e volta em ≥0,6 s
+ * (≤8 px de borda por quadro). `punch: true` (pedido explícito / modelo com pancada): 1→1.18 em 0,15 s.
+ * Um update_clip por clipe com todos os zooms.
  */
-export function emphasisZoomOps(p: Project, max = 8, scale = 1.18): { ops: EditOp[]; count: number } {
+export function emphasisZoomOps(p: Project, max = 8, scale?: number, punch = false): { ops: EditOp[]; count: number } {
+  const z = scale ?? (punch ? 1.18 : 1.06);
   const segs = p.captions.segments;
   if (!segs.length) return { ops: [], count: 0 };
   const keywords = new Set(p.brief.split(/\s+/).map(normWord).filter((t) => t.length > 3));
@@ -139,20 +142,35 @@ export function emphasisZoomOps(p: Project, max = 8, scale = 1.18): { ops: EditO
   const chosen = ranked.filter((r) => r.score >= cut).slice(0, max).map((r) => r.s).sort((a, b) => a.start - b.start);
   const byClip = new Map<Id, { clip: VideoClip; kfs: Keyframe[]; n: number }>();
   let lastT = -10;
+  const lastRel = new Map<Id, number>();
   for (const s of chosen) {
-    if (s.start - lastT < 1.5) continue; // nada de zoom em cima de zoom
+    if (s.start - lastT < (punch ? 1.5 : 2.2)) continue; // nada de zoom em cima de zoom
     const clip = mainVideoClips(p).find((c) => s.start >= c.start && s.start < clipEnd(c) - 0.3);
     if (!clip) continue;
     const t0 = r3(s.start - clip.start);
-    const hold = Math.min(1.1, Math.max(0.5, s.end - s.start - 0.2));
-    const t3 = Math.min(clip.duration, t0 + 0.15 + hold + 0.25);
     const e = byClip.get(clip.id) ?? { clip, kfs: [], n: 0 };
-    e.kfs.push(
-      { t: r3(Math.max(0, t0 - 0.01)), transform: { scale: 1 } },
-      { t: r3(t0 + 0.15), transform: { scale }, easing: 'easeOut' },
-      { t: r3(Math.min(t3 - 0.25, t0 + 0.15 + hold)), transform: { scale } },
-      { t: r3(t3), transform: { scale: 1 }, easing: 'easeInOut' },
-    );
+    if (punch) {
+      const hold = Math.min(1.1, Math.max(0.5, s.end - s.start - 0.2));
+      const t3 = Math.min(clip.duration, t0 + 0.15 + hold + 0.25);
+      e.kfs.push(
+        { t: r3(Math.max(0, t0 - 0.01)), transform: { scale: 1 } },
+        { t: r3(t0 + 0.15), transform: { scale: z }, easing: 'easeOut' },
+        { t: r3(Math.min(t3 - 0.25, t0 + 0.15 + hold)), transform: { scale: z } },
+        { t: r3(t3), transform: { scale: 1 }, easing: 'easeInOut' },
+      );
+    } else {
+      // aproximação durante a frase toda (começa um respiro antes), segura e solta em ≥0,6 s
+      const a = Math.max(0, t0 - 0.2);
+      const peak = Math.min(clip.duration - 0.6, Math.max(a + 0.8, s.end - clip.start));
+      if (peak <= a + 0.6 || a < (lastRel.get(clip.id) ?? -1) + 0.1) continue;
+      const rel = Math.min(clip.duration, peak + Math.max(0.6, Math.min(1, (peak - a) / 2)));
+      lastRel.set(clip.id, rel);
+      e.kfs.push(
+        { t: r3(a), transform: { scale: 1 } },
+        { t: r3(peak), transform: { scale: z }, easing: 'easeInOut' },
+        { t: r3(rel), transform: { scale: 1 }, easing: 'easeInOut' },
+      );
+    }
     e.n++;
     byClip.set(clip.id, e);
     lastT = s.start;
@@ -301,7 +319,8 @@ export function hookOps(p: Project, text: string): EditOp[] {
     { op: 'add_clip', trackId: fxTrack, clip: { id: 'hook_flash', type: 'adjustment', start: 0, duration: 0.35, filters: [], effects: [{ kind: 'flash-strobe', intensity: 0.8 }] }, explain: 'Flash de abertura' },
   ];
   const first = mainVideoClips(p)[0];
-  if (first) ops.push({ op: 'update_clip', clipId: first.id, patch: { keyframes: mergeKfProps(first.keyframes, [{ t: 0, transform: { scale: 1.25 } }, { t: 0.5, transform: { scale: 1 }, easing: 'easeOut' }], ['scale']) }, explain: 'Zoom rápido de abertura' });
+  // abertura suave: 1.12 → 1 em 1,2 s (easeOut), ≤8 px de borda por quadro
+  if (first) ops.push({ op: 'update_clip', clipId: first.id, patch: { keyframes: mergeKfProps(first.keyframes, [{ t: 0, transform: { scale: 1.12 } }, { t: r3(Math.min(1.2, first.duration)), transform: { scale: 1 }, easing: 'easeOut' }], ['scale']) }, explain: 'Zoom suave de abertura' });
   return ops.filter((o) => !(o.op === 'add_clip' && (p.tracks.some((t) => t.clips.some((c) => c.id === o.clip.id)))));
 }
 

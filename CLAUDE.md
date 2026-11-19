@@ -63,7 +63,7 @@
   quando houver salvar na nuvem (projetos em Neon, mídia/efeitos em R2) — hoje tudo fica no navegador.
 
 ## Branches
-- Integração: `claude/ai-video-editor-r0tr67` (branch padrão do repo e produção na Vercel). Sessões de módulo: `claude/ai-video-editor-r0tr67-<módulo>` (timeline, engine, ai, shell, library, export, qa, fx, cor, musica — todas com deploy desligado no `web/vercel.json`).
+- Integração: `claude/ai-video-editor-r0tr67` (branch padrão do repo e produção na Vercel). Sessões de módulo: `claude/ai-video-editor-r0tr67-<módulo>` (timeline, engine, ai, shell, library, export, qa, fx, cor, musica, legendas, modelo — todas com deploy desligado no `web/vercel.json`).
 - **Autorização do Bruno (2026-11-19): abrir PR e fazer merge sem perguntar.** Fluxo: merge local de teste das branches de
   módulo → tsc + vitest + build + E2E (Playwright) → PR por módulo (rascunho → pronto) → merge pelo GitHub (método merge).
   Se o GitHub acusar conflito que o git local não tem, mesclar localmente na integração e pushar (o PR fecha como mesclado).
@@ -81,7 +81,22 @@
 - Música (2026-11-19): catálogo de 81 trilhas geradas por código (18 gêneros, incl. sertanejo, forró, pagode, funk BR, gospel; −14 LUFS, sem direitos autorais) em Áudio →
   "Músicas livres" (`components/music/MusicCatalog`); a IA usa o catálogo quando o pedido tem música e não veio arquivo
   (`lib/ai/catalogMusic.ts`: 1ª edição e chat "coloca/troca a música"). 94 modelos de texto em 12 categorias.
-- Pendências conhecidas: biblioteca (fontes ≥60, SFX ≥100), Deliver do export (presets
+- IA sem limites (2026-11-19): `run_script` (JS em Worker isolado → ops), `add_graphic`/`update_graphic` (SVG saneado → PNG,
+  role 'graphic'), efeitos/transições `custom` em GLSL (`lib/fx/customShader.ts`, `checkShader`), keyframes de QUALQUER
+  propriedade (`Keyframe.props`, `lib/engine/animate.ts`), autocorreção (repair) + "Conferindo o resultado" (review por quadros).
+- Legendas (2026-11-19): SÓ da fala transcrita — nunca texto de exemplo/inventado (set_captions do Claude sem transcrição vira
+  `generate_captions`). Transcrição: servidor (`/api/ai/transcribe`, Groq whisper-large-v3-turbo com `GROQ_API_KEY` — Bruno ainda
+  não colocou) → senão Whisper base em WASM no aparelho (WebGPU fp16 no celular travava/dava texto errado). `asrFilter` (loops/
+  alucinações), `vad.ts` (corrige atraso das palavras), `legacyCaptions` ("Refazer pela fala"), agrupamento por ritmo
+  (`chunkCaptions` em lib/engine/captions.ts, `CaptionStyle.rhythm`), `retimeCaptions` (legenda presa à fala em velocidade/move/
+  ripple), op `cut_pauses`. Plano/diagnóstico: `docs/superpowers/specs/2026-11-19-legendas-e-modelo-plano.md`; fixtures em
+  `docs/fixtures/legendas-modelo/`.
+- Vídeo-modelo definitivo (2026-11-19): `lib/ai/motion.ts` mede a referência (cortes, zoom/pan por tomada, pancadas, transições,
+  faixa de legenda, cor) → `StyleProfile.template/motion`; `templateOps` replica (ritmo nos respiros, movimento medido ≤8 px/quadro,
+  só transições medidas, legenda do modelo, cor casada sem preset); `fidelity.ts` dá nota e conserta o aspecto <0,8. Movimento
+  padrão suave (push-in 1→1,06 easeInOut); pancada/tremida só se o modelo tiver ou o usuário pedir.
+- Revisão de código r2: 63 bugs confirmados, todos corrigidos (relatório em `docs/revisao/2026-11-19-r2/`).
+- Pendências conhecidas: GROQ_API_KEY (Bruno), biblioteca (fontes ≥60, SFX ≥100), Deliver do export (presets
   por plataforma, GIF, trecho in/out), transições em shader no modo nativo (pico ~110 ms na troca nativo↔canvas),
   export mais lento com efeitos/cor (passar filtros para WebGL), gestão de projetos/histórico visível (shell).
 - Testes E2E da principal ficam no scratchpad (blink2.js = tela preta por captura real; exp.js; fxcor.js; pvmenu.js…);
