@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createProject, makeVideoClip } from '../defaults';
 import type { MediaAsset } from '../types';
-import { buildRecord, debounce, isBlank, orphanBlobIds, relativeTime, stripAsset, summarize, usedAssetIds } from './pure';
+import { buildRecord, debounce, isBlank, orphanBlobIds, proxyBlobId, relativeTime, stripAsset, summarize, usedAssetIds } from './pure';
 
 const asset: MediaAsset = {
   id: 'a1', kind: 'video', role: 'source', name: 'v.mp4', mime: 'video/mp4', size: 10, duration: 4,
@@ -44,6 +44,14 @@ describe('registro do projeto', () => {
 
   it('orphanBlobIds acha blobs sem dono', () => {
     expect(orphanBlobIds(['a', 'b', 'c'], [{ assets: [stripAsset({ ...asset, id: 'b' })] }])).toEqual(['a', 'c']);
+  });
+
+  it('proxy de preview: blob protegido, URL e estado pendente não são salvos', () => {
+    expect(orphanBlobIds(['b', proxyBlobId('b'), proxyBlobId('x')], [{ assets: [stripAsset({ ...asset, id: 'b' })] }])).toEqual([proxyBlobId('x')]);
+    const s = stripAsset({ ...asset, proxyUrl: 'blob:p', proxyStatus: 'pending' });
+    expect('proxyUrl' in s).toBe(false);
+    expect(s.proxyStatus).toBeUndefined();
+    expect(stripAsset({ ...asset, proxyStatus: 'ready' }).proxyStatus).toBe('ready');
   });
 });
 
