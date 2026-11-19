@@ -6,7 +6,7 @@
 import type { MediaAsset, Seconds } from '../types';
 import { musicTrack } from './catalog';
 import { beatMarkers } from './engine';
-import { beatMarkerOps, fitMusicDuration, musicClipOps, type MusicClipOptions } from './ops';
+import { beatMarkerOps, fitMusicDuration, musicClipOps, musicRefitOps, musicTrackForAsset, type MusicClipOptions } from './ops';
 import { renderMusic } from './render';
 
 export interface InsertMusicOptions extends Omit<MusicClipOptions, 'duration'> {
@@ -51,4 +51,27 @@ export async function insertMusic(id: string, opts: InsertMusicOptions = {}): Pr
   const clipId = add && add.op === 'add_clip' ? add.clip.id : '';
   if (clipId) useEditor.getState().select([clipId]);
   return { asset, clipId };
+}
+
+/**
+ * Depois de aparar/esticar a borda de um clipe de música do catálogo: gera a
+ * faixa no tamanho novo (BPM ajustado para terminar no compasso, com final) e
+ * troca o asset do clipe. `newDuration` padrão = duração atual do clipe.
+ * Devolve false se o clipe não for música do catálogo. 1 dispatch (1 desfazer).
+ */
+export async function refitMusicClip(clipId: string, newDuration?: Seconds, opts: { history?: boolean } = {}): Promise<boolean> {
+  const { useEditor } = await import('../store');
+  const st = useEditor.getState();
+  const clip = st.project.tracks.flatMap((t) => t.clips).find((c) => c.id === clipId);
+  if (!clip || clip.type !== 'audio') return false;
+  const track = musicTrackForAsset(st.assets[clip.assetId]);
+  if (!track) return false;
+  const duration = Math.round((newDuration ?? clip.duration) * 1000) / 1000;
+  if (Math.abs(duration - (st.assets[clip.assetId]?.duration ?? 0)) < 0.02 && clip.in === 0) return true;
+  const asset = await prepareMusicAsset(track.id, duration);
+  const now = useEditor.getState();
+  const ops = musicRefitOps(now.project, clipId, asset);
+  if (!ops.length) return false;
+  now.dispatch(ops, opts.history === false ? { history: false } : undefined);
+  return true;
 }

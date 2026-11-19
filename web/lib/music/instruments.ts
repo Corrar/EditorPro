@@ -243,7 +243,7 @@ export function shaker(mx: Mix, t: number, vel: number, s: Send = {}): void {
   emitMono(mx, out, n, at(mx, t), { bus: 'drums', pan: -0.3, rev: 0.12, ...s, gain: (s.gain ?? 1) * vel * 0.7 });
 }
 
-export type PercType = 'conga' | 'wood' | 'tom' | 'taiko' | 'tick' | 'tamb' | 'cowbell';
+export type PercType = 'conga' | 'wood' | 'tom' | 'taiko' | 'tick' | 'tamb' | 'cowbell' | 'triangle' | 'surdo' | 'pandeiro';
 
 export function perc(mx: Mix, t: number, vel: number, type: PercType, s: Send = {}): void {
   const { sr } = mx;
@@ -255,11 +255,16 @@ export function perc(mx: Mix, t: number, vel: number, type: PercType, s: Send = 
     tick: { f0: 2900, f1: 2900, pt: 0.01, tau: 0.008, len: 0.05, noise: 0.15 },
     tamb: { f0: 0, f1: 0, pt: 0.01, tau: 0.09, len: 0.3, noise: 1 },
     cowbell: { f0: 562, f1: 562, pt: 0.01, tau: 0.13, len: 0.4, noise: 0 },
+    // triângulo: aberto (vel ≥ 0,45) soa longo; fechado (abafado pela mão) é curtinho
+    triangle: { f0: 4150, f1: 4150, pt: 0.01, tau: vel >= 0.45 ? 0.22 : 0.035, len: vel >= 0.45 ? 1.1 : 0.12, noise: 0.04 },
+    surdo: { f0: 88, f1: 68, pt: 0.04, tau: 0.42, len: 1.1, noise: 0.05 },
+    pandeiro: { f0: 190, f1: 170, pt: 0.02, tau: 0.07, len: 0.3, noise: 0.9 },
   }[type];
   const n = Math.round(cfg.len * sr);
   const out = scratch(0, n);
   const f = new SVF(sr);
-  f.set(type === 'tamb' ? 8500 : type === 'taiko' ? 260 : 1800, type === 'tamb' ? 1.5 : 0.7);
+  f.set(type === 'tamb' || type === 'pandeiro' ? 8000 : type === 'taiko' || type === 'surdo' ? 260 : type === 'triangle' ? 9000 : 1800, type === 'tamb' || type === 'pandeiro' ? 1.5 : 0.7);
+  let ph3 = 0;
   let ph = 0, ph2 = 0, pe = 1, e = 1;
   const kp = Math.exp(-1 / (cfg.pt * sr)), k = Math.exp(-1 / (cfg.tau * sr));
   const kn = Math.exp(-1 / (Math.min(cfg.tau, 0.05) * sr));
@@ -273,6 +278,11 @@ export function perc(mx: Mix, t: number, vel: number, type: PercType, s: Send = 
       ph2 += 845 / sr;
       v = (pulse(ph - Math.floor(ph), 562 / sr) + pulse(ph2 - Math.floor(ph2), 845 / sr)) * 0.3;
       f.tick(v); v = f.band * 1.5;
+    } else if (type === 'triangle') {
+      ph2 += 6890 / sr; ph3 += 9320 / sr;
+      v = sin1(ph) * 0.6 + sin1(ph2) * 0.35 + sin1(ph3) * 0.2;
+    } else if (type === 'pandeiro') {
+      v = sin1(ph) * 0.55 * en; // pele
     } else if (type === 'wood') {
       ph2 += 1900 / sr;
       v = sin1(ph) * 0.8 + sin1(ph2) * 0.25;
@@ -281,13 +291,15 @@ export function perc(mx: Mix, t: number, vel: number, type: PercType, s: Send = 
     }
     if (cfg.noise) {
       f.tick(mx.noise());
-      v += (type === 'taiko' ? f.low * 2 : type === 'tamb' ? f.band : f.band) * cfg.noise * (type === 'tamb' ? 1 : en);
+      const jingle = type === 'tamb' || type === 'pandeiro';
+      v += (type === 'taiko' || type === 'surdo' ? f.low * 2 : f.band) * cfg.noise * (jingle ? 1 : en);
     }
     const atk = i < 16 ? i / 16 : 1;
-    out[i] = (type === 'taiko' ? ftanh(v * 1.6) : v) * e * atk;
+    out[i] = (type === 'taiko' || type === 'surdo' ? ftanh(v * 1.6) : v) * e * atk;
     e *= k; en *= kn;
   }
-  emitMono(mx, out, n, at(mx, t), { bus: 'drums', rev: type === 'taiko' ? 0.5 : 0.2, ...s, gain: (s.gain ?? 1) * vel });
+  const g = type === 'triangle' ? 0.22 : 1;
+  emitMono(mx, out, n, at(mx, t), { bus: 'drums', rev: type === 'taiko' ? 0.5 : 0.2, ...s, gain: (s.gain ?? 1) * (type === 'triangle' ? Math.max(0.5, vel) : vel) * g });
 }
 
 export function crash(mx: Mix, t: number, vel: number, s: Send = {}): void {
@@ -653,7 +665,7 @@ export function keys(mx: Mix, t: number, dur: number, midi: number, vel: number,
    LEADS
    ===================================================================== */
 
-export type LeadType = 'saw' | 'super' | 'square' | 'soft' | 'whistle';
+export type LeadType = 'saw' | 'super' | 'square' | 'soft' | 'whistle' | 'accordion';
 
 export function lead(mx: Mix, t: number, dur: number, midi: number, vel: number, type: LeadType, s: Send = {}): void {
   const { sr } = mx;
@@ -663,14 +675,15 @@ export function lead(mx: Mix, t: number, dur: number, midi: number, vel: number,
     square: { a: 0.005, d: 0.2, s: 0.6, r: 0.08, cut: 3000 },
     soft: { a: 0.05, d: 0.4, s: 0.75, r: 0.18, cut: 4000 },
     whistle: { a: 0.04, d: 0.3, s: 0.8, r: 0.12, cut: 6000 },
+    accordion: { a: 0.03, d: 0.2, s: 0.85, r: 0.08, cut: 2900 },
   }[type];
   const len = Math.round((dur + cfg.r + 0.02) * sr);
   const env = scratch(2, len);
   const total = adsr(env, len, sr, cfg.a, cfg.d, cfg.s, cfg.r, dur);
   const l = scratch(0, total), r = scratch(1, total);
   const f = mtof(midi);
-  const det = type === 'super' ? [-14, -6, 0, 6, 14] : type === 'saw' ? [-5, 5] : [0];
-  const pans = type === 'super' ? [-0.8, -0.4, 0, 0.4, 0.8] : type === 'saw' ? [-0.3, 0.3] : [0];
+  const det = type === 'super' ? [-14, -6, 0, 6, 14] : type === 'saw' ? [-5, 5] : type === 'accordion' ? [-9, 0, 9] : [0];
+  const pans = type === 'super' ? [-0.8, -0.4, 0, 0.4, 0.8] : type === 'saw' ? [-0.3, 0.3] : type === 'accordion' ? [-0.35, 0, 0.35] : [0];
   const vibDelay = Math.round(0.22 * sr);
   const breath = new SVF(sr); breath.set(Math.min(f * 2, 8000), 2);
   for (let v = 0; v < det.length; v++) {
@@ -679,12 +692,13 @@ export function lead(mx: Mix, t: number, dur: number, midi: number, vel: number,
     let ph = mx.rand();
     const amp = 1 / Math.sqrt(det.length);
     for (let i = 0; i < total; i++) {
-      const vib = i > vibDelay ? 1 + 0.0045 * Math.min(1, (i - vibDelay) / sr / 0.3) * sin1((i / sr) * 5.4) : 1;
+      const vib = type !== 'accordion' && i > vibDelay ? 1 + 0.0045 * Math.min(1, (i - vibDelay) / sr / 0.3) * sin1((i / sr) * 5.4) : 1;
       const dt = (fr * vib) / sr;
       ph += dt; if (ph >= 1) ph -= 1;
       let x: number;
       if (type === 'saw' || type === 'super') x = saw(ph, dt);
       else if (type === 'square') x = pulse(ph, dt, 0.5) * 0.7;
+      else if (type === 'accordion') x = pulse(ph, dt, 0.42) * 0.45 + saw(ph, dt) * 0.35;
       else if (type === 'soft') {
         breath.tick(mx.noise());
         x = sin1(ph) + 0.18 * sin1(ph * 2) + 0.05 * sin1(ph * 3) + breath.band * 0.08;

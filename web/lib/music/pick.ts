@@ -12,6 +12,11 @@ interface Hint { genres?: Genre[]; moods?: Mood[]; energy?: Energy }
 
 /** palavras (sem acento) → gênero/humor/energia */
 const SYNONYMS: [RegExp, Hint][] = [
+  [/sertanej|modao|agro|rodeio|fazenda|interior|viola/, { genres: ['sertanejo'] }],
+  [/forro|xote|baiao|sao joao|junina|quadrilha|nordest|sanfona/, { genres: ['forro'] }],
+  [/pagode|samba|carnaval|cavaco|roda de/, { genres: ['pagode'] }],
+  [/funk br|funk brasil|baile|tamborzao|mandelao|favela|dancinha|funk 150|funk melody/, { genres: ['funkbr'] }],
+  [/gospel|louvor|adorac|igreja|crista|devocional|oracao|fe\b|culto|biblic/, { genres: ['gospel'] }],
   [/anima|alegr|feliz|happy|pra cima|positiv|contagiant|vibrant/, { moods: ['feliz', 'divertida', 'energetica'], energy: 'alta', genres: ['pop', 'vlog', 'funk'] }],
   [/calm|tranquil|relax|suave|paz|zen|medit|spa|dormir|sono|respira/, { moods: ['calma', 'relaxante'], energy: 'baixa', genres: ['ambiente', 'lofi', 'acustica'] }],
   [/lo.?fi|chill|estud|cafe/, { genres: ['lofi'], moods: ['relaxante', 'nostalgica'] }],
@@ -67,7 +72,7 @@ export function scoreTracks(o: PickOptions): { track: MusicTrack; score: number 
     if (h.energy && !hint.energy) hint.energy = h.energy;
   }
   // nomes de gênero/humor escritos por extenso
-  for (const [g, label] of Object.entries(GENRE_LABELS)) if (text && (normSearch(label).split('/').some((w) => text.includes(w)) || text.includes(g))) hint.genres.unshift(g as Genre);
+  for (const [g, label] of Object.entries(GENRE_LABELS)) if (text && (normSearch(label).split('/').some((w) => text.includes(w)) || text.includes(g))) hint.genres.push(g as Genre);
   for (const [m, label] of Object.entries(MOOD_LABELS)) if (text && text.includes(normSearch(label).slice(0, 5))) hint.moods.unshift(m as Mood);
   const words = text.split(/\s+/).filter((w) => w.length > 3);
   return MUSIC_CATALOG.map((t, i) => {

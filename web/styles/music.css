@@ -52,6 +52,11 @@
 [data-genre="infantil"] .ep-mus-cover { --c1:#FFB000; --c2:#7ED957; }
 [data-genre="romantica"] .ep-mus-cover { --c1:#E8577E; --c2:#F7B2C4; }
 [data-genre="vlog"] .ep-mus-cover { --c1:#00A884; --c2:#FFD166; }
+[data-genre="sertanejo"] .ep-mus-cover { --c1:#8A4B1F; --c2:#E9A23B; }
+[data-genre="forro"] .ep-mus-cover { --c1:#D7263D; --c2:#F9C80E; }
+[data-genre="pagode"] .ep-mus-cover { --c1:#0B8457; --c2:#F4D35E; }
+[data-genre="funkbr"] .ep-mus-cover { --c1:#111111; --c2:#2DE38D; }
+[data-genre="gospel"] .ep-mus-cover { --c1:#6C8EF5; --c2:#F6E7B2; }
 
 .ep-mus-info { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
 .ep-mus-name { font-size:15px; font-weight:750; color:var(--ink); letter-spacing:-.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }

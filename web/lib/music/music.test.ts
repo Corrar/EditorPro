@@ -6,7 +6,7 @@ import { MUSIC_CATALOG, musicTrack, trackStyle } from './catalog';
 import { GENRE_LABELS } from './styles';
 import { CEILING, beatMarkers, barMarkers, musicTiming, planSections, renderMusicPCM } from './engine';
 import { lufs, peakOf } from './dsp';
-import { beatMarkerOps, fitMusicDuration, musicClipOps } from './ops';
+import { beatMarkerOps, fitMusicDuration, musicClipOps, musicRefitOps, musicTrackForAsset } from './ops';
 import { matchesMusic, pickMusic } from './pick';
 import { chordOf, voiceChord, SCALES } from './theory';
 import { musicWav } from './wav';
@@ -27,7 +27,7 @@ const asset = (id: string, duration: number, kind: MediaAsset['kind'] = 'audio')
 
 describe('catálogo', () => {
   it('tem ≥ 40 faixas em ≥ 10 gêneros, ids únicos e campos válidos', () => {
-    expect(MUSIC_CATALOG.length).toBeGreaterThanOrEqual(40);
+    expect(MUSIC_CATALOG.length).toBeGreaterThanOrEqual(80);
     const genres = new Set(MUSIC_CATALOG.map((t) => t.genre));
     expect(genres.size).toBeGreaterThanOrEqual(10);
     expect(genres.size).toBe(Object.keys(GENRE_LABELS).length);
@@ -233,6 +233,22 @@ describe('projeto', () => {
     expect(add && add.op === 'add_clip' && add.clip.type === 'audio' && add.clip.duckUnderVoice).toBe(false);
   });
 
+  it('musicRefitOps troca o asset do clipe pela versão no tamanho novo (in = 0)', () => {
+    const p0 = createProject();
+    const a = { ...asset('m1', 30), name: 'Café da Tarde.wav', library: true };
+    const { project } = applyOps(p0, musicClipOps(p0, a, 0, { id: 'cm' }));
+    expect(musicTrackForAsset(a)?.id).toBe('cafe-da-tarde');
+    expect(musicTrackForAsset({ ...a, library: false })).toBeUndefined();
+    const b = { ...a, id: 'm2', duration: 21.5 };
+    const ops = musicRefitOps(project, 'cm', b);
+    const { project: p2, errors } = applyOps(project, ops);
+    expect(errors).toEqual([]);
+    const c = p2.tracks.flatMap((t) => t.clips).find((x) => x.id === 'cm')!;
+    expect(c.type === 'audio' && c.assetId).toBe('m2');
+    expect(c.duration).toBe(21.5);
+    expect(musicRefitOps(project, 'nope', b)).toEqual([]);
+  });
+
   it('beatMarkerOps cria marcadores kind "beat" deslocados pelo início do clipe, sem duplicar', () => {
     const p0 = createProject();
     const beats = beatMarkers('pulso-noturno', 8);
@@ -258,6 +274,11 @@ describe('IA e busca', () => {
     expect(musicTrack(pickMusic({ mood: 'suspense', energy: 'baixa' }))!.genre).toBe('suspense');
     expect(musicTrack(pickMusic({ mood: 'romântica para casamento' }))!.genre).toBe('romantica');
     expect(musicTrack(pickMusic({ mood: 'lo-fi para estudar' }))!.genre).toBe('lofi');
+    expect(musicTrack(pickMusic({ mood: 'sertanejo para vídeo do agro' }))!.genre).toBe('sertanejo');
+    expect(musicTrack(pickMusic({ mood: 'forró de são joão' }))!.genre).toBe('forro');
+    expect(musicTrack(pickMusic({ mood: 'pagode' }))!.genre).toBe('pagode');
+    expect(musicTrack(pickMusic({ mood: 'funk de baile' }))!.genre).toBe('funkbr');
+    expect(musicTrack(pickMusic({ mood: 'louvor gospel' }))!.genre).toBe('gospel');
     expect(musicTrack(pickMusic({ mood: 'qualquer coisa estranha xyz' }))).toBeTruthy();
     expect(musicTrack(pickMusic())).toBeTruthy();
     const first = pickMusic({ mood: 'animada' });

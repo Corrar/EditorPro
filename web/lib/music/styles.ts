@@ -8,7 +8,8 @@ import type { ScaleName } from './theory';
 
 export type Genre =
   | 'pop' | 'eletronica' | 'lofi' | 'hiphop' | 'corporativa' | 'cinematica' | 'acustica'
-  | 'funk' | 'ambiente' | 'suspense' | 'infantil' | 'romantica' | 'vlog';
+  | 'funk' | 'ambiente' | 'suspense' | 'infantil' | 'romantica' | 'vlog'
+  | 'sertanejo' | 'forro' | 'pagode' | 'funkbr' | 'gospel';
 
 export const GENRE_LABELS: Record<Genre, string> = {
   pop: 'Animada/Pop',
@@ -24,6 +25,11 @@ export const GENRE_LABELS: Record<Genre, string> = {
   infantil: 'Infantil/Divertida',
   romantica: 'Romântica',
   vlog: 'Vlog/Viagem',
+  sertanejo: 'Sertanejo',
+  forro: 'Forró',
+  pagode: 'Pagode/Samba',
+  funkbr: 'Funk BR',
+  gospel: 'Gospel/Adoração',
 };
 
 /** instrumento de uma parte: pad (acordes sustentados), teclas/cordas ou lead */
@@ -236,6 +242,71 @@ export const STYLES: Record<Genre, Style> = {
     harm2: { inst: { keys: 'mallet' }, rhythm: 'stab', gain: 0.35, always: true },
     lead: { kind: 'melody', inst: { keys: 'pluck' }, center: 76, gain: 0.45, sections: 'B', density: 0.7, dly: 0.3 },
     fx: { reverb: 0.4, room: 0.6, delay: 0.3, sidechain: 0.4, riser: true },
+    intro: 1,
+  },
+  /* ---------- Brasil ---------- */
+  sertanejo: {
+    scale: 'major', progA: [0, 4, 5, 3], progB: [3, 4, 0, 5], chordSize: 3, chordsPerBar: 1, swing: 0,
+    kit: { kick: 'punch', snare: 'snare', perc: 'tamb', hatGain: 0.6, snareGain: 0.6 },
+    drumsA: { k: 'x.......x.......', s: '....x.......x...', h: 'x.x.x.x.x.x.x.x.' },
+    drumsB: { k: 'x.....x.x.......', s: '....x.......x...', h: 'x.x.x.x.x.x.x.x.', p: '..x...x...x...x.' },
+    drumsIntro: {},
+    bass: { type: 'finger', pattern: 'folk', gain: 0.75 },
+    harm: { inst: { keys: 'guitar' }, rhythm: 'strum', gain: 0.55, lo: 52, hi: 71 },
+    harm2: { inst: { pad: 'warm' }, rhythm: 'sustain', gain: 0.25 },
+    lead: { kind: 'melody', inst: { lead: 'accordion' }, center: 74, gain: 0.38, sections: 'all', density: 0.6 },
+    fx: { reverb: 0.3, room: 0.5, delay: 0.1, sidechain: 0, crash: true },
+    intro: 1,
+  },
+  forro: {
+    scale: 'mixolydian', progA: [0, 3, 6, 0], progB: [0, 4, 3, 0], chordSize: 3, chordsPerBar: 1, swing: 0.1,
+    // zabumba = bumbo grave + bacalhau (aro) no contratempo; triângulo aberto/fechado
+    kit: { kick: 'soft', snare: 'rim', perc: 'triangle', hatGain: 0.5, kickGain: 1.1, snareGain: 0.8 },
+    drumsA: { k: 'x.....x.........', s: '..x...x...x...x.', p: 'gxggXxggXgggxgxg' },
+    drumsB: { k: 'x.....x...x.....', s: '..x...x...x...x.', p: 'gxggXxggXgggxgxg' },
+    drumsIntro: { p: 'gxggXxggXgggxgxg' },
+    bass: { type: 'finger', pattern: 'folk', gain: 0.75 },
+    harm: { inst: { keys: 'guitar' }, rhythm: 'stab', gain: 0.4, lo: 52, hi: 71 },
+    lead: { kind: 'melody', inst: { lead: 'accordion' }, center: 74, gain: 0.45, sections: 'all', density: 0.8 },
+    fx: { reverb: 0.25, room: 0.45, delay: 0.05, sidechain: 0 },
+    intro: 1,
+  },
+  pagode: {
+    scale: 'major', progA: [0, 5, 1, 4], progB: [3, 2, 1, 4], chordSize: 4, chordsPerBar: 1, swing: 0.16,
+    kit: { kick: 'soft', snare: 'none', perc: 'pandeiro', perc2: 'surdo', hatGain: 0.5 },
+    drumsA: { p: 'xgxgXgxgxgxgXgxg', t: '....x.......X...', x: 'x.x.x.x.x.x.x.x.' },
+    drumsB: { k: 'x.......x.......', p: 'xgxgXgxgxgxgXgxg', t: '....x..x....X...', x: 'xgxgxgxgxgxgxgxg' },
+    drumsIntro: { p: 'xgxgXgxgxgxgXgxg' },
+    bass: { type: 'finger', pattern: 'walking', gain: 0.7 },
+    harm: { inst: { keys: 'uke' }, rhythm: 'strum', gain: 0.5, lo: 60, hi: 76 },
+    harm2: { inst: { keys: 'guitar' }, rhythm: 'pick', gain: 0.35, always: true, lo: 50, hi: 67 },
+    lead: { kind: 'melody', inst: { lead: 'soft' }, center: 76, gain: 0.3, sections: 'B', density: 0.6 },
+    fx: { reverb: 0.25, room: 0.45, delay: 0.1, sidechain: 0 },
+    intro: 1,
+  },
+  funkbr: {
+    scale: 'minor', progA: [0, 0, 5, 6], progB: [0, 5, 3, 4], chordSize: 3, chordsPerBar: 1, swing: 0,
+    // tamborzão: bumbo sincopado + palmas + atabaques
+    kit: { kick: '808', snare: 'clap', perc: 'conga', perc2: 'tom', hatGain: 0.5, kickGain: 0.85 },
+    drumsA: { k: 'x..x..x...x..x..', s: '....x.......x...', p: '..x..x....x..x.x' },
+    drumsB: { k: 'x..x..x...x..x..', s: '....x..x....x...', p: '..x..x..x.x..x.x', t: 'x.....x.........', h: 'x.x.x.x.x.x.x.x.' },
+    drumsIntro: { p: '..x..x....x..x.x' },
+    bass: { type: '808', pattern: '808', gain: 0.85 },
+    harm: { inst: { keys: 'stab' }, rhythm: 'stab', gain: 0.35, lo: 57, hi: 76 },
+    lead: { kind: 'melody', inst: { keys: 'bell' }, center: 79, gain: 0.3, sections: 'B', density: 0.7 },
+    fx: { reverb: 0.2, room: 0.4, delay: 0.15, sidechain: 0, drive: 1.5 },
+    intro: 1,
+  },
+  gospel: {
+    scale: 'major', progA: [0, 4, 5, 3], progB: [3, 0, 4, 5], chordSize: 3, add9: true, chordsPerBar: 1, swing: 0,
+    kit: { kick: 'soft', snare: 'snare', perc: 'tamb', hatGain: 0.45, snareGain: 0.45 },
+    drumsA: {},
+    drumsB: { k: 'x.......x.......', s: '....x.......x...', h: 'x.x.x.x.x.x.x.x.' },
+    bass: { type: 'sub', pattern: 'root4', gain: 0.6 },
+    harm: { inst: { keys: 'piano' }, rhythm: 'halfs', gain: 0.6 },
+    harm2: { inst: { pad: 'air' }, rhythm: 'sustain', gain: 0.4, always: true },
+    lead: { kind: 'melody', inst: { pad: 'strings' }, center: 74, gain: 0.35, sections: 'B', density: 0.35 },
+    fx: { reverb: 0.6, room: 0.85, delay: 0.15, sidechain: 0, crash: true, riser: true },
     intro: 1,
   },
 };
