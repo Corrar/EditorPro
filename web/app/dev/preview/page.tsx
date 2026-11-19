@@ -144,6 +144,7 @@ export default function DevPreviewPage() {
   useEffect(() => {
     window.__ep = {
       useEditor, exportVideo, exportAudio, exportFrame, toFCPXML, toSRT, toVTT, hasWebCodecs, makePreviewProxy, probeVideoInfo, buildDemo, buildCapcutDemo, emit, assetsList: () => Object.values(useEditor.getState().assets),
+      color: () => import('@/lib/color'),
       blobToBase64: async (b: Blob) => {
         const buf = new Uint8Array(await b.arrayBuffer());
         let s = '';

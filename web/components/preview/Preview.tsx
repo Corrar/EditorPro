@@ -13,6 +13,7 @@ import { formatTime } from '@/lib/util';
 import { LiveMediaPool } from './livePool';
 import { PlaybackClock, QualityGovernor, frameInterval } from './syncPolicy';
 import { nativePlan } from './hybrid';
+import { onLutsChanged, onCompareChanged } from '@/lib/color';
 import { hitTest, dragPatch, type Box } from './manipulate';
 import type { Clip, Project, TextClip } from '@/lib/types';
 import { stripLooks, PLAY_RATES, rateLabel, loopRange, wrapLoop, stepFrame, zoomScale, VIEW_ZOOMS, zoomLabel, SAFE_ZONES, SAFE_LABELS, type ViewZoom, type SafePlatform } from './viewing';
@@ -259,7 +260,10 @@ export default function Preview() {
     segEvents.onReady = () => { if (!useEditor.getState().playing) requestStill(); };
     // fonte/emoji da biblioteca carregou: redesenha
     assetEvents.onReady = () => { if (!useEditor.getState().playing) requestStill(); };
-    return () => { pool.dispose(); poolRef.current = null; };
+    // LUT importada carregou / modo de comparação da Cor mudou: redesenha
+    const offLut = onLutsChanged(() => { if (!useEditor.getState().playing) requestStill(); });
+    const offCmp = onCompareChanged(() => { if (!useEditor.getState().playing) requestStill(); });
+    return () => { offLut(); offCmp(); pool.dispose(); poolRef.current = null; };
   }, [requestStill]);
 
   /* ---------- tamanho: encaixa o quadro no palco mantendo o aspecto ---------- */
