@@ -19,6 +19,8 @@ import { resolveFilters, needsPixelGrade } from '@/lib/engine/filters';
 import { transitionVisual, type TransitionVisual } from '@/lib/engine/transitions';
 import { isShaderTransition } from '@/lib/engine/shaderTransitions';
 import { gradeNeedsCanvas, gradeCssEquivalent } from '@/lib/color';
+import { effectsNativeMode } from '@/lib/fx/native';
+import { effectGeometry } from '@/lib/engine/effects';
 
 /** uma camada nativa: um <video> visível com geometria/opacidade/filtro em CSS */
 export interface NativeLayer {
@@ -106,7 +108,8 @@ export function nativePlan(p: Project, t: Seconds): NativePlan {
 export function clipNeedsCanvas(clip: Clip, t: Seconds): string | null {
   if (clip.type !== 'video') return 'não é vídeo';
   if (clip.reverse) return 'reverso';
-  if (clip.effects?.length) return 'efeito';
+  // efeitos: 'css' (geometria vira CSS no <video>) fica nativo; 'overlay' e 'canvas' compõem no canvas
+  if (clip.effects?.length && effectsNativeMode(clip.effects) !== 'css') return 'efeito';
   if (clip.mask) return 'máscara';
   if (clip.chromaKey) return 'chroma';
   if (clip.removeBackground) return 'remover fundo';
@@ -142,12 +145,13 @@ export function nativeGeometry(clip: VideoClip, t: Seconds, W: number, H: number
     const k = fit === 'contain' ? Math.min(W / sw, H / sh) : Math.max(W / sw, H / sh);
     dw = sw * k; dh = sh * k;
   }
-  const s = Math.max(0.0001, tf.scale) * (tv ? tv.scale : 1);
+  const eg = effectGeometry(clip.effects, t);
+  const s = Math.max(0.0001, tf.scale) * (tv ? tv.scale : 1) * eg.scale;
   dw *= s; dh *= s;
   const tdx = tv ? tv.dx : 0, tdy = tv ? tv.dy : 0;
-  const cx = W / 2 + (tf.x + tdx) * W;
-  const cy = H / 2 + (tf.y + tdy) * H;
-  const rot = tf.rotation + (tv ? tv.rotation : 0);
+  const cx = W / 2 + (tf.x + tdx + eg.dx) * W;
+  const cy = H / 2 + (tf.y + tdy + eg.dy) * H;
+  const rot = tf.rotation + (tv ? tv.rotation : 0) + eg.rotation;
   const g: NativeGeometry = { x: cx - dw / 2, y: cy - dh / 2, w: dw, h: dh, rot, fx: clip.flipH ? -1 : 1, fy: clip.flipV ? -1 : 1 };
   // slide: o canvas recorta a camada no quadro deslocado; aqui, clip-path na caixa (sem rotação)
   if ((tdx || tdy) && !rot) {
