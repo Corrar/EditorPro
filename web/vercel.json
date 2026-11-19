@@ -8,7 +8,9 @@
       "claude/ai-video-editor-r0tr67-shell": false,
       "claude/ai-video-editor-r0tr67-library": false,
       "claude/ai-video-editor-r0tr67-export": false,
-      "claude/ai-video-editor-r0tr67-qa": false
+      "claude/ai-video-editor-r0tr67-qa": false,
+      "claude/ai-video-editor-r0tr67-fx": false,
+      "claude/ai-video-editor-r0tr67-cor": false
     }
   }
 }
