@@ -7,6 +7,7 @@
    - escuta ep:start-ai-edit e ep:generate-captions; anexar -> ep:attach-files
    ===================================================================== */
 import { useEffect, useMemo, useRef, useState } from 'react';
+import Icon from '@/components/ui/Icon';
 import { useEditor } from '@/lib/store';
 import { emit, on } from '@/lib/events';
 import { useAIChat, type RunState } from '@/lib/ai/chatStore';
@@ -18,24 +19,6 @@ const SUGGESTIONS = [
   'Traduzir legendas para inglês', 'Cores cinematográficas',
 ];
 
-function Icon({ d, size = 16 }: { d: string; size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d={d} />
-    </svg>
-  );
-}
-const I = {
-  spark: 'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15z',
-  send: 'M5 12h13M13 6l6 6-6 6',
-  clip: 'M21 11.5l-8.6 8.6a5 5 0 01-7.1-7.1l8.6-8.6a3.4 3.4 0 014.8 4.8l-8.6 8.6a1.7 1.7 0 01-2.4-2.4l7.9-7.9',
-  undo: 'M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 010 11H11',
-  check: 'M5 12.5l4.2 4.2L19 7',
-  x: 'M6 6l12 12M18 6L6 18',
-  skip: 'M5 12h14',
-  target: 'M12 2v4M12 18v4M2 12h4M18 12h4M12 8a4 4 0 100 8 4 4 0 000-8z',
-  note: 'M4 5h16v11H8l-4 4z',
-};
 
 function Steps({ run }: { run: RunState }) {
   if (!run.steps.length) return null;
@@ -53,7 +36,7 @@ function Steps({ run }: { run: RunState }) {
         {run.steps.map((s) => (
           <li key={s.id} className={`ep-ch-step ${s.state}`}>
             <span className="ep-ch-stepic">
-              {s.state === 'done' ? <Icon d={I.check} size={12} /> : s.state === 'skipped' ? <Icon d={I.skip} size={12} /> : s.state === 'active' ? <span className="ep-ch-spin" /> : null}
+              {s.state === 'done' ? <Icon name="check" size={12} /> : s.state === 'skipped' ? <Icon name="close" size={12} /> : s.state === 'active' ? <span className="ep-ch-spin" /> : null}
             </span>
             <span className="ep-ch-steptext">{s.text}</span>
           </li>
@@ -67,12 +50,12 @@ function AssistantBubble({ m, run, canUndo, onUndo, onAnswer, onSkip }: { m: Cha
   const working = run && !run.done;
   return (
     <div className={`ep-ch-msg ai${m.status === 'error' ? ' err' : ''}`}>
-      <div className="ep-ch-avatar"><Icon d={I.spark} size={14} /></div>
+      <div className="ep-ch-avatar"><Icon name="ai" size={14} /></div>
       <div className="ep-ch-bubble">
         {run?.log.length ? (
           <ul className="ep-ch-log">
             {run.log.map((l, i) => (
-              <li key={i}><Icon d={I.check} size={12} /> <span>{l}</span></li>
+              <li key={i}><Icon name="check" size={12} /> <span>{l}</span></li>
             ))}
           </ul>
         ) : null}
@@ -100,7 +83,7 @@ function AssistantBubble({ m, run, canUndo, onUndo, onAnswer, onSkip }: { m: Cha
         {m.text ? <p className="ep-ch-text">{m.text}</p> : null}
         {canUndo ? (
           <button className="ep-ch-undo" onClick={onUndo}>
-            <Icon d={I.undo} size={13} /> Desfazer esta edição
+            <Icon name="undo" size={13} /> Desfazer esta edição
           </button>
         ) : null}
       </div>
@@ -176,7 +159,7 @@ export default function ChatPanel() {
     <div className="ep-ch">
       <header className="ep-ch-head">
         <div className="ep-aicard ep-ch-aicard">
-          <div className="spark"><Icon d={I.spark} size={20} /></div>
+          <div className="spark"><Icon name="ai" size={20} /></div>
           <div className="ep-ch-headtxt">
             <b className="t">Assistente IA</b>
             <span className="d">{busy ? 'Trabalhando…' : claude ? 'Pronto para editar' : 'Modo demonstração'}</span>
@@ -199,7 +182,7 @@ export default function ChatPanel() {
       <div className="ep-ch-list" ref={listRef}>
         {empty ? (
           <div className="ep-ch-empty">
-            <div className="ic"><Icon d={I.spark} size={22} /></div>
+            <div className="ic"><Icon name="ai" size={22} /></div>
             <h4>Diga como quer o vídeo</h4>
             <p>
               {assetCount
@@ -214,7 +197,7 @@ export default function ChatPanel() {
               return (
                 <div key={m.id} className="ep-ch-msg me">
                   <div className="ep-ch-bubble">
-                    {m.context ? <span className="ep-ch-ctxtag"><Icon d={I.target} size={11} /> {m.context.label}</span> : null}
+                    {m.context ? <span className="ep-ch-ctxtag"><Icon name="point" size={11} /> {m.context.label}</span> : null}
                     {m.text}
                   </div>
                 </div>
@@ -233,19 +216,19 @@ export default function ChatPanel() {
       <div className="ep-ch-foot">
         {pendingComments ? (
           <button className="ep-ch-comments" disabled={busy} onClick={() => comments()}>
-            <Icon d={I.note} size={14} /> Aplicar comentários com IA <b>{pendingComments}</b>
+            <Icon name="review" size={14} /> Aplicar comentários com IA <b>{pendingComments}</b>
           </button>
         ) : null}
         {chatContext ? (
           <div className="ep-ch-ctx" role="status">
-            <Icon d={I.target} size={13} />
+            <Icon name="point" size={13} />
             <span>Apontando para: <b>{chatContext.label}</b></span>
-            <button aria-label="Limpar o alvo" title="Limpar" onClick={() => setChatContext(undefined)}><Icon d={I.x} size={12} /></button>
+            <button aria-label="Limpar o alvo" title="Limpar" onClick={() => setChatContext(undefined)}><Icon name="close" size={12} /></button>
           </div>
         ) : null}
         {ctxComment ? (
           <button className="ep-ch-applyone" disabled={busy} onClick={() => comments([ctxComment.id])}>
-            <Icon d={I.spark} size={13} /> Aplicar este comentário
+            <Icon name="ai" size={13} /> Aplicar este comentário
           </button>
         ) : null}
         <div className="ep-ch-chips" role="list">
@@ -257,7 +240,7 @@ export default function ChatPanel() {
         </div>
         <div className={`ep-ch-input${busy ? ' busy' : ''}`}>
           <button className="ep-ch-attach" title="Anexar mídia" aria-label="Anexar mídia" onClick={() => fileRef.current?.click()}>
-            <Icon d={I.clip} size={17} />
+            <Icon name="attach" size={17} />
           </button>
           <input ref={fileRef} type="file" multiple accept="video/*,audio/*,image/*" hidden onChange={(e) => onFiles(e.target.files)} />
           <textarea
@@ -275,7 +258,7 @@ export default function ChatPanel() {
             aria-label="Mensagem para a IA"
           />
           <button className="ep-ch-send" disabled={busy || !text.trim()} onClick={() => submit()} aria-label="Enviar">
-            {busy ? <span className="ep-ch-spin light" /> : <Icon d={I.send} size={17} />}
+            {busy ? <span className="ep-ch-spin light" /> : <Icon name="send2" size={17} />}
           </button>
         </div>
         <div className="ep-ch-hint">Enter envia · Shift+Enter quebra a linha</div>
