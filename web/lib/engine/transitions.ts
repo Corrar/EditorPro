@@ -1,7 +1,8 @@
 /* parâmetros visuais de cada transição (puro). progress 0..1; role 'out' = clipe que sai, 'in' = que entra */
 import type { TransitionKind } from '../types';
 import { ease } from './easing';
-import { isShaderTransition, SHADER_TRANSITION_LABELS } from './shaderTransitions';
+import { isShaderTransition } from './shaderTransitions';
+import { FX_TRANSITION_LABELS } from '../fx/catalog';
 
 export interface TransitionVisual {
   opacity: number;
@@ -39,7 +40,7 @@ const swapAtMid = (v: TransitionVisual, p: number, role: 'in' | 'out') => {
 };
 
 export function transitionVisual(kind: TransitionKind, progress: number, role: 'in' | 'out'): TransitionVisual {
-  const p = Math.min(1, Math.max(0, progress));
+  const p = Number.isFinite(progress) ? Math.min(1, Math.max(0, progress)) : 0;
   const e = ease('easeInOut', p);
   const bell = Math.sin(p * Math.PI); // 0 → 1 → 0
   const v: TransitionVisual = { ...NEUTRAL_TRANSITION };
@@ -127,20 +128,31 @@ export function transitionVisual(kind: TransitionKind, progress: number, role: '
     case 'film-burn':
       if (role === 'in') { v.burn = bell; v.opacity = e; }
       break;
+    /* empurrar: os dois andam juntos */
+    case 'push-left': v.dx = role === 'out' ? -e : 1 - e; break;
+    case 'push-right': v.dx = role === 'out' ? e : -(1 - e); break;
+    case 'push-up': v.dy = role === 'out' ? -e : 1 - e; break;
+    case 'push-down': v.dy = role === 'out' ? e : -(1 - e); break;
+    /* cobrir: o que entra desliza por cima; o que sai fica parado e escurece um pouco */
+    case 'cover-left': if (role === 'in') v.dx = 1 - e; else v.opacity = 1 - 0.3 * e; break;
+    case 'cover-right': if (role === 'in') v.dx = -(1 - e); else v.opacity = 1 - 0.3 * e; break;
+    case 'cover-up': if (role === 'in') v.dy = 1 - e; else v.opacity = 1 - 0.3 * e; break;
+    case 'cover-down': if (role === 'in') v.dy = -(1 - e); else v.opacity = 1 - 0.3 * e; break;
+    /* deslizar com desfoque (CSS: translate + blur) */
+    case 'slide-blur-left':
+    case 'slide-blur-right': {
+      const dir = kind === 'slide-blur-left' ? -1 : 1;
+      v.dx = role === 'out' ? dir * e : -dir * (1 - e);
+      v.blur = bell;
+      break;
+    }
     default:
       if (role === 'out') v.opacity = 0;
   }
   return v;
 }
 
-export const TRANSITION_LABELS: Record<TransitionKind, string> = {
-  cut: 'Corte seco', fade: 'Fade (preto)', crossfade: 'Dissolver', 'slide-left': 'Deslizar ←',
-  'slide-right': 'Deslizar →', 'slide-up': 'Deslizar ↑', 'slide-down': 'Deslizar ↓', 'zoom-in': 'Zoom in',
-  'zoom-out': 'Zoom out', whip: 'Chicote', glitch: 'Glitch', flash: 'Flash', 'dip-black': 'Mergulho preto',
-  'dip-white': 'Mergulho branco', blur: 'Desfoque', spin: 'Giro', 'wipe-left': 'Cortina ←', 'wipe-right': 'Cortina →',
-  'wipe-up': 'Cortina ↑', 'circle-open': 'Círculo', pixelate: 'Pixelar', shake: 'Tremor', 'rgb-split': 'RGB split',
-  'film-burn': 'Filme queimado',
-  ...SHADER_TRANSITION_LABELS,
-};
+/** rótulos PT-BR (derivados do catálogo único em lib/fx/catalog.ts) */
+export const TRANSITION_LABELS: Record<TransitionKind, string> = FX_TRANSITION_LABELS;
 
 export const ALL_TRANSITIONS = Object.keys(TRANSITION_LABELS) as TransitionKind[];

@@ -1,6 +1,8 @@
 /* animações de clipe (entrada/saída/loop) estilo CapCut — puro */
 import type { ClipAnimation, Seconds } from '../types';
 import { clamp01, ease, easeOutBack, easeOutBounce } from './easing';
+import { FX_CLIP_ANIMATION_LABELS } from '../fx/catalog';
+import { applyIntroFx, applyLoopFx } from '../fx/clipAnimations';
 
 export interface AnimFx {
   opacity: number;
@@ -14,11 +16,8 @@ export interface AnimFx {
 
 export const NO_ANIM: AnimFx = { opacity: 1, dx: 0, dy: 0, scale: 1, rotation: 0, blur: 0, scaleX: 1 };
 
-export const CLIP_ANIMATION_LABELS: Record<ClipAnimation, string> = {
-  fade: 'Esmaecer', 'zoom-in': 'Zoom in', 'zoom-out': 'Zoom out', 'slide-left': 'Deslizar ←', 'slide-right': 'Deslizar →',
-  'slide-up': 'Deslizar ↑', 'slide-down': 'Deslizar ↓', spin: 'Girar', bounce: 'Quicar', pop: 'Pop', shake: 'Tremer',
-  swing: 'Balançar', blur: 'Desfocar', flip: 'Virar',
-};
+/** rótulos PT-BR (catálogo único da sessão fx: lib/fx/catalog.ts) */
+export const CLIP_ANIMATION_LABELS: Record<ClipAnimation, string> = FX_CLIP_ANIMATION_LABELS;
 
 /** aplica uma animação de entrada com progresso p (0 = início, 1 = repouso). dir=-1 espelha (saída) */
 function applyIntro(fx: AnimFx, kind: ClipAnimation, p: number, dir: 1 | -1): void {
@@ -39,6 +38,7 @@ function applyIntro(fx: AnimFx, kind: ClipAnimation, p: number, dir: 1 | -1): vo
     case 'swing': fx.rotation += Math.sin(p * Math.PI * 3) * 22 * a; fx.opacity *= clamp01(p * 3); break;
     case 'blur': fx.blur = Math.max(fx.blur, a); fx.opacity *= clamp01(p * 1.5); break;
     case 'flip': fx.scaleX *= Math.max(0.001, e); break;
+    default: applyIntroFx(fx, kind, p, dir); // animações novas (sessão fx)
   }
 }
 
@@ -56,6 +56,7 @@ function applyLoop(fx: AnimFx, kind: ClipAnimation, phase: number): void {
     case 'swing': fx.rotation += s * 8; break;
     case 'blur': fx.blur = Math.max(fx.blur, 0.3 * (0.5 - 0.5 * Math.cos(phase * Math.PI * 2))); break;
     case 'flip': fx.scaleX *= Math.cos(phase * Math.PI * 2) || 0.001; break;
+    default: applyLoopFx(fx, kind, phase); // animações novas (sessão fx)
   }
 }
 
@@ -71,13 +72,13 @@ export function clipAnimFx(c: Animated, local: Seconds, duration: Seconds): Anim
   const ai = c.animationIn;
   if (ai && ai.duration > 0) {
     const d = Math.min(ai.duration, duration);
-    if (local < d) applyIntro(fx, ai.kind, clamp01(local / d), 1);
+    if (d > 0 && local < d) applyIntro(fx, ai.kind, clamp01(local / d), 1);
   }
   const ao = c.animationOut;
   if (ao && ao.duration > 0) {
     const d = Math.min(ao.duration, duration);
     const left = duration - local;
-    if (left < d) applyIntro(fx, ao.kind, clamp01(left / d), -1);
+    if (d > 0 && left < d) applyIntro(fx, ao.kind, clamp01(left / d), -1);
   }
   const al = c.animationLoop;
   if (al && al.duration > 0) applyLoop(fx, al.kind, (local / al.duration) % 1);

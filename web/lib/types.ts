@@ -114,23 +114,62 @@ export type TransitionKind =
   /* transições em shader WebGL (portadas do HyperFrames, Apache-2.0) */
   | 'domain-warp' | 'ridged-burn' | 'whip-pan' | 'sdf-iris' | 'ripple-waves' | 'gravitational-lens'
   | 'cinematic-zoom' | 'chromatic-split' | 'digital-glitch' | 'swirl-vortex' | 'thermal-distortion'
-  | 'flash-through-white' | 'cross-warp-morph' | 'light-leak';
+  | 'flash-through-white' | 'cross-warp-morph' | 'light-leak'
+  /* (aditivo 2026-11-19, sessão fx) — CSS/canvas */
+  | 'push-left' | 'push-right' | 'push-up' | 'push-down' | 'cover-left' | 'cover-right' | 'cover-up' | 'cover-down'
+  | 'slide-blur-left' | 'slide-blur-right'
+  /* (aditivo 2026-11-19, sessão fx) — shader WebGL próprio (lib/fx/transitionShaders.ts) */
+  | 'cube-left' | 'cube-right' | 'cube-up' | 'flip-x' | 'flip-y' | 'page-curl' | 'doors-open' | 'doors-close'
+  | 'blinds-h' | 'blinds-v' | 'luma-star' | 'luma-heart' | 'luma-diagonal' | 'luma-clock' | 'noise-dissolve'
+  | 'zoom-blur' | 'spin-blur' | 'stretch' | 'ink' | 'smoke' | 'mosaic' | 'pixel-sort' | 'glitch-2' | 'camera-flash'
+  | 'whip-left' | 'whip-right' | 'whip-up' | 'whip-down' | 'uncover-left' | 'uncover-up' | 'iris-close' | 'diamond'
+  | 'wind' | 'wave' | 'burn-2' | 'flare' | 'swirl' | 'split-open' | 'shutter' | 'checkerboard' | 'squares'
+  | 'polka' | 'film-roll' | 'tv-off' | 'kaleido' | 'dreamy' | 'zoom-rotate' | 'squeeze' | 'luma-melt';
 
 /** efeitos visuais aplicados ao clipe (ou a uma camada de ajuste) */
 export type VisualEffectKind =
   | 'shake' | 'glitch' | 'rgb-split' | 'zoom-pulse' | 'vhs' | 'film-grain' | 'light-leak'
   | 'pixelate' | 'mirror' | 'kaleidoscope' | 'blur-motion' | 'flash-strobe' | 'old-film'
-  | 'vignette-pulse' | 'sparkle' | 'soft-glow' | 'neon-edge' | 'black-bars';
+  | 'vignette-pulse' | 'sparkle' | 'soft-glow' | 'neon-edge' | 'black-bars'
+  /* (aditivo 2026-11-19, sessão fx — catálogo em lib/fx/catalog.ts) */
+  | 'zoom-punch' | 'zoom-slow' | 'handheld' | 'shake-3d' | 'beat-pulse'
+  | 'blur-gauss' | 'blur-directional' | 'blur-radial' | 'blur-zoom' | 'tilt-shift' | 'focus-center'
+  | 'fisheye' | 'bulge' | 'pinch' | 'swirl' | 'waves' | 'heat-haze' | 'ripple' | 'kaleidoscope-6'
+  | 'glitch-digital' | 'datamosh' | 'chromatic-aberration' | 'rgb-wave' | 'pixel-sort'
+  | 'crt' | 'vhs-2' | 'film-8mm' | 'dust-scratches' | 'night-vision'
+  | 'bloom' | 'neon-glow' | 'light-leak-2' | 'light-leak-3' | 'lens-flare' | 'bokeh' | 'light-sweep'
+  | 'cartoon' | 'sketch' | 'halftone' | 'duotone' | 'posterize' | 'ascii' | 'pixel-art' | 'outline' | 'thermal'
+  | 'invert' | 'rainbow'
+  | 'mirror-4' | 'mirror-vertical' | 'split-2' | 'split-3' | 'split-4' | 'split-9' | 'echo-trail'
+  | 'strobe-color' | 'flash-black' | 'freeze-flash'
+  | 'snow' | 'rain' | 'confetti' | 'hearts' | 'bubbles' | 'fireflies' | 'embers'
+  | 'frame-border' | 'polaroid' | 'film-frame' | 'cinema-bars-anim' | 'vignette' | 'rounded-frame' | 'drop-shadow'
+  | 'disco' | 'countdown';
 
 export interface VisualEffect {
   kind: VisualEffectKind;
   intensity: number; // 0..1
   speed?: number; // 0..2 (1 = normal)
+  /** (aditivo, fx) cor do efeito ('#RRGGBB') — neon, duotone, moldura, contorno… */
+  color?: string;
+  /** (aditivo, fx) direção em graus (0 = →, 90 = ↓) — desfoque direcional, chuva, vazamento */
+  angle?: number;
 }
 
-export type BlendMode = 'normal' | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten' | 'add' | 'difference';
+export type BlendMode = 'normal' | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten' | 'add' | 'difference'
+  /* (aditivo 2026-11-19, sessão fx) */
+  | 'soft-light' | 'hard-light' | 'color-dodge' | 'color-burn' | 'exclusion' | 'hue' | 'saturation' | 'color' | 'luminosity';
 
-export type MaskShape = 'rect' | 'circle' | 'heart' | 'star' | 'line' | 'mirror';
+export type MaskShape = 'rect' | 'circle' | 'heart' | 'star' | 'line' | 'mirror'
+  /* (aditivo 2026-11-19, sessão fx) gradiente linear, radial, retângulo arredondado, losango, texto */
+  | 'linear' | 'radial' | 'rounded-rect' | 'diamond' | 'text';
+
+/** (aditivo, fx) keyframe de máscara relativo ao início do clipe (Power Window animada) */
+export interface MaskKeyframe {
+  t: Seconds;
+  x?: number; y?: number; w?: number; h?: number; rotation?: number; feather?: number;
+  easing?: Easing;
+}
 
 export interface Mask {
   shape: MaskShape;
@@ -139,6 +178,12 @@ export interface Mask {
   rotation: number;
   feather: number; // 0..1
   invert?: boolean;
+  /** (aditivo, fx) raio dos cantos do 'rounded-rect' (0..1 do lado menor) */
+  radius?: number;
+  /** (aditivo, fx) texto da máscara 'text' */
+  text?: string;
+  /** (aditivo, fx) animação da máscara */
+  keyframes?: MaskKeyframe[];
 }
 
 export interface ChromaKey {
@@ -165,6 +210,8 @@ export interface AudioEffect { kind: AudioEffectKind; amount: number /* 0..1 */ 
 export interface Transition {
   kind: TransitionKind;
   duration: Seconds; // tipicamente 0.2–0.8
+  /** (aditivo, fx) curva aplicada ao progresso (ausente = curva própria da transição) */
+  easing?: Easing;
 }
 
 export interface Transform {
@@ -222,7 +269,11 @@ export interface VisualExtras {
 
 export type ClipAnimation =
   | 'fade' | 'zoom-in' | 'zoom-out' | 'slide-left' | 'slide-right' | 'slide-up' | 'slide-down'
-  | 'spin' | 'bounce' | 'pop' | 'shake' | 'swing' | 'blur' | 'flip';
+  | 'spin' | 'bounce' | 'pop' | 'shake' | 'swing' | 'blur' | 'flip'
+  /* (aditivo 2026-11-19, sessão fx — lib/fx/clipAnimations.ts) */
+  | 'rotate-3d' | 'pulse' | 'breathe' | 'wiggle' | 'slide-blur-left' | 'slide-blur-right' | 'slide-blur-up'
+  | 'spin-zoom' | 'drop' | 'elastic' | 'rise' | 'roll' | 'zoom-blur' | 'heartbeat' | 'float' | 'pendulum'
+  | 'tilt' | 'squash' | 'whirl' | 'jelly';
 
 /** campos de áudio comuns a vídeo/áudio */
 export interface AudioExtras {

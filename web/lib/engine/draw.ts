@@ -17,6 +17,7 @@ import { transitionVisual, NEUTRAL_TRANSITION, type TransitionVisual } from './t
 import { clipAnimFx } from './animations';
 import { applyGrade, applySurfaceEffects, effectGeometry, filmBurn, glitchInPlace, hasSurfaceEffects, pixelateInPlace, rgbSplitInPlace } from './effects';
 import { applyMask } from './masks';
+import { BLEND_OPS } from '../fx/blend';
 import { processPixels } from './gl';
 import { emojiCanvas, shapeCanvas, clipShapeAspect } from './shapes';
 import { getSegMask, requestSegMask } from './segment';
@@ -43,10 +44,8 @@ export function mediaSize(el: MediaElement | AnyCanvas): { w: number; h: number 
   return null;
 }
 
-const BLEND: Record<BlendMode, GlobalCompositeOperation> = {
-  normal: 'source-over', multiply: 'multiply', screen: 'screen', overlay: 'overlay', darken: 'darken',
-  lighten: 'lighten', add: 'lighter', difference: 'difference',
-};
+/* modos de mesclagem: tabela no catálogo da sessão fx (lib/fx/blend.ts) */
+const BLEND: Record<BlendMode, GlobalCompositeOperation> = BLEND_OPS;
 
 /* ---------- fundo (Tela de fundo do CapCut) ---------- */
 

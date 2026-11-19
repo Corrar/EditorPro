@@ -7,7 +7,10 @@
    Ver web/THIRD_PARTY_NOTICES.md.
    ===================================================================== */
 import type { TransitionKind } from '../types';
-import { makeCanvas, type AnyCanvas } from './surface';
+import type { AnyCanvas } from './surface';
+import { fxGLAvailable, runFx } from '../fx/glcore';
+import { FX_SHADER_TRANSITION_KINDS, fxTransitionFragment } from '../fx/transitionShaders';
+import { FX_TRANSITION_LABELS } from '../fx/catalog';
 
 const VERT = 'attribute vec2 a_pos; varying vec2 v_uv; void main(){v_uv=a_pos*0.5+0.5; v_uv.y=1.0-v_uv.y; gl_Position=vec4(a_pos,0,1);}';
 
@@ -21,11 +24,11 @@ const NQ =
   'return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}' +
   'float fbm(vec2 p){float v=0.,a=.5;mat2 R=mat2(.8,.6,-.6,.8);for(int i=0;i<5;i++){v+=a*vnoise(p);p=R*p*2.02;a*=.5;}return v;}';
 
-export type ShaderTransitionKind = Extract<TransitionKind,
+type LegacyShaderKind = Extract<TransitionKind,
   'domain-warp' | 'ridged-burn' | 'whip-pan' | 'sdf-iris' | 'ripple-waves' | 'gravitational-lens' | 'cinematic-zoom'
   | 'chromatic-split' | 'digital-glitch' | 'swirl-vortex' | 'thermal-distortion' | 'flash-through-white' | 'cross-warp-morph' | 'light-leak'>;
 
-const FRAG: Record<ShaderTransitionKind, string> = {
+const FRAG: Record<LegacyShaderKind, string> = {
   'domain-warp': H + NQ +
     'void main(){vec2 q=vec2(fbm(v_uv*3.),fbm(v_uv*3.+vec2(5.2,1.3)));' +
     'vec2 r=vec2(fbm(v_uv*3.+q*4.+vec2(1.7,9.2)),fbm(v_uv*3.+q*4.+vec2(8.3,2.8)));float n=fbm(v_uv*3.+r*2.);' +
@@ -114,111 +117,41 @@ const FRAG: Record<ShaderTransitionKind, string> = {
     'overexposed=aces(overexposed);gl_FragColor=vec4(mix(overexposed,B.rgb,smoothstep(.15,.85,u_progress)),1.);}',
 };
 
-export const SHADER_TRANSITIONS = Object.keys(FRAG) as ShaderTransitionKind[];
+/** transições em shader: as 14 portadas do HyperFrames + as escritas pela sessão fx (lib/fx/transitionShaders.ts) */
+export type ShaderTransitionKind = TransitionKind;
 
-export const SHADER_TRANSITION_LABELS: Record<ShaderTransitionKind, string> = {
-  'domain-warp': 'Distorção fluida', 'ridged-burn': 'Queima em brasa', 'whip-pan': 'Chicote (shader)',
-  'sdf-iris': 'Íris', 'ripple-waves': 'Ondas', 'gravitational-lens': 'Lente gravitacional', 'cinematic-zoom': 'Zoom cinemático',
-  'chromatic-split': 'Separação cromática', 'digital-glitch': 'Glitch digital', 'swirl-vortex': 'Redemoinho',
-  'thermal-distortion': 'Distorção térmica', 'flash-through-white': 'Flash branco suave', 'cross-warp-morph': 'Metamorfose',
-  'light-leak': 'Vazamento de luz',
-};
+export const SHADER_TRANSITIONS = [...Object.keys(FRAG), ...FX_SHADER_TRANSITION_KINDS] as ShaderTransitionKind[];
+const SHADER_SET = new Set<string>(SHADER_TRANSITIONS);
+
+export const SHADER_TRANSITION_LABELS = Object.fromEntries(
+  SHADER_TRANSITIONS.map((k) => [k, FX_TRANSITION_LABELS[k as TransitionKind] ?? k]),
+) as Record<ShaderTransitionKind, string>;
 
 export function isShaderTransition(kind: TransitionKind): kind is ShaderTransitionKind {
-  return Object.prototype.hasOwnProperty.call(FRAG, kind);
+  return SHADER_SET.has(kind);
 }
 
-/* cores de destaque = laranja da marca (#D9641E) e variações */
+/* cores de destaque = laranja da marca e variações */
 const ACCENT: [number, number, number] = [0.851, 0.392, 0.118];
 const ACCENT_DARK: [number, number, number] = [0.42, 0.14, 0.03];
 const ACCENT_BRIGHT: [number, number, number] = [1.0, 0.76, 0.42];
 
-interface State {
-  canvas: AnyCanvas;
-  gl: WebGLRenderingContext;
-  vs: WebGLShader;
-  progs: Map<string, WebGLProgram>;
-  texFrom: WebGLTexture;
-  texTo: WebGLTexture;
-}
-let st: State | null | undefined;
-
-function init(): State | null {
-  if (st !== undefined) return st;
-  st = null;
-  try {
-    if (typeof document === 'undefined' && typeof OffscreenCanvas === 'undefined') return null;
-    const canvas = makeCanvas(16, 16);
-    const gl = (canvas as HTMLCanvasElement).getContext('webgl', { preserveDrawingBuffer: true, premultipliedAlpha: false, alpha: false }) as WebGLRenderingContext | null;
-    if (!gl) return null;
-    const vs = gl.createShader(gl.VERTEX_SHADER)!;
-    gl.shaderSource(vs, VERT); gl.compileShader(vs);
-    if (!gl.getShaderParameter(vs, gl.COMPILE_STATUS)) return null;
-    const buf = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
-    const mkTex = () => {
-      const t = gl.createTexture()!;
-      gl.bindTexture(gl.TEXTURE_2D, t);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-      return t;
-    };
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-    st = { canvas, gl, vs, progs: new Map(), texFrom: mkTex(), texTo: mkTex() };
-  } catch (e) {
-    console.warn('[engine] transições em shader indisponíveis', e);
-    st = null;
-  }
-  return st;
-}
-
+/** WebGL disponível? (contexto compartilhado com os efeitos — lib/fx/glcore.ts) */
 export function shaderTransitionsAvailable(): boolean {
-  return !!init();
+  return fxGLAvailable();
 }
 
-function program(S: State, kind: ShaderTransitionKind): WebGLProgram | null {
-  const hit = S.progs.get(kind);
-  if (hit) return hit;
-  const { gl } = S;
-  const fs = gl.createShader(gl.FRAGMENT_SHADER)!;
-  gl.shaderSource(fs, FRAG[kind]); gl.compileShader(fs);
-  if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) { console.warn('[engine] shader', kind, gl.getShaderInfoLog(fs)); return null; }
-  const p = gl.createProgram()!;
-  gl.attachShader(p, S.vs); gl.attachShader(p, fs); gl.linkProgram(p);
-  gl.deleteShader(fs);
-  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) return null;
-  S.progs.set(kind, p);
-  return p;
+function fragmentOf(kind: ShaderTransitionKind): string | null {
+  if (Object.prototype.hasOwnProperty.call(FRAG, kind)) return FRAG[kind as LegacyShaderKind];
+  return fxTransitionFragment(kind);
 }
 
 /** mistura dois quadros completos W×H com o shader `kind`; devolve o canvas GL (desenhe na hora) */
 export function runShaderTransition(kind: ShaderTransitionKind, from: TexImageSource, to: TexImageSource, progress: number, W: number, H: number): AnyCanvas | null {
-  const S = init();
-  if (!S) return null;
-  const p = program(S, kind);
-  if (!p) return null;
-  const { gl, canvas } = S;
-  if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
-  gl.viewport(0, 0, W, H);
-  gl.useProgram(p);
-  const loc = gl.getAttribLocation(p, 'a_pos');
-  gl.enableVertexAttribArray(loc);
-  gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, S.texFrom);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, from);
-  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, S.texTo);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, to);
-  const u = (n: string) => gl.getUniformLocation(p, n);
-  gl.uniform1i(u('u_from'), 0);
-  gl.uniform1i(u('u_to'), 1);
-  gl.uniform1f(u('u_progress'), Math.min(1, Math.max(0, progress)));
-  gl.uniform2f(u('u_resolution'), W, H);
-  gl.uniform3fv(u('u_accent'), ACCENT);
-  gl.uniform3fv(u('u_accent_dark'), ACCENT_DARK);
-  gl.uniform3fv(u('u_accent_bright'), ACCENT_BRIGHT);
-  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-  return canvas;
+  const frag = fragmentOf(kind);
+  if (!frag) return null;
+  const p = Number.isFinite(progress) ? Math.min(1, Math.max(0, progress)) : 0;
+  return runFx('tr:' + kind, frag, [['u_from', from], ['u_to', to]], W, H, {
+    u_progress: p, u_resolution: [W, H], u_accent: ACCENT, u_accent_dark: ACCENT_DARK, u_accent_bright: ACCENT_BRIGHT,
+  });
 }
