@@ -10,7 +10,7 @@
 import type { CaptionStyle, Easing, Id, Keyframe, MotionMode, Project, ReferenceTemplate, Seconds, StyleProfile, TransitionKind, VideoClip } from '../types';
 import { allWords, applyOps, type EditOp } from '../ops';
 import { mergeKfProps } from './features';
-import { r3, smoothKeyframes } from './sanitize';
+import { isObj, r3, sanitizeStyleMotion, smoothKeyframes } from './sanitize';
 import { uid } from '../util';
 
 /** limites do movimento "suave" (padrão): zoom ≥0,6 s e no máx. 8% por tomada */
@@ -339,3 +339,35 @@ export function wantsPunchMotion(text: string, style?: StyleProfile): boolean {
   const k = style?.template?.motion.mode ?? style?.motion?.kind;
   return k === 'punch' || k === 'handheld' || /punch|pancada|tranco|zoom (rapido|seco)|tremid|shake/i.test(text.normalize('NFD').replace(/[̀-ͯ]/g, ''));
 }
+
+/**
+ * Junta o que o Claude descreveu com o MEDIDO (o medido ganha): movimento de câmera, transições, faixa de
+ * legenda (cor, caixa, posição, maiúsculas) e o molde inteiro guardado em style.template.
+ */
+export function mergeMeasured(style: StyleProfile, raw: unknown, template?: ReferenceTemplate): StyleProfile {
+  const r = isObj(raw) ? raw : {};
+  const cam = isObj(r.camera) ? r.camera : undefined;
+  const claudeMotion = cam ? sanitizeStyleMotion({ kind: cam.mode, zoomPerShot: cam.avgZoomPerShot, easing: cam.easing }) : undefined;
+  if (template) {
+    style.template = template;
+    const tm = template.motion;
+    style.motion = { kind: tm.mode, zoomPerShot: tm.avgZoomPerShot, easing: tm.easing };
+    style.zoomPunchIns = tm.mode === 'punch';
+    style.transitions = [...new Set<TransitionKind>(['cut', ...template.transitions.filter((t) => t.frequency > 0.05).map((t) => t.kind)])];
+    if (template.captions) {
+      const c = template.captions;
+      style.captions = {
+        ...(style.captions ?? {}),
+        present: true,
+        color: c.textColor,
+        ...(c.boxColor ? { background: c.boxColor } : {}),
+        position: { x: 0.5, y: r3((c.region.y0 + c.region.y1) / 2) },
+        ...(c.uppercase !== undefined && style.captions?.uppercase === undefined ? { uppercase: c.uppercase } : {}),
+      };
+    }
+  } else if (claudeMotion) {
+    style.motion = claudeMotion;
+  }
+  return style;
+}
+

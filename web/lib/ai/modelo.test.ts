@@ -213,3 +213,39 @@ describe('2.2 contrato StyleProfile.template/motion (sanitize)', () => {
     expect(sanitizeStyleProfile({ summary: 'x', template: { shots: [] } })?.template).toBeUndefined();
   });
 });
+
+describe('2.5 fidelidade ao modelo', () => {
+  const graded = (p: Project) => applyOps(p, videoClips(p).map((c) => ({ op: 'update_clip', clipId: c.id, patch: { colorGrade: { exposure: 0.1 } } }) as EditOp)).project;
+  it('réplica do planejador: ≥0,8 em todos os aspectos (R2)', async () => {
+    const { fidelityOf, fidelityLine } = await import('./fidelity');
+    let p = applyOps(base(15), [{ op: 'set_captions', segments: speech(15), language: 'pt-BR' } as EditOp]).project;
+    p = graded(p);
+    const plan = planFirstEdit({ project: p, assets, brief: 'vídeo', silencesByAsset: { a1: [] }, style: refStyle(), colorGraded: true });
+    const after = sanitizeOps(plan.ops, p, assets, MAX_AI_OPS).project;
+    const f = fidelityOf(after, refStyle(), { r: 0.6, g: 0.47, b: 0.35 })!;
+    expect(f.min).toBeGreaterThanOrEqual(0.8);
+    expect(fidelityLine(f)).toMatch(/^Fidelidade ao modelo: ritmo \d+%, movimento \d+%, transições \d+%, legenda \d+%, cor \d+%$/);
+  });
+  it('edição antiga (1 clipe, pancada, transição inventada, look vibrante): nota baixa e o conserto sobe', async () => {
+    const { fidelityOf, failing, repairOps } = await import('./fidelity');
+    let p = applyOps(base(15), [{ op: 'set_captions', segments: speech(15), language: 'pt-BR' } as EditOp]).project;
+    p = applyOps(p, [...zoomOps(p, true, undefined, 'punch'), { op: 'update_clip', clipId: 'c1', patch: { colorPreset: 'vibrant' } }]).project;
+    const f = fidelityOf(p, refStyle())!;
+    const bad = failing(f);
+    expect(bad).toEqual(expect.arrayContaining(['ritmo', 'movimento', 'legenda', 'cor']));
+    const fixed = sanitizeOps(repairOps(p, refStyle(), bad), p, assets, MAX_AI_OPS).project;
+    const g = fidelityOf(graded(fixed), refStyle())!;
+    expect(g.scores.ritmo).toBeGreaterThanOrEqual(0.8);
+    expect(g.scores.movimento).toBeGreaterThanOrEqual(0.8);
+    expect(g.scores.legenda).toBeGreaterThanOrEqual(0.8);
+    expect(g.scores.cor).toBeGreaterThanOrEqual(0.8);
+  });
+  it('transição a mais num modelo de cortes secos derruba "transições"', async () => {
+    const { fidelityOf } = await import('./fidelity');
+    let p = applyOps(base(15), [{ op: 'set_captions', segments: speech(15), language: 'pt-BR' } as EditOp]).project;
+    const r = templateOps(p, refStyle());
+    p = applyOps(p, r.ops).project;
+    p = applyOps(p, videoClips(p).slice(1).map((c) => ({ op: 'update_clip', clipId: c.id, patch: { transitionIn: { kind: 'zoom-in', duration: 0.3 } } }) as EditOp)).project;
+    expect(fidelityOf(p, refStyle())!.scores.transicoes).toBeLessThan(0.5);
+  });
+});

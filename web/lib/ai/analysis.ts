@@ -4,10 +4,11 @@
    - vídeo-exemplo: quadros (p/ o Claude) + cortes de cena -> métricas de ritmo
    A lógica numérica fica em demo.ts (pura, testada).
    ===================================================================== */
-import type { AspectRatio, Id, MediaAsset, StyleProfile } from '../types';
+import type { AspectRatio, Id, MediaAsset, ReferenceTemplate, StyleProfile } from '../types';
 import { cutsFromDiffs, detectSilences, styleFromCuts, type Range, type SilenceOptions } from './demo';
 import { detectBeats } from './features';
-import { deviceProfile, sampleVideo, type ColorStats, type Frame } from './frames';
+import { deviceProfile, fitBudget, sampleMotionFrames, sampleVideo, sampleVideoAt, type ColorStats, type Frame } from './frames';
+import { cutsOnBeatsRatio, measureReference } from './motion';
 
 const MAX_DECODE_BYTES = 400 * 1024 * 1024;
 const silenceCache = new Map<string, Range[]>();
@@ -87,7 +88,7 @@ export async function silencesFor(assets: MediaAsset[], opts?: SilenceOptions): 
 
 export interface ReferenceSample {
   frames: Frame[];
-  metrics: { duration: number; cuts: number[]; avgShotLength: number; pacing: StyleProfile["pacing"]; aspect?: AspectRatio; width: number; height: number; color?: ColorStats };
+  metrics: { duration: number; cuts: number[]; avgShotLength: number; pacing: StyleProfile["pacing"]; aspect?: AspectRatio; width: number; height: number; color?: ColorStats; template?: ReferenceTemplate };
   /** perfil heurístico (modo demo / fallback se a IA falhar) */
   localStyle: StyleProfile;
 }
@@ -100,20 +101,63 @@ export async function sampleReference(asset: MediaAsset, onProgress?: (f: number
     const s = await sampleVideo(asset.url, {
       maxDuration: dev.weak ? 60 : 120,
       maxFrames: withFrames ? undefined : 1,
-      onProgress,
+      onProgress: onProgress ? (f) => onProgress(f * 0.5) : undefined,
     });
     if (!s.duration) return undefined;
-    const cuts = cutsFromDiffs(s.diffs, s.diffTimes);
-    const localStyle = styleFromCuts(cuts, s.duration, { width: s.width || asset.width, height: s.height || asset.height }, s.color);
+    // molde medido quadro a quadro (movimento, cortes exatos, legenda, transições); sem ele, só os cortes grossos
+    const template = await measureTemplate(asset, s.color, onProgress).catch((e) => { console.warn('[ai] medição do movimento falhou', e); return undefined; });
+    const cuts = template ? template.shots.slice(1).map((x) => x.start) : cutsFromDiffs(s.diffs, s.diffTimes);
+    const localStyle = styleFromCuts(cuts, s.duration, { width: s.width || asset.width, height: s.height || asset.height }, s.color, template);
+    // para o Claude: pares em volta dos cortes (que transição é), começo/fim de algumas tomadas (movimento)
+    // e a faixa de legenda em resolução cheia
+    let extra: Frame[] = [];
+    if (withFrames && template) {
+      extra = await sampleVideoAt(asset.url, referenceProbeTimes(template, s.duration)).catch(() => []);
+    }
     return {
-      frames: withFrames ? s.frames : [],
-      metrics: { duration: s.duration, cuts, avgShotLength: localStyle.avgShotLength, pacing: localStyle.pacing, aspect: localStyle.aspect, width: s.width, height: s.height, ...(s.color ? { color: s.color } : {}) },
+      frames: withFrames ? [...fitBudget(s.frames, 2_300_000), ...extra] : [],
+      metrics: { duration: s.duration, cuts, avgShotLength: localStyle.avgShotLength, pacing: localStyle.pacing, aspect: localStyle.aspect, width: s.width, height: s.height, ...(s.color ? { color: s.color } : {}), ...(template ? { template } : {}) },
       localStyle,
     };
   } catch (e) {
     console.warn('[ai] amostragem do exemplo falhou', e);
     return undefined;
   }
+}
+
+/** instantes que o Claude precisa ver do modelo (puro) */
+export function referenceProbeTimes(t: ReferenceTemplate, duration: number): { t: number; label: string; crop?: { y0: number; y1: number } }[] {
+  const out: { t: number; label: string; crop?: { y0: number; y1: number } }[] = [];
+  const cuts = t.shots.slice(1).map((x) => x.start);
+  const pick = <T,>(l: T[], n: number) => (l.length <= n ? l : Array.from({ length: n }, (_, k) => l[Math.floor(((k + 0.5) * l.length) / n)]));
+  for (const c of pick(cuts, 3)) {
+    out.push({ t: Math.max(0, c - 0.15), label: `ANTES do corte em ${c.toFixed(2)} s` }, { t: Math.min(duration - 0.02, c + 0.15), label: `DEPOIS do corte em ${c.toFixed(2)} s` });
+  }
+  for (const s of pick(t.shots.filter((x) => x.end - x.start >= 0.6), 3)) {
+    out.push({ t: s.start + 0.05, label: `COMEÇO da tomada ${s.start.toFixed(2)}–${s.end.toFixed(2)} s` }, { t: s.end - 0.08, label: `FIM da tomada ${s.start.toFixed(2)}–${s.end.toFixed(2)} s (compare o enquadramento)` });
+  }
+  if (t.captions) {
+    const pad = 0.02;
+    const band = { y0: Math.max(0, t.captions.region.y0 - pad), y1: Math.min(1, t.captions.region.y1 + pad) };
+    for (const s of pick(t.shots, 2)) out.push({ t: (s.start + s.end) / 2, label: 'Recorte da FAIXA DE LEGENDA em resolução cheia', crop: band });
+  }
+  return out;
+}
+
+/** mede o modelo (motion.ts): quadros cinza ~10 fps tocando mudo + faixa de legenda + batidas (cortes na batida) */
+export async function measureTemplate(asset: MediaAsset, color?: ColorStats, onProgress?: (f: number) => void): Promise<ReferenceTemplate | undefined> {
+  if (!asset.url || asset.kind !== 'video') return undefined;
+  const dev = deviceProfile();
+  const mf = await sampleMotionFrames(asset.url, { onProgress: onProgress ? (f) => onProgress(0.5 + f * 0.45) : undefined });
+  if (mf.gray.length < 4) return undefined;
+  const m = measureReference(mf.gray, mf.times, mf.windows, { duration: mf.duration, weak: dev.weak, ...(color ? { color: { r: color.r, g: color.g, b: color.b, sat: color.sat, lum: color.lum, ...(color.lumSd !== undefined ? { lumSd: color.lumSd } : {}) } } : {}) });
+  console.info(`[ai] modelo medido em ${m.ms} ms (${mf.gray.length} quadros, ${mf.method}): ${m.template.motion.mode} ×${m.template.motion.avgZoomPerShot}, ${m.cuts.length} cortes${m.template.captions ? ', legenda detectada' : ''}`);
+  // batidas do áudio do modelo: os cortes caem nelas?
+  if (m.cuts.length >= 3) {
+    const beats = await beatsOf(asset).catch(() => []);
+    if (beats.length) m.template.cutsOnBeats = cutsOnBeatsRatio(m.cuts, beats);
+  }
+  return m.template;
 }
 
 /** compatível com a versão anterior: só o perfil heurístico */
