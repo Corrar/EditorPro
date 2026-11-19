@@ -9,7 +9,8 @@ import type { Project } from '../types';
 /** chamado quando uma fonte/emoji fica disponível (o preview redesenha) */
 export const assetEvents = { onReady: () => {} };
 
-type Lib = { ensureFont?: (family: string, weights?: number[]) => Promise<unknown>; emojiFor?: (word: string) => string | undefined | null; captionBasePreset?: (id: string) => string };
+type Lib = { ensureFont?: (family: string, weights?: number[]) => Promise<unknown>; emojiFor?: (word: string) => string | undefined | null; captionBasePreset?: (id: string) => string;
+  captionPresetDef?: (id: string) => { style?: { color?: string; highlightColor?: string } } | undefined };
 let libPromise: Promise<Lib> | null = null;
 let lib: Lib | null = null;
 
@@ -24,6 +25,24 @@ function loadLib(): Promise<Lib> {
 
 const GENERIC = new Set(['serif', 'sans-serif', 'monospace', 'cursive', 'fantasy', 'system-ui']);
 const done = new Set<string>();
+/**
+ * Muda sempre que uma fonte termina de carregar: entra na chave do cache de bitmap do texto,
+ * para um bitmap desenhado com a fonte reserva não sobreviver à chegada da fonte certa (r2 biblioteca #1).
+ */
+let epoch = 0;
+export const fontEpoch = () => epoch;
+let epochListener = false;
+function watchFonts() {
+  if (epochListener || typeof document === 'undefined' || !document.fonts?.addEventListener) return;
+  epochListener = true;
+  document.fonts.addEventListener('loadingdone', () => { epoch++; assetEvents.onReady(); });
+}
+/** a fonte já terminou de carregar (ou é genérica)? Só então vale guardar o desenho em bitmap */
+export function fontLoaded(family: string, weight = 700, italic = false): boolean {
+  const fam = (family || '').trim();
+  if (!fam || GENERIC.has(fam.toLowerCase()) || typeof document === 'undefined') return true;
+  return done.has(key(fam, weight, italic));
+}
 const inflight = new Map<string, Promise<void>>();
 
 function key(family: string, weight: number, italic?: boolean) {
@@ -48,6 +67,7 @@ export function ensureFontLoaded(family: string, weight = 700, italic = false): 
       } catch { /* segue com a fonte reserva */ }
       done.add(k);
       inflight.delete(k);
+      epoch++;
       assetEvents.onReady();
     })();
     inflight.set(k, p);
@@ -59,6 +79,7 @@ export function ensureFontLoaded(family: string, weight = 700, italic = false): 
 export function requestFont(family: string, weight = 700, italic = false): boolean {
   const fam = (family || '').trim();
   if (!fam || typeof document === 'undefined') return true;
+  watchFonts();
   if (done.has(key(fam, weight, italic))) return true;
   try {
     if (document.fonts?.check?.(`${italic ? 'italic ' : ''}${weight} 48px "${fam}"`)) {
@@ -113,4 +134,14 @@ export function basePresetFor(id: string | undefined): string {
     if (b && NATIVE.has(b)) return b;
   } catch { /* usa a heurística */ }
   return guessBasePreset(id);
+}
+
+/** cores-padrão do preset de legenda da biblioteca (p/ saber se o usuário mexeu no destaque) */
+export function captionPresetColors(id: string | undefined): { color?: string; highlightColor?: string } | null {
+  if (!id || NATIVE.has(id)) return null;
+  if (!lib) { void loadLib().then(() => assetEvents.onReady()); return null; }
+  try {
+    const st = lib.captionPresetDef?.(id)?.style;
+    return st ? { color: st.color, highlightColor: st.highlightColor } : null;
+  } catch { return null; }
 }

@@ -5,9 +5,10 @@
    reprodução o da próxima transição ~1,5 s antes dela.
    ===================================================================== */
 import type { Project, Seconds, TransitionKind } from '@/lib/types';
-import { isShaderTransition, runShaderTransition, shaderTransitionsAvailable } from '@/lib/engine/shaderTransitions';
+import { isShaderTransition } from '@/lib/engine/shaderTransitions';
+import { prewarmTransition, isTransitionWarm } from '@/lib/engine/prewarm';
 
-const warmed = new Set<string>();
+
 
 /** tipos de transição em shader usados no projeto (na ordem do tempo), sem repetir */
 export function shaderKindsIn(p: Project, from: Seconds = 0, until: Seconds = Infinity): TransitionKind[] {
@@ -25,30 +26,18 @@ export function shaderKindsIn(p: Project, from: Seconds = 0, until: Seconds = In
   return [...new Set(hits.map((h) => h.kind))];
 }
 
-/** localStorage 'ep:pv-warm' = '0' desliga (comparação) */
-function warmDisabled(): boolean {
-  try { return typeof localStorage !== 'undefined' && localStorage.getItem('ep:pv-warm') === '0'; } catch { return false; }
-}
-
-let tiny: HTMLCanvasElement | null = null;
-/** compila o shader `kind` (desenhando 2×2); true se já estava pronto */
+/** compila o shader `kind` (delegado a lib/engine/prewarm); true se já estava pronto */
 export function warmShader(kind: TransitionKind): boolean {
-  if (warmed.has(kind)) return true;
-  if (warmDisabled()) return false;
-  warmed.add(kind);
-  if (typeof document === 'undefined' || !isShaderTransition(kind) || !shaderTransitionsAvailable()) return false;
-  if (!tiny) { tiny = document.createElement('canvas'); tiny.width = 2; tiny.height = 2; tiny.getContext('2d')?.fillRect(0, 0, 2, 2); }
-  try { runShaderTransition(kind as never, tiny, tiny, 0.5, 2, 2); } catch { /* fica p/ o fallback */ }
-  return false;
+  return prewarmTransition(kind);
 }
 
 export function isWarm(kind: TransitionKind): boolean {
-  return warmed.has(kind);
+  return isTransitionWarm(kind);
 }
 
 /** aquece no ócio, um shader por vez (não trava a interação) */
 export function warmIdle(kinds: TransitionKind[]): () => void {
-  const todo = kinds.filter((k) => !warmed.has(k));
+  const todo = kinds.filter((k) => !isTransitionWarm(k));
   let cancelled = false;
   type RIC = (cb: () => void, o?: { timeout: number }) => number;
   const ric: RIC = (typeof window !== 'undefined' && (window as unknown as { requestIdleCallback?: RIC }).requestIdleCallback) || ((cb) => window.setTimeout(cb, 200));

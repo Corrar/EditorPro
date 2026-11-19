@@ -8,9 +8,9 @@ import { animateClip } from './animate';
 import type { CaptionStyle, Project, Seconds, TextClip, TextStyle } from '../types';
 import { interpolateTransform, easeOutBack, easeOutBounce, ease, clamp01 } from './easing';
 import { balanceLines, layoutWords, splitText, textAnimState, fontPx, type AnimState } from './text';
-import { captionLook, chunkAt, chunkCaptions, clampToSafeZone, isEmphasisWord, wordStates, type CaptionChunk } from './captions';
-import { charOffsets, unitFx, unitKindOf, UNIT_NEUTRAL, type UnitFx, type UnitKind } from './textUnits';
-import { basePresetFor, emojiForWord, requestFont } from './fonts';
+import { captionHighlight, captionLook, chunkAt, chunkCaptions, clampToSafeZone, isEmphasisWord, wordStates, type CaptionChunk } from './captions';
+import { charOffsets, graphemes, unitFx, unitKindOf, UNIT_NEUTRAL, type UnitFx, type UnitKind } from './textUnits';
+import { basePresetFor, captionPresetColors, emojiForWord, fontEpoch, fontLoaded, requestFont } from './fonts';
 import { hash, makeCanvas, type AnyCanvas, type Ctx } from './surface';
 
 /* ---------- texto ---------- */
@@ -263,8 +263,10 @@ function drawBlock(ctx: Ctx, P: BlockParams, H: number) {
       if (charsLeft <= 0) break;
       let text = w.text;
       if (Number.isFinite(charsLeft)) {
-        if (text.length > charsLeft) text = text.slice(0, charsLeft);
-        charsLeft -= w.text.length + 1;
+        // por grafema: não corta emoji/par substituto no meio
+        const g = graphemes(w.text);
+        if (g.length > charsLeft) text = g.slice(0, charsLeft).join('');
+        charsLeft -= g.length + 1;
       }
       const paint = P.paints?.(w.index) ?? { color: P.style.color, scale: 1 };
       const ufx = P.unit?.kind === 'word' ? P.unit.fx(w.index) : UNIT_NEUTRAL;
@@ -279,7 +281,7 @@ function drawBlock(ctx: Ctx, P: BlockParams, H: number) {
         ctx.save();
         ctx.globalAlpha *= wordAlpha;
         let acc = 0;
-        for (const ch of [...text]) {
+        for (const ch of graphemes(text)) {
           const cw = ctx.measureText(ch).width;
           const phi = (x0 + w.x + acc + cw / 2 - cxLine) / Rr;
           ctx.save();
@@ -316,7 +318,7 @@ function drawBlock(ctx: Ctx, P: BlockParams, H: number) {
       const fill = gradient && paint.color === P.style.color ? gradient : paint.color;
       if (offsets && P.unit) {
         // letra a letra
-        const chars = [...text];
+        const chars = graphemes(text);
         let acc = 0;
         chars.forEach((ch, ci) => {
           const cfx = P.unit!.fx(offsets[w.index] + ci);
@@ -375,7 +377,7 @@ function textUnits(clip: TextClip, words: string[], local: number): BlockParams[
   const kinds = [unitKindOf(clip.animation), unitKindOf(clip.animationOut), unitKindOf(clip.animationLoop)];
   const kind = kinds.find(Boolean);
   if (!kind) return undefined;
-  const count = kind === 'char' ? words.reduce((a, w) => a + [...w].length, 0) : words.length;
+  const count = kind === 'char' ? words.reduce((a, w) => a + graphemes(w).length, 0) : words.length;
   const timing = { duration: clip.duration };
   return {
     kind,
@@ -412,7 +414,7 @@ export function drawTextClip(ctx: Ctx, clip0: TextClip, t: Seconds, W: number, H
   // animação por unidade cuida da entrada/saída: o bloco não esmaece por conta própria
   const unitOut = unitKindOf(clip.animationOut) ? 'none' : clip.animationOut;
   const blockIn = unitKindOf(clip.animation) ? 'none' : clip.animation;
-  const anim = textAnimState(blockIn, local, clip.duration, raw.replace(/\s+/g, ' ').length,
+  const anim = textAnimState(blockIn, local, clip.duration, graphemes(raw.replace(/\s+/g, ' ')).length,
     unitKindOf(clip.animation) && !clip.animationOut ? 'none' : unitOut, unitKindOf(clip.animationLoop) ? undefined : clip.animationLoop);
   const tf = interpolateTransform({ x: 0, y: 0, scale: clip.scale ?? 1, rotation: clip.rotation ?? 0, opacity: 1 }, clip.keyframes, Math.max(0, local));
   const hl = style.highlightColor || style.color;
@@ -427,8 +429,11 @@ export function drawTextClip(ctx: Ctx, clip0: TextClip, t: Seconds, W: number, H
     rotation: tf.rotation, scale: tf.scale, opacity: tf.opacity,
   };
   // texto parado (fora da entrada/saída, sem loop/unidade): desenha 1x num bitmap e reaproveita
-  if (fontReady && !unit && !paints && !style.backgroundBlur && isStaticAnim(anim) && W * H <= TEXT_CACHE_MAX_PX) {
-    const key = JSON.stringify([raw, style, W, H, anim.sweep > 0, anim.underlineDraw > 0, anim.boxReveal]);
+  // só guarda bitmap com a fonte CARREGADA (check() otimista desenha direto, mas não vai para o cache) e
+  // com a época das fontes na chave — senão o bitmap da fonte reserva fica para sempre (r2 biblioteca #1)
+  if (fontReady && fontLoaded(style.fontFamily, style.fontWeight || 700, !!style.italic)
+    && !unit && !paints && !style.backgroundBlur && isStaticAnim(anim) && W * H <= TEXT_CACHE_MAX_PX) {
+    const key = JSON.stringify([fontEpoch(), raw, style, W, H, anim.sweep > 0, anim.underlineDraw > 0, anim.boxReveal]);
     let bmp = textCache.get(key);
     if (bmp) { textCache.delete(key); textCache.set(key, bmp); } else {
       bmp = makeCanvas(W, H);
@@ -497,19 +502,20 @@ export function drawCaptions(ctx: Ctx, p: Project, t: Seconds, W: number, H: num
   const look = captionLook(basePresetFor(style.preset));
   const states = wordStates(chunk, t, look);
   const words = chunk.words.map((w) => (style.uppercase ? w.text.toLocaleUpperCase('pt-BR') : w.text));
-  const hl = style.highlightColor || '#FFD23F';
+  // a cor escolhida pelo usuário ganha do preset (ver captionHighlight)
+  const hl = captionHighlight(style, captionPresetColors(style.preset));
   const local = t - chunk.start;
-  const anim = captionAnim(style, local, chunk.end - chunk.start, words.join(' ').length);
+  const anim = captionAnim(style, local, chunk.end - chunk.start, graphemes(words.join(' ')).length);
   if (style.animation === 'typewriter') {
     const shown = chunk.words.filter((w) => t >= w.start).length;
-    anim.visibleChars = words.slice(0, shown).reduce((a, w) => a + w.length + 1, 0);
+    anim.visibleChars = words.slice(0, shown).reduce((a, w) => a + graphemes(w).length + 1, 0);
   }
   // animação por palavra/letra seguindo o tempo da fala
   const kind = unitKindOf(style.animation);
   let unit: BlockParams['unit'];
   if (kind) {
     const wordStarts = chunk.words.map((w) => Math.max(0, w.start - chunk.start));
-    const starts = kind === 'word' ? wordStarts : words.flatMap((w, wi) => [...w].map((_, ci) => wordStarts[wi] + ci * 0.03));
+    const starts = kind === 'word' ? wordStarts : words.flatMap((w, wi) => graphemes(w).map((_, ci) => wordStarts[wi] + ci * 0.03));
     const count = starts.length;
     unit = { kind, fx: (i) => unitFx(style.animation, kind, i, count, local, { duration: chunk.end - chunk.start, starts }, 'in') };
   }

@@ -80,6 +80,9 @@ export function nativePlan(p: Project, t: Seconds): NativePlan {
     if (tr.kind === 'video' && trackLayers(tr, t).length) return no('2ª trilha de vídeo');
     if (tr.kind === 'overlay' && tr.clips.some((c) => c.type === 'video' && t >= c.start && t < c.start + c.duration)) return no('PiP');
     if (tr.kind === 'effect' && tr.clips.some((c) => c.type === 'adjustment' && t >= c.start && t < c.start + c.duration)) return no('camada de ajuste');
+    // camada com mesclagem (screen, multiply…) sobre o vídeo: o canvas transparente por cima não mescla
+    // com o <video> de baixo — só o canvas completo faz a conta certa (r2 fx #4)
+    if (tr.clips.some((c) => 'blendMode' in c && c.blendMode && c.blendMode !== 'normal' && t >= c.start && t < c.start + c.duration)) return no('mesclagem');
   }
   if (items.length > 2) return no('camadas sobrepostas');
   const layers: NativeLayer[] = [];
@@ -111,7 +114,9 @@ export function clipNeedsCanvas(clip: Clip, t: Seconds): string | null {
   if (clip.type !== 'video') return 'não é vídeo';
   if (clip.reverse) return 'reverso';
   // efeitos: 'css' (geometria vira CSS no <video>) fica nativo; 'overlay' e 'canvas' compõem no canvas
-  if (clip.effects?.length && effectsNativeMode(clip.effects) !== 'css') return 'efeito';
+  // intensidade ausente vale 0,5 no desenho (effects.ts) — a política ignorava e mantinha o nativo,
+  // e o efeito (ex.: 'custom' da IA sem intensity) não aparecia no preview
+  if (clip.effects?.length && effectsNativeMode(clip.effects.map((e) => (e.intensity == null ? { ...e, intensity: 0.5 } : e))) !== 'css') return 'efeito';
   if (clip.mask) return 'máscara';
   if (clip.chromaKey) return 'chroma';
   if (clip.removeBackground) return 'remover fundo';

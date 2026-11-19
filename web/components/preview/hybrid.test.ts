@@ -16,6 +16,23 @@ function proj(clips: VideoClip[]): Project {
 const mode = (p: Project, t: number) => { const r = nativePlan(p, t); return r.native ? 'nativo' : r.reason; };
 
 describe('política de modo: nativo (<video> visível) × canvas', () => {
+  it("efeito sem intensity (IA) conta como 0,5 → canvas, como no desenho", () => {
+    const code = 'vec4 effect(vec2 uv){vec4 c=tex(uv);return vec4(1.0-c.rgb,c.a);}';
+    expect(mode(proj([vclip('a', 0, 3), vclip('b', 3, 3, { effects: [{ kind: 'custom', code } as never] })]), 3)).toBe('efeito');
+    expect(mode(proj([vclip('a', 0, 3, { effects: [{ kind: 'vhs', intensity: 0 }] })]), 1)).toBe('nativo');
+  });
+  it('sticker na overlay com mesclagem (screen) → canvas; sem mesclagem continua nativo (r2 fx #4)', () => {
+    const p = proj([vclip('a', 0, 5)]);
+    const st = { id: 's', type: 'sticker' as const, emoji: '⭐', start: 0, duration: 5, transform: { x: 0, y: 0, scale: 0.3, rotation: 0, opacity: 1 } };
+    p.tracks.push({ id: 'ov', kind: 'overlay', name: 'Sobreposição', clips: [{ ...st, blendMode: 'screen' }] } as Track);
+    expect(mode(p, 1)).toBe('mesclagem');
+    (p.tracks.at(-1)!.clips[0] as { blendMode?: string }).blendMode = 'normal';
+    expect(mode(p, 1)).toBe('nativo');
+    delete (p.tracks.at(-1)!.clips[0] as { blendMode?: string }).blendMode;
+    expect(mode(p, 1)).toBe('nativo');
+    (p.tracks.at(-1)!.clips[0] as { blendMode?: string }).blendMode = 'multiply';
+    expect(mode(p, 6)).toBe('sem clipe'); // fora do tempo do sticker não pesa
+  });
   it('clipe simples com keyframes de zoom, fade e legenda → nativo', () => {
     const p = proj([vclip('a', 0, 5, { keyframes: [{ t: 0, transform: { scale: 1 } }, { t: 5, transform: { scale: 1.2 } }], fadeIn: 0.5 })]);
     p.captions = { ...p.captions, enabled: true };
