@@ -96,6 +96,32 @@ function buildMock() {
   return { project, assets };
 }
 
+/** projeto grande p/ teste de desempenho: n clipes em cada uma de 4 trilhas + legendas/marcadores */
+function buildBig(n: number, assets: MediaAsset[]) {
+  const A = Object.fromEntries(assets.map((a) => [a.id, a]));
+  const base = createProject({ name: `Projeto grande (${n * 4} clipes)` });
+  const ops: EditOp[] = [{ op: 'add_track', track: { id: 'track_video_2', kind: 'video', name: 'B-roll' } }];
+  let tv = 0;
+  let tb = 0.5;
+  let tt = 0.2;
+  let ta = 0;
+  for (let i = 0; i < n; i++) {
+    const dv = 1.5 + (i % 4) * 0.5;
+    ops.push({ op: 'add_clip', trackId: 'track_video_1', clip: { ...makeVideoClip(i % 2 ? A.a_praia : A.a_cidade, tv, { duration: dv, in: (i % 5) * 0.8, label: i % 7 === 0 ? 'gancho' : undefined }), id: `bv${i}` } });
+    tv += dv;
+    ops.push({ op: 'add_clip', trackId: 'track_video_2', clip: { ...makeVideoClip(A.a_cidade, tb, { duration: 1.2, in: 1 }), id: `bb${i}` } });
+    tb += 2.4;
+    ops.push({ op: 'add_clip', trackId: 'track_text_1', clip: { ...makeTextClip(`Texto ${i + 1}`, tt, 1.4), id: `bt${i}` } });
+    tt += 2.1;
+    ops.push({ op: 'add_clip', trackId: 'track_audio_1', clip: { ...makeAudioClip(A.a_trilha, ta, { duration: 3, in: (i * 3) % 50 }), id: `ba${i}` } });
+    ta += 3;
+  }
+  const segs = Array.from({ length: n * 2 }, (_, i) => ({ id: `bs${i}`, start: i * 1.3, end: i * 1.3 + 1.1, text: `Legenda número ${i + 1}` }));
+  ops.push({ op: 'set_captions', segments: segs });
+  for (let i = 0; i < Math.ceil(n / 4); i++) ops.push({ op: 'add_marker', marker: { id: `bm${i}`, t: i * 8 + 1, kind: i % 3 ? 'user' : 'comment', label: `M${i}`, color: '#3B7DD8' } });
+  return applyOps(base, ops).project;
+}
+
 const AI_OPS: EditOp[] = [
   { op: 'split_clip', clipId: 'c_v2', at: 7.5, newId: 'c_v2b', explain: 'Cortando a pausa da entrevista em 0:07' },
   { op: 'trim_clip', clipId: 'c_v2b', start: 8.2, explain: 'Removendo o silêncio depois do corte' },
@@ -118,7 +144,9 @@ export default function TimelineHarness() {
     else if (window.innerWidth < 700) setTlH('55vh');
     const { project, assets } = buildMock();
     const st = useEditor.getState();
-    if (q.get('empty') !== '1') st.loadProject(project);
+    const big = Number(q.get('big') || 0);
+    if (big > 0) st.loadProject(buildBig(big, assets));
+    else if (q.get('empty') !== '1') st.loadProject(project);
     for (const a of assets) st.addAsset(a);
     if (q.get('zoom')) st.setZoom(+q.get('zoom')!);
     setReady(true);

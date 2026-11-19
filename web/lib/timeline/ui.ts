@@ -189,3 +189,21 @@ export const useTimelineUi = create<TimelineUi>((set) => ({
 }));
 
 export const useDims = () => useTimelineUi((s) => s.dims);
+
+/**
+ * janela de tempo a renderizar (virtualização horizontal): a tela visível + 1 tela de cada lado,
+ * quantizada por "página" — só muda (e re-renderiza as trilhas) quando a rolagem cruza uma página.
+ */
+export function visibleWindow(page: number, viewW: number, headerW: number, zoom: number): [Seconds, Seconds] {
+  const w = Math.max(200, viewW);
+  const x0 = (page - 1) * w - headerW;
+  const x1 = (page + 2) * w;
+  return [Math.max(0, x0 / zoom), x1 / zoom];
+}
+
+export function useVisibleWindow(zoom: number): [Seconds, Seconds] {
+  const page = useTimelineUi((s) => Math.floor(s.scrollLeft / Math.max(200, s.viewW)));
+  const viewW = useTimelineUi((s) => s.viewW);
+  const headerW = useTimelineUi((s) => s.dims.headerW);
+  return visibleWindow(page, viewW, headerW, zoom);
+}
