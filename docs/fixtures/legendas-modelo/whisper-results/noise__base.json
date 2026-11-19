@@ -1,0 +1,719 @@
+{
+ "model": "onnx-community/whisper-base_timestamped",
+ "dtype": "q8",
+ "variant": "app",
+ "opts": {
+  "language": "portuguese",
+  "task": "transcribe",
+  "return_timestamps": "word",
+  "chunk_length_s": 30,
+  "stride_length_s": 5,
+  "max_new_tokens": 220,
+  "no_repeat_ngram_size": 4
+ },
+ "split": 60,
+ "loadMs": 1134,
+ "clips": [
+  {
+   "id": "N_music_only",
+   "duration": 20.0106875,
+   "ms": 6633,
+   "rtf": 0.331472869185529,
+   "cuts": [
+    0,
+    20.0106875
+   ],
+   "pieces": [
+    {
+     "a": 0,
+     "b": 20.0106875,
+     "speech": true,
+     "ms": 6617,
+     "text": " e o que é o que é que é o e o que não é o que não não é o e do que é o e do que não é do que não não não é do e do que a gente não é do e do que o e do e do e o e do",
+     "nWords": 58
+    }
+   ],
+   "words": [
+    {
+     "text": " e",
+     "timestamp": [
+      4.04,
+      4.04
+     ]
+    },
+    {
+     "text": " o",
+     "timestamp": [
+      4.04,
+      4.04
+     ]
+    },
+    {
+     "text": " que",
+     "timestamp": [
+      4.04,
+      4.04
+     ]
+    },
+    {
+     "text": " é",
+     "timestamp": [
+      4.04,
+      4.04
+     ]
+    },
+    {
+     "text": " o",
+     "timestamp": [
+      4.04,
+      4.04
+     ]
+    },
+    {
+     "text": " que",
+     "timestamp": [
+      4.04,
+      4.04
+     ]
+    },
+    {
+     "text": " é",
+     "timestamp": [
+      4.04,
+      4.04
+     ]
+    },
+    {
+     "text": " que",
+     "timestamp": [
+      4.04,
+      4.04
+     ]
+    },
+    {
+     "text": " é",
+     "timestamp": [
+      4.04,
+      4.04
+     ]
+    },
+    {
+     "text": " o",
+     "timestamp": [
+      4.04,
+      4.04
+     ]
+    },
+    {
+     "text": " e",
+     "timestamp": [
+      4.04,
+      4.04
+     ]
+    },
+    {
+     "text": " o",
+     "timestamp": [
+      4.04,
+      4.1
+     ]
+    },
+    {
+     "text": " que",
+     "timestamp": [
+      4.1,
+      4.1
+     ]
+    },
+    {
+     "text": " não",
+     "timestamp": [
+      4.1,
+      4.1
+     ]
+    },
+    {
+     "text": " é",
+     "timestamp": [
+      4.1,
+      4.1
+     ]
+    },
+    {
+     "text": " o",
+     "timestamp": [
+      4.1,
+      4.1
+     ]
+    },
+    {
+     "text": " que",
+     "timestamp": [
+      4.1,
+      4.1
+     ]
+    },
+    {
+     "text": " não",
+     "timestamp": [
+      4.1,
+      4.1
+     ]
+    },
+    {
+     "text": " não",
+     "timestamp": [
+      4.1,
+      4.1
+     ]
+    },
+    {
+     "text": " é",
+     "timestamp": [
+      4.1,
+      4.1
+     ]
+    },
+    {
+     "text": " o",
+     "timestamp": [
+      4.1,
+      4.1
+     ]
+    },
+    {
+     "text": " e",
+     "timestamp": [
+      4.1,
+      4.1
+     ]
+    },
+    {
+     "text": " do",
+     "timestamp": [
+      4.1,
+      4.1
+     ]
+    },
+    {
+     "text": " que",
+     "timestamp": [
+      4.1,
+      4.1
+     ]
+    },
+    {
+     "text": " é",
+     "timestamp": [
+      4.1,
+      4.1
+     ]
+    },
+    {
+     "text": " o",
+     "timestamp": [
+      4.1,
+      4.1
+     ]
+    },
+    {
+     "text": " e",
+     "timestamp": [
+      4.18,
+      9.36
+     ]
+    },
+    {
+     "text": " do",
+     "timestamp": [
+      9.36,
+      11.02
+     ]
+    },
+    {
+     "text": " que",
+     "timestamp": [
+      11.02,
+      11.02
+     ]
+    },
+    {
+     "text": " não",
+     "timestamp": [
+      11.02,
+      11.02
+     ]
+    },
+    {
+     "text": " é",
+     "timestamp": [
+      11.02,
+      11.02
+     ]
+    },
+    {
+     "text": " do",
+     "timestamp": [
+      11.02,
+      11.02
+     ]
+    },
+    {
+     "text": " que",
+     "timestamp": [
+      11.02,
+      11.02
+     ]
+    },
+    {
+     "text": " não",
+     "timestamp": [
+      11.02,
+      11.02
+     ]
+    },
+    {
+     "text": " não",
+     "timestamp": [
+      11.02,
+      11.02
+     ]
+    },
+    {
+     "text": " não",
+     "timestamp": [
+      11.02,
+      11.02
+     ]
+    },
+    {
+     "text": " é",
+     "timestamp": [
+      11.02,
+      11.02
+     ]
+    },
+    {
+     "text": " do",
+     "timestamp": [
+      11.02,
+      11.02
+     ]
+    },
+    {
+     "text": " e",
+     "timestamp": [
+      11.02,
+      11.02
+     ]
+    },
+    {
+     "text": " do",
+     "timestamp": [
+      11.02,
+      11.02
+     ]
+    },
+    {
+     "text": " que",
+     "timestamp": [
+      11.02,
+      11.02
+     ]
+    },
+    {
+     "text": " a",
+     "timestamp": [
+      11.02,
+      12.14
+     ]
+    },
+    {
+     "text": " gente",
+     "timestamp": [
+      12.14,
+      12.14
+     ]
+    },
+    {
+     "text": " não",
+     "timestamp": [
+      12.14,
+      12.14
+     ]
+    },
+    {
+     "text": " é",
+     "timestamp": [
+      12.14,
+      12.14
+     ]
+    },
+    {
+     "text": " do",
+     "timestamp": [
+      12.14,
+      12.14
+     ]
+    },
+    {
+     "text": " e",
+     "timestamp": [
+      12.52,
+      16.78
+     ]
+    },
+    {
+     "text": " do",
+     "timestamp": [
+      16.78,
+      17.24
+     ]
+    },
+    {
+     "text": " que",
+     "timestamp": [
+      17.24,
+      17.24
+     ]
+    },
+    {
+     "text": " o",
+     "timestamp": [
+      17.24,
+      17.24
+     ]
+    },
+    {
+     "text": " e",
+     "timestamp": [
+      17.24,
+      17.24
+     ]
+    },
+    {
+     "text": " do",
+     "timestamp": [
+      17.24,
+      17.24
+     ]
+    },
+    {
+     "text": " e",
+     "timestamp": [
+      17.24,
+      17.24
+     ]
+    },
+    {
+     "text": " do",
+     "timestamp": [
+      17.24,
+      17.24
+     ]
+    },
+    {
+     "text": " e",
+     "timestamp": [
+      17.24,
+      17.24
+     ]
+    },
+    {
+     "text": " o",
+     "timestamp": [
+      17.24,
+      20.44
+     ]
+    },
+    {
+     "text": " e",
+     "timestamp": [
+      20.44,
+      20.54
+     ]
+    },
+    {
+     "text": " do",
+     "timestamp": [
+      20.54,
+      21
+     ]
+    }
+   ],
+   "segments": [
+    {
+     "start": 4.04,
+     "end": 4.1,
+     "text": "que é o e o que não",
+     "words": [
+      {
+       "start": 4.04,
+       "end": 4.1,
+       "text": "o"
+      }
+     ]
+    },
+    {
+     "start": 4.1,
+     "end": 4.18,
+     "text": "e do que é o",
+     "words": [
+      {
+       "start": 4.1,
+       "end": 4.18,
+       "text": "o"
+      }
+     ]
+    },
+    {
+     "start": 4.18,
+     "end": 9.36,
+     "text": "e",
+     "words": [
+      {
+       "start": 4.18,
+       "end": 9.36,
+       "text": "e"
+      }
+     ]
+    },
+    {
+     "start": 9.36,
+     "end": 11.02,
+     "text": "do que não é do que não",
+     "words": [
+      {
+       "start": 9.36,
+       "end": 11.02,
+       "text": "do"
+      }
+     ]
+    },
+    {
+     "start": 11.02,
+     "end": 12.34,
+     "text": "a gente não é do",
+     "words": [
+      {
+       "start": 11.02,
+       "end": 12.14,
+       "text": "a"
+      },
+      {
+       "start": 12.14,
+       "end": 12.34,
+       "text": "do"
+      }
+     ]
+    },
+    {
+     "start": 12.52,
+     "end": 16.78,
+     "text": "e",
+     "words": [
+      {
+       "start": 12.52,
+       "end": 16.78,
+       "text": "e"
+      }
+     ]
+    },
+    {
+     "start": 16.78,
+     "end": 17.24,
+     "text": "do que o e do e do",
+     "words": [
+      {
+       "start": 16.78,
+       "end": 17.24,
+       "text": "do"
+      }
+     ]
+    },
+    {
+     "start": 17.24,
+     "end": 20.011,
+     "text": "e o e",
+     "words": [
+      {
+       "start": 17.24,
+       "end": 20.011,
+       "text": "o"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "N_intro_music",
+   "duration": 16.2346875,
+   "ms": 3170,
+   "rtf": 0.19526091894285,
+   "cuts": [
+    0,
+    16.2346875
+   ],
+   "pieces": [
+    {
+     "a": 0,
+     "b": 16.2346875,
+     "speech": true,
+     "ms": 3165,
+     "text": " Se você gostou dessa dica, deixe o seu comentário aqui embaixo.",
+     "nWords": 11
+    }
+   ],
+   "words": [
+    {
+     "text": " Se",
+     "timestamp": [
+      12.1,
+      12.28
+     ]
+    },
+    {
+     "text": " você",
+     "timestamp": [
+      12.28,
+      12.52
+     ]
+    },
+    {
+     "text": " gostou",
+     "timestamp": [
+      12.52,
+      12.9
+     ]
+    },
+    {
+     "text": " dessa",
+     "timestamp": [
+      12.9,
+      13.08
+     ]
+    },
+    {
+     "text": " dica,",
+     "timestamp": [
+      13.08,
+      13.6
+     ]
+    },
+    {
+     "text": " deixe",
+     "timestamp": [
+      13.74,
+      13.84
+     ]
+    },
+    {
+     "text": " o",
+     "timestamp": [
+      13.84,
+      13.96
+     ]
+    },
+    {
+     "text": " seu",
+     "timestamp": [
+      13.96,
+      14.22
+     ]
+    },
+    {
+     "text": " comentário",
+     "timestamp": [
+      14.22,
+      14.68
+     ]
+    },
+    {
+     "text": " aqui",
+     "timestamp": [
+      14.68,
+      15.14
+     ]
+    },
+    {
+     "text": " embaixo.",
+     "timestamp": [
+      15.14,
+      15.2
+     ]
+    }
+   ],
+   "segments": [
+    {
+     "start": 12.1,
+     "end": 13.96,
+     "text": "Se você gostou dessa dica, deixe o",
+     "words": [
+      {
+       "start": 12.1,
+       "end": 12.28,
+       "text": "Se"
+      },
+      {
+       "start": 12.28,
+       "end": 12.52,
+       "text": "você"
+      },
+      {
+       "start": 12.52,
+       "end": 12.9,
+       "text": "gostou"
+      },
+      {
+       "start": 12.9,
+       "end": 13.08,
+       "text": "dessa"
+      },
+      {
+       "start": 13.08,
+       "end": 13.6,
+       "text": "dica,"
+      },
+      {
+       "start": 13.74,
+       "end": 13.84,
+       "text": "deixe"
+      },
+      {
+       "start": 13.84,
+       "end": 13.96,
+       "text": "o"
+      }
+     ]
+    },
+    {
+     "start": 13.96,
+     "end": 15.2,
+     "text": "seu comentário aqui embaixo.",
+     "words": [
+      {
+       "start": 13.96,
+       "end": 14.22,
+       "text": "seu"
+      },
+      {
+       "start": 14.22,
+       "end": 14.68,
+       "text": "comentário"
+      },
+      {
+       "start": 14.68,
+       "end": 15.14,
+       "text": "aqui"
+      },
+      {
+       "start": 15.14,
+       "end": 15.2,
+       "text": "embaixo."
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,238 @@
+{
+ "model": "onnx-community/whisper-tiny_timestamped",
+ "dtype": "q8",
+ "variant": "app",
+ "opts": {
+  "language": "portuguese",
+  "task": "transcribe",
+  "return_timestamps": "word",
+  "chunk_length_s": 30,
+  "stride_length_s": 5,
+  "max_new_tokens": 220,
+  "no_repeat_ngram_size": 4
+ },
+ "split": 60,
+ "loadMs": 888,
+ "clips": [
+  {
+   "id": "N_music_only",
+   "duration": 20.0106875,
+   "ms": 1346,
+   "rtf": 0.06726405577019781,
+   "cuts": [
+    0,
+    20.0106875
+   ],
+   "pieces": [
+    {
+     "a": 0,
+     "b": 20.0106875,
+     "speech": true,
+     "ms": 1330,
+     "text": " E aí!",
+     "nWords": 2
+    }
+   ],
+   "words": [
+    {
+     "text": " E",
+     "timestamp": [
+      14.46,
+      14.48
+     ]
+    },
+    {
+     "text": " aí!",
+     "timestamp": [
+      14.48,
+      19.86
+     ]
+    }
+   ],
+   "segments": [
+    {
+     "start": 14.48,
+     "end": 19.86,
+     "text": "aí!",
+     "words": [
+      {
+       "start": 14.48,
+       "end": 19.86,
+       "text": "aí!"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "N_intro_music",
+   "duration": 16.2346875,
+   "ms": 2063,
+   "rtf": 0.12707358857384846,
+   "cuts": [
+    0,
+    16.2346875
+   ],
+   "pieces": [
+    {
+     "a": 0,
+     "b": 16.2346875,
+     "speech": true,
+     "ms": 2062,
+     "text": " Se você gostou dessa dica, deixe o seu comentário aqui embaixo.",
+     "nWords": 11
+    }
+   ],
+   "words": [
+    {
+     "text": " Se",
+     "timestamp": [
+      12.16,
+      12.4
+     ]
+    },
+    {
+     "text": " você",
+     "timestamp": [
+      12.4,
+      12.68
+     ]
+    },
+    {
+     "text": " gostou",
+     "timestamp": [
+      12.68,
+      12.98
+     ]
+    },
+    {
+     "text": " dessa",
+     "timestamp": [
+      12.98,
+      13.46
+     ]
+    },
+    {
+     "text": " dica,",
+     "timestamp": [
+      13.46,
+      13.66
+     ]
+    },
+    {
+     "text": " deixe",
+     "timestamp": [
+      13.82,
+      13.98
+     ]
+    },
+    {
+     "text": " o",
+     "timestamp": [
+      13.98,
+      14.04
+     ]
+    },
+    {
+     "text": " seu",
+     "timestamp": [
+      14.04,
+      14.42
+     ]
+    },
+    {
+     "text": " comentário",
+     "timestamp": [
+      14.42,
+      14.84
+     ]
+    },
+    {
+     "text": " aqui",
+     "timestamp": [
+      14.84,
+      15.26
+     ]
+    },
+    {
+     "text": " embaixo.",
+     "timestamp": [
+      15.26,
+      15.28
+     ]
+    }
+   ],
+   "segments": [
+    {
+     "start": 12.16,
+     "end": 14.04,
+     "text": "Se você gostou dessa dica, deixe o",
+     "words": [
+      {
+       "start": 12.16,
+       "end": 12.4,
+       "text": "Se"
+      },
+      {
+       "start": 12.4,
+       "end": 12.68,
+       "text": "você"
+      },
+      {
+       "start": 12.68,
+       "end": 12.98,
+       "text": "gostou"
+      },
+      {
+       "start": 12.98,
+       "end": 13.46,
+       "text": "dessa"
+      },
+      {
+       "start": 13.46,
+       "end": 13.66,
+       "text": "dica,"
+      },
+      {
+       "start": 13.82,
+       "end": 13.98,
+       "text": "deixe"
+      },
+      {
+       "start": 13.98,
+       "end": 14.04,
+       "text": "o"
+      }
+     ]
+    },
+    {
+     "start": 14.04,
+     "end": 15.28,
+     "text": "seu comentário aqui embaixo.",
+     "words": [
+      {
+       "start": 14.04,
+       "end": 14.42,
+       "text": "seu"
+      },
+      {
+       "start": 14.42,
+       "end": 14.84,
+       "text": "comentário"
+      },
+      {
+       "start": 14.84,
+       "end": 15.26,
+       "text": "aqui"
+      },
+      {
+       "start": 15.26,
+       "end": 15.28,
+       "text": "embaixo."
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

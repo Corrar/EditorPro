@@ -1,0 +1,520 @@
+[
+ {
+  "id": "A_intro",
+  "duration": 21.533,
+  "text": "Fala, pessoal, tudo bem com vocês? Hoje eu vou mostrar como eu organizo a minha rotina de trabalho em casa. Primeiro, eu acordo cedo e tomo um café bem forte. Depois, eu separo as tarefas mais importantes do dia e coloco tudo numa lista no celular. Parece simples, mas faz uma diferença enorme no final da semana. Se você gostou dessa dica, deixa o seu comentário aqui embaixo.",
+  "sentences": [
+   {
+    "text": "Fala, pessoal, tudo bem com vocês?",
+    "start": 0.5,
+    "end": 2.432,
+    "voice": "faber",
+    "ls": 1.0
+   },
+   {
+    "text": "Hoje eu vou mostrar como eu organizo a minha rotina de trabalho em casa.",
+    "start": 2.682,
+    "end": 5.912,
+    "voice": "faber",
+    "ls": 1.0
+   },
+   {
+    "text": "Primeiro, eu acordo cedo e tomo um café bem forte.",
+    "start": 6.212,
+    "end": 8.854,
+    "voice": "faber",
+    "ls": 1.0
+   },
+   {
+    "text": "Depois, eu separo as tarefas mais importantes do dia e coloco tudo numa lista no celular.",
+    "start": 9.154,
+    "end": 13.911,
+    "voice": "faber",
+    "ls": 1.0
+   },
+   {
+    "text": "Parece simples, mas faz uma diferença enorme no final da semana.",
+    "start": 14.211,
+    "end": 17.405,
+    "voice": "faber",
+    "ls": 1.0
+   },
+   {
+    "text": "Se você gostou dessa dica, deixa o seu comentário aqui embaixo.",
+    "start": 17.705,
+    "end": 21.033,
+    "voice": "faber",
+    "ls": 1.0
+   }
+  ],
+  "bed_snr_db": null,
+  "words": 68
+ },
+ {
+  "id": "B_fast",
+  "duration": 34.098,
+  "text": "Gente, presta atenção que essa receita é muito rápida e fica deliciosa. Você vai precisar de dois ovos, uma xícara de leite, uma xícara de farinha de trigo e uma pitada de sal. Bate tudo no liquidificador por uns dois minutos, até a massa ficar bem lisinha. Enquanto isso, esquenta a frigideira com um fio de óleo, mas cuidado para não deixar queimar. Coloca uma concha de massa, espalha bem e espera dourar dos dois lados. Depois é só rechear com o que você tiver em casa, pode ser queijo, presunto, frango desfiado ou até doce de leite. Eu gosto de fazer de manhã, porque é prático e todo mundo aqui em casa adora. Se você testar, me marca nos stories que eu quero ver como ficou a sua panqueca, combinado?",
+  "sentences": [
+   {
+    "text": "Gente, presta atenção que essa receita é muito rápida e fica deliciosa. Você vai precisar de dois ovos, uma xícara de leite, uma xícara de farinha de trigo e uma pitada de sal.",
+    "start": 0.3,
+    "end": 8.763,
+    "voice": "cadu",
+    "ls": 0.68
+   },
+   {
+    "text": "Bate tudo no liquidificador por uns dois minutos, até a massa ficar bem lisinha. Enquanto isso, esquenta a frigideira com um fio de óleo, mas cuidado para não deixar queimar.",
+    "start": 8.883,
+    "end": 17.072,
+    "voice": "cadu",
+    "ls": 0.68
+   },
+   {
+    "text": "Coloca uma concha de massa, espalha bem e espera dourar dos dois lados. Depois é só rechear com o que você tiver em casa, pode ser queijo, presunto, frango desfiado ou até doce de leite.",
+    "start": 17.192,
+    "end": 26.404,
+    "voice": "cadu",
+    "ls": 0.68
+   },
+   {
+    "text": "Eu gosto de fazer de manhã, porque é prático e todo mundo aqui em casa adora. Se você testar, me marca nos stories que eu quero ver como ficou a sua panqueca, combinado?",
+    "start": 26.524,
+    "end": 33.798,
+    "voice": "cadu",
+    "ls": 0.68
+   }
+  ],
+  "bed_snr_db": null,
+  "words": 131
+ },
+ {
+  "id": "C_music10",
+  "duration": 17.502,
+  "text": "Esse lugar aqui é simplesmente incrível. A gente chegou cedinho, antes do sol nascer, e a vista lá de cima da montanha é de tirar o fôlego. O caminho é um pouco puxado, então leva água, protetor solar e um tênis confortável. Vale cada passo, eu prometo para vocês.",
+  "sentences": [
+   {
+    "text": "Esse lugar aqui é simplesmente incrível.",
+    "start": 1.0,
+    "end": 2.845,
+    "voice": "jeff",
+    "ls": 0.95
+   },
+   {
+    "text": "A gente chegou cedinho, antes do sol nascer, e a vista lá de cima da montanha é de tirar o fôlego.",
+    "start": 3.195,
+    "end": 8.422,
+    "voice": "jeff",
+    "ls": 0.95
+   },
+   {
+    "text": "O caminho é um pouco puxado, então leva água, protetor solar e um tênis confortável.",
+    "start": 8.772,
+    "end": 13.738,
+    "voice": "jeff",
+    "ls": 0.95
+   },
+   {
+    "text": "Vale cada passo, eu prometo para vocês.",
+    "start": 14.088,
+    "end": 16.502,
+    "voice": "jeff",
+    "ls": 0.95
+   }
+  ],
+  "bed_snr_db": 10,
+  "words": 49
+ },
+ {
+  "id": "C_music3",
+  "duration": 17.438,
+  "text": "Esse lugar aqui é simplesmente incrível. A gente chegou cedinho, antes do sol nascer, e a vista lá de cima da montanha é de tirar o fôlego. O caminho é um pouco puxado, então leva água, protetor solar e um tênis confortável. Vale cada passo, eu prometo para vocês.",
+  "sentences": [
+   {
+    "text": "Esse lugar aqui é simplesmente incrível.",
+    "start": 1.0,
+    "end": 2.851,
+    "voice": "jeff",
+    "ls": 0.95
+   },
+   {
+    "text": "A gente chegou cedinho, antes do sol nascer, e a vista lá de cima da montanha é de tirar o fôlego.",
+    "start": 3.201,
+    "end": 8.684,
+    "voice": "jeff",
+    "ls": 0.95
+   },
+   {
+    "text": "O caminho é um pouco puxado, então leva água, protetor solar e um tênis confortável.",
+    "start": 9.034,
+    "end": 13.833,
+    "voice": "jeff",
+    "ls": 0.95
+   },
+   {
+    "text": "Vale cada passo, eu prometo para vocês.",
+    "start": 14.183,
+    "end": 16.438,
+    "voice": "jeff",
+    "ls": 0.95
+   }
+  ],
+  "bed_snr_db": 3,
+  "words": 49
+ },
+ {
+  "id": "D_pauses",
+  "duration": 21.76,
+  "text": "Então, deixa eu pensar aqui. Eu acho que o mais importante é a consistência. Não adianta postar todo dia por uma semana e depois sumir. O algoritmo gosta de quem aparece sempre. E o seu público também.",
+  "sentences": [
+   {
+    "text": "Então, deixa eu pensar aqui.",
+    "start": 1.2,
+    "end": 2.671,
+    "voice": "faber",
+    "ls": 1.05
+   },
+   {
+    "text": "Eu acho que o mais importante é a consistência.",
+    "start": 4.171,
+    "end": 6.371,
+    "voice": "faber",
+    "ls": 1.05
+   },
+   {
+    "text": "Não adianta postar todo dia por uma semana e depois sumir.",
+    "start": 8.871,
+    "end": 12.113,
+    "voice": "faber",
+    "ls": 1.05
+   },
+   {
+    "text": "O algoritmo gosta de quem aparece sempre.",
+    "start": 15.613,
+    "end": 17.677,
+    "voice": "faber",
+    "ls": 1.05
+   },
+   {
+    "text": "E o seu público também.",
+    "start": 18.677,
+    "end": 19.76,
+    "voice": "faber",
+    "ls": 1.05
+   }
+  ],
+  "bed_snr_db": null,
+  "words": 37
+ },
+ {
+  "id": "E_long",
+  "duration": 57.392,
+  "text": "Hoje eu quero contar uma história que aconteceu comigo no ano passado, e que mudou completamente a forma como eu vejo o meu trabalho. Eu tinha acabado de abrir a minha loja online e estava vendendo quase nada. Eram duas ou três vendas por semana, no máximo. Um dia, uma cliente me mandou uma mensagem perguntando se eu fazia entrega no mesmo dia. Eu não fazia, mas resolvi arriscar e disse que sim. Peguei o carro, atravessei a cidade inteira debaixo de chuva e entreguei o pedido no fim da tarde. Ela ficou tão feliz que gravou um vídeo agradecendo e postou nas redes sociais. Naquela semana, eu recebi mais de cinquenta pedidos. Foi aí que eu entendi que o atendimento é o que faz a diferença. Não é o preço, não é a propaganda, é como você trata cada pessoa. Hoje a loja cresceu, eu tenho uma equipe pequena, e a entrega no mesmo dia virou a nossa marca registrada. Então, se você está começando agora, não tenha medo de fazer aquilo que os grandes não fazem. É justamente aí que mora a sua chance.",
+  "sentences": [
+   {
+    "text": "Hoje eu quero contar uma história que aconteceu comigo no ano passado, e que mudou completamente a forma como eu vejo o meu trabalho.",
+    "start": 0.4,
+    "end": 6.694,
+    "voice": "cadu",
+    "ls": 0.92
+   },
+   {
+    "text": "Eu tinha acabado de abrir a minha loja online e estava vendendo quase nada. Eram duas ou três vendas por semana, no máximo.",
+    "start": 7.044,
+    "end": 14.158,
+    "voice": "cadu",
+    "ls": 0.92
+   },
+   {
+    "text": "Um dia, uma cliente me mandou uma mensagem perguntando se eu fazia entrega no mesmo dia. Eu não fazia, mas resolvi arriscar e disse que sim.",
+    "start": 14.508,
+    "end": 22.753,
+    "voice": "cadu",
+    "ls": 0.92
+   },
+   {
+    "text": "Peguei o carro, atravessei a cidade inteira debaixo de chuva e entreguei o pedido no fim da tarde.",
+    "start": 23.103,
+    "end": 28.173,
+    "voice": "cadu",
+    "ls": 0.92
+   },
+   {
+    "text": "Ela ficou tão feliz que gravou um vídeo agradecendo e postou nas redes sociais. Naquela semana, eu recebi mais de cinquenta pedidos.",
+    "start": 28.523,
+    "end": 35.944,
+    "voice": "cadu",
+    "ls": 0.92
+   },
+   {
+    "text": "Foi aí que eu entendi que o atendimento é o que faz a diferença. Não é o preço, não é a propaganda, é como você trata cada pessoa.",
+    "start": 36.294,
+    "end": 43.536,
+    "voice": "cadu",
+    "ls": 0.92
+   },
+   {
+    "text": "Hoje a loja cresceu, eu tenho uma equipe pequena, e a entrega no mesmo dia virou a nossa marca registrada.",
+    "start": 43.886,
+    "end": 49.144,
+    "voice": "cadu",
+    "ls": 0.92
+   },
+   {
+    "text": "Então, se você está começando agora, não tenha medo de fazer aquilo que os grandes não fazem. É justamente aí que mora a sua chance.",
+    "start": 49.494,
+    "end": 56.792,
+    "voice": "cadu",
+    "ls": 0.92
+   }
+  ],
+  "bed_snr_db": null,
+  "words": 186
+ },
+ {
+  "id": "R_12249_12879_001458",
+  "duration": 19.72,
+  "text": "em volta do seu espírito pela primeira vez alucinado um turbilhão de grandezas que ele mal conhecia e mal podia imaginar perpassou vertiginosamente em ondas de seda e rendas velado e pérolas colos e braços de mulheres seminuas",
+  "sentences": [],
+  "bed_snr_db": null,
+  "words": 38,
+  "real": true
+ },
+ {
+  "id": "R_5677_4807_001093",
+  "duration": 18.68,
+  "text": "entravam com respeito com concentração com uma ponta de pavor nos olhos como se penetrassem noutro mundo chegavam aos parentes e os embrulhos se desfaziam eram guloseimas fumo meias chinelas às vezes livros e jornais dos doentes uns conversavam com os parentes",
+  "sentences": [],
+  "bed_snr_db": null,
+  "words": 42,
+  "real": true
+ },
+ {
+  "id": "R_4367_3698_000162",
+  "duration": 19.55,
+  "text": "um retrato qualquer do senhor seu pai o retrato vai o senhor fazer mo mas o senhor não tem outro do qual eu possa copiar o meu não senhor se eu tivesse o retrato de meu pai não lhe encomendava outro bastava-me um",
+  "sentences": [],
+  "bed_snr_db": null,
+  "words": 43,
+  "real": true
+ },
+ {
+  "id": "R_9958_6390_000005",
+  "duration": 13.82,
+  "text": "o rico ficou logo todo agitado e não quiz que o compadre trabalhasse mais nas suas terras quando o pobre se retirou o outro largou se com sua mulher para as mattas a ver a grande riqueza",
+  "sentences": [],
+  "bed_snr_db": null,
+  "words": 37,
+  "real": true
+ },
+ {
+  "id": "B_fast30",
+  "duration": 27.582,
+  "text": "Olha só, hoje eu vou te mostrar três erros que todo mundo comete quando começa a gravar vídeo pro Instagram. O primeiro é a luz: grava sempre de frente pra janela, nunca de costas, senão o seu rosto fica escuro e ninguém presta atenção. O segundo é o áudio: o microfone do celular pega tudo, o barulho da rua, o ventilador, a televisão, então procura um lugar silencioso ou compra um microfone de lapela, que é baratinho. E o terceiro, que é o mais importante, é o começo do vídeo. Você tem dois segundos pra prender a pessoa, então já começa falando o que ela vai ganhar assistindo até o final, sem enrolação nenhuma, beleza?",
+  "sentences": [
+   {
+    "text": "Olha só, hoje eu vou te mostrar três erros que todo mundo comete quando começa a gravar vídeo pro Instagram. O primeiro é a luz: grava sempre de frente pra janela, nunca de costas, senão o seu rosto fica escuro e ninguém presta atenção.",
+    "start": 0.2,
+    "end": 10.457,
+    "voice": "cadu",
+    "ls": 0.6
+   },
+   {
+    "text": "O segundo é o áudio: o microfone do celular pega tudo, o barulho da rua, o ventilador, a televisão, então procura um lugar silencioso ou compra um microfone de lapela, que é baratinho.",
+    "start": 10.537,
+    "end": 18.821,
+    "voice": "cadu",
+    "ls": 0.6
+   },
+   {
+    "text": "E o terceiro, que é o mais importante, é o começo do vídeo. Você tem dois segundos pra prender a pessoa, então já começa falando o que ela vai ganhar assistindo até o final, sem enrolação nenhuma, beleza?",
+    "start": 18.901,
+    "end": 27.382,
+    "voice": "cadu",
+    "ls": 0.6
+   }
+  ],
+  "bed_snr_db": null,
+  "words": 115
+ },
+ {
+  "id": "F_concat",
+  "duration": 113.25,
+  "text": "Hoje eu quero contar uma história que aconteceu comigo no ano passado, e que mudou completamente a forma como eu vejo o meu trabalho. Eu tinha acabado de abrir a minha loja online e estava vendendo quase nada. Eram duas ou três vendas por semana, no máximo. Um dia, uma cliente me mandou uma mensagem perguntando se eu fazia entrega no mesmo dia. Eu não fazia, mas resolvi arriscar e disse que sim. Peguei o carro, atravessei a cidade inteira debaixo de chuva e entreguei o pedido no fim da tarde. Ela ficou tão feliz que gravou um vídeo agradecendo e postou nas redes sociais. Naquela semana, eu recebi mais de cinquenta pedidos. Foi aí que eu entendi que o atendimento é o que faz a diferença. Não é o preço, não é a propaganda, é como você trata cada pessoa. Hoje a loja cresceu, eu tenho uma equipe pequena, e a entrega no mesmo dia virou a nossa marca registrada. Então, se você está começando agora, não tenha medo de fazer aquilo que os grandes não fazem. É justamente aí que mora a sua chance. Então, deixa eu pensar aqui. Eu acho que o mais importante é a consistência. Não adianta postar todo dia por uma semana e depois sumir. O algoritmo gosta de quem aparece sempre. E o seu público também. Gente, presta atenção que essa receita é muito rápida e fica deliciosa. Você vai precisar de dois ovos, uma xícara de leite, uma xícara de farinha de trigo e uma pitada de sal. Bate tudo no liquidificador por uns dois minutos, até a massa ficar bem lisinha. Enquanto isso, esquenta a frigideira com um fio de óleo, mas cuidado para não deixar queimar. Coloca uma concha de massa, espalha bem e espera dourar dos dois lados. Depois é só rechear com o que você tiver em casa, pode ser queijo, presunto, frango desfiado ou até doce de leite. Eu gosto de fazer de manhã, porque é prático e todo mundo aqui em casa adora. Se você testar, me marca nos stories que eu quero ver como ficou a sua panqueca, combinado?",
+  "sentences": [
+   {
+    "text": "Hoje eu quero contar uma história que aconteceu comigo no ano passado, e que mudou completamente a forma como eu vejo o meu trabalho.",
+    "start": 0.4,
+    "end": 6.694,
+    "voice": "cadu",
+    "ls": 0.92
+   },
+   {
+    "text": "Eu tinha acabado de abrir a minha loja online e estava vendendo quase nada. Eram duas ou três vendas por semana, no máximo.",
+    "start": 7.044,
+    "end": 14.158,
+    "voice": "cadu",
+    "ls": 0.92
+   },
+   {
+    "text": "Um dia, uma cliente me mandou uma mensagem perguntando se eu fazia entrega no mesmo dia. Eu não fazia, mas resolvi arriscar e disse que sim.",
+    "start": 14.508,
+    "end": 22.753,
+    "voice": "cadu",
+    "ls": 0.92
+   },
+   {
+    "text": "Peguei o carro, atravessei a cidade inteira debaixo de chuva e entreguei o pedido no fim da tarde.",
+    "start": 23.103,
+    "end": 28.173,
+    "voice": "cadu",
+    "ls": 0.92
+   },
+   {
+    "text": "Ela ficou tão feliz que gravou um vídeo agradecendo e postou nas redes sociais. Naquela semana, eu recebi mais de cinquenta pedidos.",
+    "start": 28.523,
+    "end": 35.944,
+    "voice": "cadu",
+    "ls": 0.92
+   },
+   {
+    "text": "Foi aí que eu entendi que o atendimento é o que faz a diferença. Não é o preço, não é a propaganda, é como você trata cada pessoa.",
+    "start": 36.294,
+    "end": 43.536,
+    "voice": "cadu",
+    "ls": 0.92
+   },
+   {
+    "text": "Hoje a loja cresceu, eu tenho uma equipe pequena, e a entrega no mesmo dia virou a nossa marca registrada.",
+    "start": 43.886,
+    "end": 49.144,
+    "voice": "cadu",
+    "ls": 0.92
+   },
+   {
+    "text": "Então, se você está começando agora, não tenha medo de fazer aquilo que os grandes não fazem. É justamente aí que mora a sua chance.",
+    "start": 49.494,
+    "end": 56.792,
+    "voice": "cadu",
+    "ls": 0.92
+   },
+   {
+    "text": "Então, deixa eu pensar aqui.",
+    "start": 58.592,
+    "end": 60.063,
+    "voice": "faber",
+    "ls": 1.05
+   },
+   {
+    "text": "Eu acho que o mais importante é a consistência.",
+    "start": 61.563,
+    "end": 63.763,
+    "voice": "faber",
+    "ls": 1.05
+   },
+   {
+    "text": "Não adianta postar todo dia por uma semana e depois sumir.",
+    "start": 66.263,
+    "end": 69.505,
+    "voice": "faber",
+    "ls": 1.05
+   },
+   {
+    "text": "O algoritmo gosta de quem aparece sempre.",
+    "start": 73.005,
+    "end": 75.069,
+    "voice": "faber",
+    "ls": 1.05
+   },
+   {
+    "text": "E o seu público também.",
+    "start": 76.069,
+    "end": 77.152,
+    "voice": "faber",
+    "ls": 1.05
+   },
+   {
+    "text": "Gente, presta atenção que essa receita é muito rápida e fica deliciosa. Você vai precisar de dois ovos, uma xícara de leite, uma xícara de farinha de trigo e uma pitada de sal.",
+    "start": 79.452,
+    "end": 87.915,
+    "voice": "cadu",
+    "ls": 0.68
+   },
+   {
+    "text": "Bate tudo no liquidificador por uns dois minutos, até a massa ficar bem lisinha. Enquanto isso, esquenta a frigideira com um fio de óleo, mas cuidado para não deixar queimar.",
+    "start": 88.035,
+    "end": 96.224,
+    "voice": "cadu",
+    "ls": 0.68
+   },
+   {
+    "text": "Coloca uma concha de massa, espalha bem e espera dourar dos dois lados. Depois é só rechear com o que você tiver em casa, pode ser queijo, presunto, frango desfiado ou até doce de leite.",
+    "start": 96.344,
+    "end": 105.556,
+    "voice": "cadu",
+    "ls": 0.68
+   },
+   {
+    "text": "Eu gosto de fazer de manhã, porque é prático e todo mundo aqui em casa adora. Se você testar, me marca nos stories que eu quero ver como ficou a sua panqueca, combinado?",
+    "start": 105.676,
+    "end": 112.95,
+    "voice": "cadu",
+    "ls": 0.68
+   }
+  ],
+  "bed_snr_db": null,
+  "words": 354
+ },
+ {
+  "id": "B_vfast",
+  "duration": 31.446,
+  "text": "Olha só, hoje eu vou te mostrar três erros que todo mundo comete quando começa a gravar vídeo pro Instagram. O primeiro é a luz: grava sempre de frente pra janela, nunca de costas, senão o seu rosto fica escuro e ninguém presta atenção. O segundo é o áudio: o microfone do celular pega tudo, o barulho da rua, o ventilador, a televisão, então procura um lugar silencioso ou compra um microfone de lapela, que é baratinho. E o terceiro, que é o mais importante, é o começo do vídeo. Você tem dois segundos pra prender a pessoa, então já começa falando o que ela vai ganhar assistindo até o final, sem enrolação nenhuma. Bate tudo no liquidificador por uns dois minutos, até a massa ficar bem lisinha. Enquanto isso, esquenta a frigideira com um fio de óleo, mas cuidado para não deixar queimar, beleza?",
+  "sentences": [
+   {
+    "text": "Olha só, hoje eu vou te mostrar três erros que todo mundo comete quando começa a gravar vídeo pro Instagram. O primeiro é a luz: grava sempre de frente pra janela, nunca de costas, senão o seu rosto fica escuro e ninguém presta atenção.",
+    "start": 0.2,
+    "end": 9.35,
+    "voice": "cadu",
+    "ls": 0.5
+   },
+   {
+    "text": "O segundo é o áudio: o microfone do celular pega tudo, o barulho da rua, o ventilador, a televisão, então procura um lugar silencioso ou compra um microfone de lapela, que é baratinho.",
+    "start": 9.4,
+    "end": 16.867,
+    "voice": "cadu",
+    "ls": 0.5
+   },
+   {
+    "text": "E o terceiro, que é o mais importante, é o começo do vídeo. Você tem dois segundos pra prender a pessoa, então já começa falando o que ela vai ganhar assistindo até o final, sem enrolação nenhuma.",
+    "start": 16.917,
+    "end": 24.103,
+    "voice": "cadu",
+    "ls": 0.5
+   },
+   {
+    "text": "Bate tudo no liquidificador por uns dois minutos, até a massa ficar bem lisinha. Enquanto isso, esquenta a frigideira com um fio de óleo, mas cuidado para não deixar queimar, beleza?",
+    "start": 24.153,
+    "end": 31.246,
+    "voice": "cadu",
+    "ls": 0.5
+   }
+  ],
+  "bed_snr_db": null,
+  "words": 145
+ },
+ {
+  "id": "N_music_only",
+  "duration": 20.0,
+  "text": "",
+  "sentences": [],
+  "bed_snr_db": 0,
+  "words": 0
+ },
+ {
+  "id": "N_intro_music",
+  "duration": 16.216,
+  "text": "Se você gostou dessa dica, deixa o seu comentário aqui embaixo.",
+  "sentences": [],
+  "bed_snr_db": 0,
+  "words": 11
+ }
+]

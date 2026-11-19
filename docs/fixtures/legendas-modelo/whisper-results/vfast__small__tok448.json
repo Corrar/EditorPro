@@ -1,0 +1,3558 @@
+{
+ "model": "onnx-community/whisper-small_timestamped",
+ "dtype": "q8",
+ "variant": "tok448",
+ "opts": {
+  "language": "portuguese",
+  "task": "transcribe",
+  "return_timestamps": "word",
+  "chunk_length_s": 30,
+  "stride_length_s": 5,
+  "max_new_tokens": 440,
+  "no_repeat_ngram_size": 4
+ },
+ "split": 60,
+ "loadMs": 2592,
+ "clips": [
+  {
+   "id": "B_fast30",
+   "duration": 27.584,
+   "ms": 23432,
+   "rtf": 0.849477958236659,
+   "cuts": [
+    0,
+    27.584
+   ],
+   "pieces": [
+    {
+     "a": 0,
+     "b": 27.584,
+     "speech": true,
+     "ms": 23417,
+     "text": " Olha só, hoje eu vou te mostrar três erros que todo mundo comete quando começa a gravar vídeo para o Instagram. O primeiro é a luz. Grava sempre de frente para janela, nunca de costas, senão o seu rosto fique escuro e ninguém presta atenção. O segundo é o áudio. O microfone do celular pera tudo. O barulho da rua, o ventilador, a televisão. Então procura um lugar silencioso ou compra um microfone de lapela, que é baratinho. E o terceiro, que é o mais importante, é o começo do vídeo. Você tem dois segundos para aprender a pessoa, então já começa falando o que ela vai ganhar assistindo até o final. Sem enrolação nenhuma. Beleza.",
+     "nWords": 116
+    }
+   ],
+   "words": [
+    {
+     "text": " Olha",
+     "timestamp": [
+      0.32,
+      0.56
+     ]
+    },
+    {
+     "text": " só,",
+     "timestamp": [
+      0.56,
+      0.8
+     ]
+    },
+    {
+     "text": " hoje",
+     "timestamp": [
+      0.94,
+      1.02
+     ]
+    },
+    {
+     "text": " eu",
+     "timestamp": [
+      1.02,
+      1.14
+     ]
+    },
+    {
+     "text": " vou",
+     "timestamp": [
+      1.14,
+      1.2
+     ]
+    },
+    {
+     "text": " te",
+     "timestamp": [
+      1.2,
+      1.42
+     ]
+    },
+    {
+     "text": " mostrar",
+     "timestamp": [
+      1.42,
+      1.8
+     ]
+    },
+    {
+     "text": " três",
+     "timestamp": [
+      1.8,
+      1.96
+     ]
+    },
+    {
+     "text": " erros",
+     "timestamp": [
+      1.96,
+      2.14
+     ]
+    },
+    {
+     "text": " que",
+     "timestamp": [
+      2.14,
+      2.34
+     ]
+    },
+    {
+     "text": " todo",
+     "timestamp": [
+      2.34,
+      2.56
+     ]
+    },
+    {
+     "text": " mundo",
+     "timestamp": [
+      2.56,
+      2.76
+     ]
+    },
+    {
+     "text": " comete",
+     "timestamp": [
+      2.76,
+      3.04
+     ]
+    },
+    {
+     "text": " quando",
+     "timestamp": [
+      3.04,
+      3.36
+     ]
+    },
+    {
+     "text": " começa",
+     "timestamp": [
+      3.36,
+      3.48
+     ]
+    },
+    {
+     "text": " a",
+     "timestamp": [
+      3.48,
+      3.6
+     ]
+    },
+    {
+     "text": " gravar",
+     "timestamp": [
+      3.6,
+      3.88
+     ]
+    },
+    {
+     "text": " vídeo",
+     "timestamp": [
+      3.88,
+      4.04
+     ]
+    },
+    {
+     "text": " para",
+     "timestamp": [
+      4.04,
+      4.04
+     ]
+    },
+    {
+     "text": " o",
+     "timestamp": [
+      4.04,
+      4.24
+     ]
+    },
+    {
+     "text": " Instagram.",
+     "timestamp": [
+      4.24,
+      4.66
+     ]
+    },
+    {
+     "text": " O",
+     "timestamp": [
+      4.86,
+      5.08
+     ]
+    },
+    {
+     "text": " primeiro",
+     "timestamp": [
+      5.08,
+      5.22
+     ]
+    },
+    {
+     "text": " é",
+     "timestamp": [
+      5.22,
+      5.26
+     ]
+    },
+    {
+     "text": " a",
+     "timestamp": [
+      5.26,
+      5.4
+     ]
+    },
+    {
+     "text": " luz.",
+     "timestamp": [
+      5.4,
+      5.74
+     ]
+    },
+    {
+     "text": " Grava",
+     "timestamp": [
+      5.84,
+      6.16
+     ]
+    },
+    {
+     "text": " sempre",
+     "timestamp": [
+      6.16,
+      6.32
+     ]
+    },
+    {
+     "text": " de",
+     "timestamp": [
+      6.32,
+      6.48
+     ]
+    },
+    {
+     "text": " frente",
+     "timestamp": [
+      6.48,
+      6.7
+     ]
+    },
+    {
+     "text": " para",
+     "timestamp": [
+      6.7,
+      6.88
+     ]
+    },
+    {
+     "text": " janela,",
+     "timestamp": [
+      6.88,
+      7.26
+     ]
+    },
+    {
+     "text": " nunca",
+     "timestamp": [
+      7.46,
+      7.62
+     ]
+    },
+    {
+     "text": " de",
+     "timestamp": [
+      7.62,
+      7.82
+     ]
+    },
+    {
+     "text": " costas,",
+     "timestamp": [
+      7.82,
+      8.34
+     ]
+    },
+    {
+     "text": " senão",
+     "timestamp": [
+      8.38,
+      8.56
+     ]
+    },
+    {
+     "text": " o",
+     "timestamp": [
+      8.56,
+      8.62
+     ]
+    },
+    {
+     "text": " seu",
+     "timestamp": [
+      8.62,
+      8.8
+     ]
+    },
+    {
+     "text": " rosto",
+     "timestamp": [
+      8.8,
+      9.04
+     ]
+    },
+    {
+     "text": " fique",
+     "timestamp": [
+      9.04,
+      9.26
+     ]
+    },
+    {
+     "text": " escuro",
+     "timestamp": [
+      9.26,
+      9.54
+     ]
+    },
+    {
+     "text": " e",
+     "timestamp": [
+      9.54,
+      9.68
+     ]
+    },
+    {
+     "text": " ninguém",
+     "timestamp": [
+      9.68,
+      9.94
+     ]
+    },
+    {
+     "text": " presta",
+     "timestamp": [
+      9.94,
+      10.34
+     ]
+    },
+    {
+     "text": " atenção.",
+     "timestamp": [
+      10.34,
+      10.46
+     ]
+    },
+    {
+     "text": " O",
+     "timestamp": [
+      10.6,
+      10.84
+     ]
+    },
+    {
+     "text": " segundo",
+     "timestamp": [
+      10.84,
+      11
+     ]
+    },
+    {
+     "text": " é",
+     "timestamp": [
+      11,
+      11.06
+     ]
+    },
+    {
+     "text": " o",
+     "timestamp": [
+      11.06,
+      11.16
+     ]
+    },
+    {
+     "text": " áudio.",
+     "timestamp": [
+      11.16,
+      11.56
+     ]
+    },
+    {
+     "text": " O",
+     "timestamp": [
+      11.64,
+      11.82
+     ]
+    },
+    {
+     "text": " microfone",
+     "timestamp": [
+      11.82,
+      12.12
+     ]
+    },
+    {
+     "text": " do",
+     "timestamp": [
+      12.12,
+      12.36
+     ]
+    },
+    {
+     "text": " celular",
+     "timestamp": [
+      12.36,
+      12.58
+     ]
+    },
+    {
+     "text": " pera",
+     "timestamp": [
+      12.58,
+      12.82
+     ]
+    },
+    {
+     "text": " tudo.",
+     "timestamp": [
+      12.82,
+      13.04
+     ]
+    },
+    {
+     "text": " O",
+     "timestamp": [
+      13.14,
+      13.28
+     ]
+    },
+    {
+     "text": " barulho",
+     "timestamp": [
+      13.28,
+      13.48
+     ]
+    },
+    {
+     "text": " da",
+     "timestamp": [
+      13.48,
+      13.66
+     ]
+    },
+    {
+     "text": " rua,",
+     "timestamp": [
+      13.66,
+      13.92
+     ]
+    },
+    {
+     "text": " o",
+     "timestamp": [
+      13.94,
+      14.1
+     ]
+    },
+    {
+     "text": " ventilador,",
+     "timestamp": [
+      14.1,
+      14.58
+     ]
+    },
+    {
+     "text": " a",
+     "timestamp": [
+      14.64,
+      14.84
+     ]
+    },
+    {
+     "text": " televisão.",
+     "timestamp": [
+      14.84,
+      15.18
+     ]
+    },
+    {
+     "text": " Então",
+     "timestamp": [
+      15.42,
+      15.66
+     ]
+    },
+    {
+     "text": " procura",
+     "timestamp": [
+      15.66,
+      15.86
+     ]
+    },
+    {
+     "text": " um",
+     "timestamp": [
+      15.86,
+      16.04
+     ]
+    },
+    {
+     "text": " lugar",
+     "timestamp": [
+      16.04,
+      16.26
+     ]
+    },
+    {
+     "text": " silencioso",
+     "timestamp": [
+      16.26,
+      16.76
+     ]
+    },
+    {
+     "text": " ou",
+     "timestamp": [
+      16.76,
+      16.92
+     ]
+    },
+    {
+     "text": " compra",
+     "timestamp": [
+      16.92,
+      17.04
+     ]
+    },
+    {
+     "text": " um",
+     "timestamp": [
+      17.04,
+      17.26
+     ]
+    },
+    {
+     "text": " microfone",
+     "timestamp": [
+      17.26,
+      17.54
+     ]
+    },
+    {
+     "text": " de",
+     "timestamp": [
+      17.54,
+      17.68
+     ]
+    },
+    {
+     "text": " lapela,",
+     "timestamp": [
+      17.68,
+      18.06
+     ]
+    },
+    {
+     "text": " que",
+     "timestamp": [
+      18.28,
+      18.36
+     ]
+    },
+    {
+     "text": " é",
+     "timestamp": [
+      18.36,
+      18.52
+     ]
+    },
+    {
+     "text": " baratinho.",
+     "timestamp": [
+      18.52,
+      18.78
+     ]
+    },
+    {
+     "text": " E",
+     "timestamp": [
+      18.98,
+      19.02
+     ]
+    },
+    {
+     "text": " o",
+     "timestamp": [
+      19.02,
+      19.2
+     ]
+    },
+    {
+     "text": " terceiro,",
+     "timestamp": [
+      19.2,
+      19.62
+     ]
+    },
+    {
+     "text": " que",
+     "timestamp": [
+      19.72,
+      19.78
+     ]
+    },
+    {
+     "text": " é",
+     "timestamp": [
+      19.78,
+      19.82
+     ]
+    },
+    {
+     "text": " o",
+     "timestamp": [
+      19.82,
+      19.96
+     ]
+    },
+    {
+     "text": " mais",
+     "timestamp": [
+      19.96,
+      20.44
+     ]
+    },
+    {
+     "text": " importante,",
+     "timestamp": [
+      20.44,
+      20.68
+     ]
+    },
+    {
+     "text": " é",
+     "timestamp": [
+      20.74,
+      20.8
+     ]
+    },
+    {
+     "text": " o",
+     "timestamp": [
+      20.8,
+      21
+     ]
+    },
+    {
+     "text": " começo",
+     "timestamp": [
+      21,
+      21.16
+     ]
+    },
+    {
+     "text": " do",
+     "timestamp": [
+      21.16,
+      21.38
+     ]
+    },
+    {
+     "text": " vídeo.",
+     "timestamp": [
+      21.38,
+      21.72
+     ]
+    },
+    {
+     "text": " Você",
+     "timestamp": [
+      21.9,
+      22.08
+     ]
+    },
+    {
+     "text": " tem",
+     "timestamp": [
+      22.08,
+      22.24
+     ]
+    },
+    {
+     "text": " dois",
+     "timestamp": [
+      22.24,
+      22.5
+     ]
+    },
+    {
+     "text": " segundos",
+     "timestamp": [
+      22.5,
+      22.68
+     ]
+    },
+    {
+     "text": " para",
+     "timestamp": [
+      22.68,
+      22.9
+     ]
+    },
+    {
+     "text": " aprender",
+     "timestamp": [
+      22.9,
+      23.02
+     ]
+    },
+    {
+     "text": " a",
+     "timestamp": [
+      23.02,
+      23.3
+     ]
+    },
+    {
+     "text": " pessoa,",
+     "timestamp": [
+      23.3,
+      23.4
+     ]
+    },
+    {
+     "text": " então",
+     "timestamp": [
+      23.68,
+      23.82
+     ]
+    },
+    {
+     "text": " já",
+     "timestamp": [
+      23.82,
+      24.02
+     ]
+    },
+    {
+     "text": " começa",
+     "timestamp": [
+      24.02,
+      24.32
+     ]
+    },
+    {
+     "text": " falando",
+     "timestamp": [
+      24.32,
+      24.52
+     ]
+    },
+    {
+     "text": " o",
+     "timestamp": [
+      24.52,
+      24.52
+     ]
+    },
+    {
+     "text": " que",
+     "timestamp": [
+      24.52,
+      24.62
+     ]
+    },
+    {
+     "text": " ela",
+     "timestamp": [
+      24.62,
+      24.76
+     ]
+    },
+    {
+     "text": " vai",
+     "timestamp": [
+      24.76,
+      24.94
+     ]
+    },
+    {
+     "text": " ganhar",
+     "timestamp": [
+      24.94,
+      25.14
+     ]
+    },
+    {
+     "text": " assistindo",
+     "timestamp": [
+      25.14,
+      25.46
+     ]
+    },
+    {
+     "text": " até",
+     "timestamp": [
+      25.46,
+      25.54
+     ]
+    },
+    {
+     "text": " o",
+     "timestamp": [
+      25.54,
+      25.72
+     ]
+    },
+    {
+     "text": " final.",
+     "timestamp": [
+      25.72,
+      26.06
+     ]
+    },
+    {
+     "text": " Sem",
+     "timestamp": [
+      26.2,
+      26.34
+     ]
+    },
+    {
+     "text": " enrolação",
+     "timestamp": [
+      26.34,
+      26.76
+     ]
+    },
+    {
+     "text": " nenhuma.",
+     "timestamp": [
+      26.76,
+      27
+     ]
+    },
+    {
+     "text": " Beleza.",
+     "timestamp": [
+      27.14,
+      27.36
+     ]
+    }
+   ],
+   "segments": [
+    {
+     "start": 0.32,
+     "end": 1.8,
+     "text": "Olha só, hoje eu vou te mostrar",
+     "words": [
+      {
+       "start": 0.32,
+       "end": 0.56,
+       "text": "Olha"
+      },
+      {
+       "start": 0.56,
+       "end": 0.8,
+       "text": "só,"
+      },
+      {
+       "start": 0.94,
+       "end": 1.02,
+       "text": "hoje"
+      },
+      {
+       "start": 1.02,
+       "end": 1.14,
+       "text": "eu"
+      },
+      {
+       "start": 1.14,
+       "end": 1.2,
+       "text": "vou"
+      },
+      {
+       "start": 1.2,
+       "end": 1.42,
+       "text": "te"
+      },
+      {
+       "start": 1.42,
+       "end": 1.8,
+       "text": "mostrar"
+      }
+     ]
+    },
+    {
+     "start": 1.8,
+     "end": 3.36,
+     "text": "três erros que todo mundo comete quando",
+     "words": [
+      {
+       "start": 1.8,
+       "end": 1.96,
+       "text": "três"
+      },
+      {
+       "start": 1.96,
+       "end": 2.14,
+       "text": "erros"
+      },
+      {
+       "start": 2.14,
+       "end": 2.34,
+       "text": "que"
+      },
+      {
+       "start": 2.34,
+       "end": 2.56,
+       "text": "todo"
+      },
+      {
+       "start": 2.56,
+       "end": 2.76,
+       "text": "mundo"
+      },
+      {
+       "start": 2.76,
+       "end": 3.04,
+       "text": "comete"
+      },
+      {
+       "start": 3.04,
+       "end": 3.36,
+       "text": "quando"
+      }
+     ]
+    },
+    {
+     "start": 3.36,
+     "end": 4.66,
+     "text": "começa a gravar vídeo para o Instagram.",
+     "words": [
+      {
+       "start": 3.36,
+       "end": 3.48,
+       "text": "começa"
+      },
+      {
+       "start": 3.48,
+       "end": 3.6,
+       "text": "a"
+      },
+      {
+       "start": 3.6,
+       "end": 3.88,
+       "text": "gravar"
+      },
+      {
+       "start": 3.88,
+       "end": 4.04,
+       "text": "vídeo"
+      },
+      {
+       "start": 4.04,
+       "end": 4.24,
+       "text": "o"
+      },
+      {
+       "start": 4.24,
+       "end": 4.66,
+       "text": "Instagram."
+      }
+     ]
+    },
+    {
+     "start": 4.86,
+     "end": 5.74,
+     "text": "O primeiro é a luz.",
+     "words": [
+      {
+       "start": 4.86,
+       "end": 5.08,
+       "text": "O"
+      },
+      {
+       "start": 5.08,
+       "end": 5.22,
+       "text": "primeiro"
+      },
+      {
+       "start": 5.22,
+       "end": 5.26,
+       "text": "é"
+      },
+      {
+       "start": 5.26,
+       "end": 5.4,
+       "text": "a"
+      },
+      {
+       "start": 5.4,
+       "end": 5.74,
+       "text": "luz."
+      }
+     ]
+    },
+    {
+     "start": 5.84,
+     "end": 7.62,
+     "text": "Grava sempre de frente para janela, nunca",
+     "words": [
+      {
+       "start": 5.84,
+       "end": 6.16,
+       "text": "Grava"
+      },
+      {
+       "start": 6.16,
+       "end": 6.32,
+       "text": "sempre"
+      },
+      {
+       "start": 6.32,
+       "end": 6.48,
+       "text": "de"
+      },
+      {
+       "start": 6.48,
+       "end": 6.7,
+       "text": "frente"
+      },
+      {
+       "start": 6.7,
+       "end": 6.88,
+       "text": "para"
+      },
+      {
+       "start": 6.88,
+       "end": 7.26,
+       "text": "janela,"
+      },
+      {
+       "start": 7.46,
+       "end": 7.62,
+       "text": "nunca"
+      }
+     ]
+    },
+    {
+     "start": 7.62,
+     "end": 9.26,
+     "text": "de costas, senão o seu rosto fique",
+     "words": [
+      {
+       "start": 7.62,
+       "end": 7.82,
+       "text": "de"
+      },
+      {
+       "start": 7.82,
+       "end": 8.34,
+       "text": "costas,"
+      },
+      {
+       "start": 8.38,
+       "end": 8.56,
+       "text": "senão"
+      },
+      {
+       "start": 8.56,
+       "end": 8.62,
+       "text": "o"
+      },
+      {
+       "start": 8.62,
+       "end": 8.8,
+       "text": "seu"
+      },
+      {
+       "start": 8.8,
+       "end": 9.04,
+       "text": "rosto"
+      },
+      {
+       "start": 9.04,
+       "end": 9.26,
+       "text": "fique"
+      }
+     ]
+    },
+    {
+     "start": 9.26,
+     "end": 10.46,
+     "text": "escuro e ninguém presta atenção.",
+     "words": [
+      {
+       "start": 9.26,
+       "end": 9.54,
+       "text": "escuro"
+      },
+      {
+       "start": 9.54,
+       "end": 9.68,
+       "text": "e"
+      },
+      {
+       "start": 9.68,
+       "end": 9.94,
+       "text": "ninguém"
+      },
+      {
+       "start": 9.94,
+       "end": 10.34,
+       "text": "presta"
+      },
+      {
+       "start": 10.34,
+       "end": 10.46,
+       "text": "atenção."
+      }
+     ]
+    },
+    {
+     "start": 10.6,
+     "end": 11.56,
+     "text": "O segundo é o áudio.",
+     "words": [
+      {
+       "start": 10.6,
+       "end": 10.84,
+       "text": "O"
+      },
+      {
+       "start": 10.84,
+       "end": 11,
+       "text": "segundo"
+      },
+      {
+       "start": 11,
+       "end": 11.06,
+       "text": "é"
+      },
+      {
+       "start": 11.06,
+       "end": 11.16,
+       "text": "o"
+      },
+      {
+       "start": 11.16,
+       "end": 11.56,
+       "text": "áudio."
+      }
+     ]
+    },
+    {
+     "start": 11.64,
+     "end": 13.04,
+     "text": "O microfone do celular pera tudo.",
+     "words": [
+      {
+       "start": 11.64,
+       "end": 11.82,
+       "text": "O"
+      },
+      {
+       "start": 11.82,
+       "end": 12.12,
+       "text": "microfone"
+      },
+      {
+       "start": 12.12,
+       "end": 12.36,
+       "text": "do"
+      },
+      {
+       "start": 12.36,
+       "end": 12.58,
+       "text": "celular"
+      },
+      {
+       "start": 12.58,
+       "end": 12.82,
+       "text": "pera"
+      },
+      {
+       "start": 12.82,
+       "end": 13.04,
+       "text": "tudo."
+      }
+     ]
+    },
+    {
+     "start": 13.14,
+     "end": 14.84,
+     "text": "O barulho da rua, o ventilador, a",
+     "words": [
+      {
+       "start": 13.14,
+       "end": 13.28,
+       "text": "O"
+      },
+      {
+       "start": 13.28,
+       "end": 13.48,
+       "text": "barulho"
+      },
+      {
+       "start": 13.48,
+       "end": 13.66,
+       "text": "da"
+      },
+      {
+       "start": 13.66,
+       "end": 13.92,
+       "text": "rua,"
+      },
+      {
+       "start": 13.94,
+       "end": 14.1,
+       "text": "o"
+      },
+      {
+       "start": 14.1,
+       "end": 14.58,
+       "text": "ventilador,"
+      },
+      {
+       "start": 14.64,
+       "end": 14.84,
+       "text": "a"
+      }
+     ]
+    },
+    {
+     "start": 14.84,
+     "end": 15.18,
+     "text": "televisão.",
+     "words": [
+      {
+       "start": 14.84,
+       "end": 15.18,
+       "text": "televisão."
+      }
+     ]
+    },
+    {
+     "start": 15.42,
+     "end": 17.04,
+     "text": "Então procura um lugar silencioso ou compra",
+     "words": [
+      {
+       "start": 15.42,
+       "end": 15.66,
+       "text": "Então"
+      },
+      {
+       "start": 15.66,
+       "end": 15.86,
+       "text": "procura"
+      },
+      {
+       "start": 15.86,
+       "end": 16.04,
+       "text": "um"
+      },
+      {
+       "start": 16.04,
+       "end": 16.26,
+       "text": "lugar"
+      },
+      {
+       "start": 16.26,
+       "end": 16.76,
+       "text": "silencioso"
+      },
+      {
+       "start": 16.76,
+       "end": 16.92,
+       "text": "ou"
+      },
+      {
+       "start": 16.92,
+       "end": 17.04,
+       "text": "compra"
+      }
+     ]
+    },
+    {
+     "start": 17.04,
+     "end": 18.78,
+     "text": "um microfone de lapela, que é baratinho.",
+     "words": [
+      {
+       "start": 17.04,
+       "end": 17.26,
+       "text": "um"
+      },
+      {
+       "start": 17.26,
+       "end": 17.54,
+       "text": "microfone"
+      },
+      {
+       "start": 17.54,
+       "end": 17.68,
+       "text": "de"
+      },
+      {
+       "start": 17.68,
+       "end": 18.06,
+       "text": "lapela,"
+      },
+      {
+       "start": 18.28,
+       "end": 18.36,
+       "text": "que"
+      },
+      {
+       "start": 18.36,
+       "end": 18.52,
+       "text": "é"
+      },
+      {
+       "start": 18.52,
+       "end": 18.78,
+       "text": "baratinho."
+      }
+     ]
+    },
+    {
+     "start": 18.98,
+     "end": 20.44,
+     "text": "E o terceiro, que é o mais",
+     "words": [
+      {
+       "start": 18.98,
+       "end": 19.02,
+       "text": "E"
+      },
+      {
+       "start": 19.02,
+       "end": 19.2,
+       "text": "o"
+      },
+      {
+       "start": 19.2,
+       "end": 19.62,
+       "text": "terceiro,"
+      },
+      {
+       "start": 19.72,
+       "end": 19.78,
+       "text": "que"
+      },
+      {
+       "start": 19.78,
+       "end": 19.82,
+       "text": "é"
+      },
+      {
+       "start": 19.82,
+       "end": 19.96,
+       "text": "o"
+      },
+      {
+       "start": 19.96,
+       "end": 20.44,
+       "text": "mais"
+      }
+     ]
+    },
+    {
+     "start": 20.44,
+     "end": 21.72,
+     "text": "importante, é o começo do vídeo.",
+     "words": [
+      {
+       "start": 20.44,
+       "end": 20.68,
+       "text": "importante,"
+      },
+      {
+       "start": 20.74,
+       "end": 20.8,
+       "text": "é"
+      },
+      {
+       "start": 20.8,
+       "end": 21,
+       "text": "o"
+      },
+      {
+       "start": 21,
+       "end": 21.16,
+       "text": "começo"
+      },
+      {
+       "start": 21.16,
+       "end": 21.38,
+       "text": "do"
+      },
+      {
+       "start": 21.38,
+       "end": 21.72,
+       "text": "vídeo."
+      }
+     ]
+    },
+    {
+     "start": 21.9,
+     "end": 23.3,
+     "text": "Você tem dois segundos para aprender a",
+     "words": [
+      {
+       "start": 21.9,
+       "end": 22.08,
+       "text": "Você"
+      },
+      {
+       "start": 22.08,
+       "end": 22.24,
+       "text": "tem"
+      },
+      {
+       "start": 22.24,
+       "end": 22.5,
+       "text": "dois"
+      },
+      {
+       "start": 22.5,
+       "end": 22.68,
+       "text": "segundos"
+      },
+      {
+       "start": 22.68,
+       "end": 22.9,
+       "text": "para"
+      },
+      {
+       "start": 22.9,
+       "end": 23.02,
+       "text": "aprender"
+      },
+      {
+       "start": 23.02,
+       "end": 23.3,
+       "text": "a"
+      }
+     ]
+    },
+    {
+     "start": 23.3,
+     "end": 24.62,
+     "text": "pessoa, então já começa falando o que",
+     "words": [
+      {
+       "start": 23.3,
+       "end": 23.4,
+       "text": "pessoa,"
+      },
+      {
+       "start": 23.68,
+       "end": 23.82,
+       "text": "então"
+      },
+      {
+       "start": 23.82,
+       "end": 24.02,
+       "text": "já"
+      },
+      {
+       "start": 24.02,
+       "end": 24.32,
+       "text": "começa"
+      },
+      {
+       "start": 24.32,
+       "end": 24.52,
+       "text": "falando"
+      },
+      {
+       "start": 24.52,
+       "end": 24.62,
+       "text": "que"
+      }
+     ]
+    },
+    {
+     "start": 24.62,
+     "end": 26.06,
+     "text": "ela vai ganhar assistindo até o final.",
+     "words": [
+      {
+       "start": 24.62,
+       "end": 24.76,
+       "text": "ela"
+      },
+      {
+       "start": 24.76,
+       "end": 24.94,
+       "text": "vai"
+      },
+      {
+       "start": 24.94,
+       "end": 25.14,
+       "text": "ganhar"
+      },
+      {
+       "start": 25.14,
+       "end": 25.46,
+       "text": "assistindo"
+      },
+      {
+       "start": 25.46,
+       "end": 25.54,
+       "text": "até"
+      },
+      {
+       "start": 25.54,
+       "end": 25.72,
+       "text": "o"
+      },
+      {
+       "start": 25.72,
+       "end": 26.06,
+       "text": "final."
+      }
+     ]
+    },
+    {
+     "start": 26.2,
+     "end": 27,
+     "text": "Sem enrolação nenhuma.",
+     "words": [
+      {
+       "start": 26.2,
+       "end": 26.34,
+       "text": "Sem"
+      },
+      {
+       "start": 26.34,
+       "end": 26.76,
+       "text": "enrolação"
+      },
+      {
+       "start": 26.76,
+       "end": 27,
+       "text": "nenhuma."
+      }
+     ]
+    },
+    {
+     "start": 27.14,
+     "end": 27.36,
+     "text": "Beleza.",
+     "words": [
+      {
+       "start": 27.14,
+       "end": 27.36,
+       "text": "Beleza."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "B_vfast",
+   "duration": 31.4666875,
+   "ms": 37039,
+   "rtf": 1.1770860850860136,
+   "cuts": [
+    0,
+    31.4666875
+   ],
+   "pieces": [
+    {
+     "a": 0,
+     "b": 31.4666875,
+     "speech": true,
+     "ms": 37033,
+     "text": " Olha só, hoje eu vou te mostrar 3 erros que todo mundo comete quando começar a gravar vídeo para o Instagram. O primeiro é a luz. Gada sempre de frente para janela, nunca de costas, senão o seu rosto fique escuro e tem ninguém para essa atenção. O segundo é o áudio. O microfone do celular pere a tudo. O barulho da rua, o ventilador, a televisão. Então procura um lugar silencioso ou compra um microfone de lapela, que é baratinho. E o terceiro, que é o mais importante, é o começo do vídeo. Você tem 2 segundos para aprender a pessoa, então já começa falando o que ela vai ganhar assistindo até o final. Sem enrolação nenhum. Bate tudo no liquidificador por uns 2 minutos. Até a massa ficar bem lhezinha. Enquanto isso, esquenta a frigideira com um fio de óleo. Mais cuidado para não deixar queimar. Beleza!",
+     "nWords": 149
+    }
+   ],
+   "words": [
+    {
+     "text": " Olha",
+     "timestamp": [
+      0.3,
+      0.5
+     ]
+    },
+    {
+     "text": " só,",
+     "timestamp": [
+      0.5,
+      0.64
+     ]
+    },
+    {
+     "text": " hoje",
+     "timestamp": [
+      0.76,
+      0.84
+     ]
+    },
+    {
+     "text": " eu",
+     "timestamp": [
+      0.84,
+      0.92
+     ]
+    },
+    {
+     "text": " vou",
+     "timestamp": [
+      0.92,
+      1
+     ]
+    },
+    {
+     "text": " te",
+     "timestamp": [
+      1,
+      1.18
+     ]
+    },
+    {
+     "text": " mostrar",
+     "timestamp": [
+      1.18,
+      1.48
+     ]
+    },
+    {
+     "text": " 3",
+     "timestamp": [
+      1.48,
+      1.64
+     ]
+    },
+    {
+     "text": " erros",
+     "timestamp": [
+      1.64,
+      1.82
+     ]
+    },
+    {
+     "text": " que",
+     "timestamp": [
+      1.82,
+      1.98
+     ]
+    },
+    {
+     "text": " todo",
+     "timestamp": [
+      1.98,
+      2.16
+     ]
+    },
+    {
+     "text": " mundo",
+     "timestamp": [
+      2.16,
+      2.36
+     ]
+    },
+    {
+     "text": " comete",
+     "timestamp": [
+      2.36,
+      2.64
+     ]
+    },
+    {
+     "text": " quando",
+     "timestamp": [
+      2.64,
+      2.98
+     ]
+    },
+    {
+     "text": " começar",
+     "timestamp": [
+      2.98,
+      3.06
+     ]
+    },
+    {
+     "text": " a",
+     "timestamp": [
+      3.06,
+      3.14
+     ]
+    },
+    {
+     "text": " gravar",
+     "timestamp": [
+      3.14,
+      3.44
+     ]
+    },
+    {
+     "text": " vídeo",
+     "timestamp": [
+      3.44,
+      3.48
+     ]
+    },
+    {
+     "text": " para",
+     "timestamp": [
+      3.6,
+      3.62
+     ]
+    },
+    {
+     "text": " o",
+     "timestamp": [
+      3.62,
+      3.82
+     ]
+    },
+    {
+     "text": " Instagram.",
+     "timestamp": [
+      3.82,
+      4.3
+     ]
+    },
+    {
+     "text": " O",
+     "timestamp": [
+      4.36,
+      4.58
+     ]
+    },
+    {
+     "text": " primeiro",
+     "timestamp": [
+      4.58,
+      4.72
+     ]
+    },
+    {
+     "text": " é",
+     "timestamp": [
+      4.72,
+      4.76
+     ]
+    },
+    {
+     "text": " a",
+     "timestamp": [
+      4.76,
+      4.88
+     ]
+    },
+    {
+     "text": " luz.",
+     "timestamp": [
+      4.88,
+      5.12
+     ]
+    },
+    {
+     "text": " Gada",
+     "timestamp": [
+      5.18,
+      5.48
+     ]
+    },
+    {
+     "text": " sempre",
+     "timestamp": [
+      5.48,
+      5.66
+     ]
+    },
+    {
+     "text": " de",
+     "timestamp": [
+      5.66,
+      5.8
+     ]
+    },
+    {
+     "text": " frente",
+     "timestamp": [
+      5.8,
+      6
+     ]
+    },
+    {
+     "text": " para",
+     "timestamp": [
+      6,
+      6.18
+     ]
+    },
+    {
+     "text": " janela,",
+     "timestamp": [
+      6.18,
+      6.5
+     ]
+    },
+    {
+     "text": " nunca",
+     "timestamp": [
+      6.66,
+      6.82
+     ]
+    },
+    {
+     "text": " de",
+     "timestamp": [
+      6.82,
+      6.98
+     ]
+    },
+    {
+     "text": " costas,",
+     "timestamp": [
+      6.98,
+      7.36
+     ]
+    },
+    {
+     "text": " senão",
+     "timestamp": [
+      7.44,
+      7.64
+     ]
+    },
+    {
+     "text": " o",
+     "timestamp": [
+      7.64,
+      7.68
+     ]
+    },
+    {
+     "text": " seu",
+     "timestamp": [
+      7.68,
+      7.84
+     ]
+    },
+    {
+     "text": " rosto",
+     "timestamp": [
+      7.84,
+      8.06
+     ]
+    },
+    {
+     "text": " fique",
+     "timestamp": [
+      8.06,
+      8.26
+     ]
+    },
+    {
+     "text": " escuro",
+     "timestamp": [
+      8.26,
+      8.4
+     ]
+    },
+    {
+     "text": " e",
+     "timestamp": [
+      8.44,
+      8.46
+     ]
+    },
+    {
+     "text": " tem",
+     "timestamp": [
+      8.52,
+      8.66
+     ]
+    },
+    {
+     "text": " ninguém",
+     "timestamp": [
+      8.66,
+      8.86
+     ]
+    },
+    {
+     "text": " para",
+     "timestamp": [
+      8.86,
+      8.98
+     ]
+    },
+    {
+     "text": " essa",
+     "timestamp": [
+      8.98,
+      9.24
+     ]
+    },
+    {
+     "text": " atenção.",
+     "timestamp": [
+      9.24,
+      9.4
+     ]
+    },
+    {
+     "text": " O",
+     "timestamp": [
+      9.46,
+      9.66
+     ]
+    },
+    {
+     "text": " segundo",
+     "timestamp": [
+      9.66,
+      9.8
+     ]
+    },
+    {
+     "text": " é",
+     "timestamp": [
+      9.8,
+      9.86
+     ]
+    },
+    {
+     "text": " o",
+     "timestamp": [
+      9.86,
+      9.94
+     ]
+    },
+    {
+     "text": " áudio.",
+     "timestamp": [
+      9.94,
+      10.26
+     ]
+    },
+    {
+     "text": " O",
+     "timestamp": [
+      10.38,
+      10.56
+     ]
+    },
+    {
+     "text": " microfone",
+     "timestamp": [
+      10.56,
+      10.82
+     ]
+    },
+    {
+     "text": " do",
+     "timestamp": [
+      10.82,
+      11.08
+     ]
+    },
+    {
+     "text": " celular",
+     "timestamp": [
+      11.08,
+      11.24
+     ]
+    },
+    {
+     "text": " pere",
+     "timestamp": [
+      11.24,
+      11.36
+     ]
+    },
+    {
+     "text": " a",
+     "timestamp": [
+      11.36,
+      11.5
+     ]
+    },
+    {
+     "text": " tudo.",
+     "timestamp": [
+      11.5,
+      11.68
+     ]
+    },
+    {
+     "text": " O",
+     "timestamp": [
+      11.78,
+      11.88
+     ]
+    },
+    {
+     "text": " barulho",
+     "timestamp": [
+      11.88,
+      12.08
+     ]
+    },
+    {
+     "text": " da",
+     "timestamp": [
+      12.08,
+      12.22
+     ]
+    },
+    {
+     "text": " rua,",
+     "timestamp": [
+      12.22,
+      12.42
+     ]
+    },
+    {
+     "text": " o",
+     "timestamp": [
+      12.48,
+      12.62
+     ]
+    },
+    {
+     "text": " ventilador,",
+     "timestamp": [
+      12.62,
+      13.1
+     ]
+    },
+    {
+     "text": " a",
+     "timestamp": [
+      13.14,
+      13.34
+     ]
+    },
+    {
+     "text": " televisão.",
+     "timestamp": [
+      13.34,
+      13.66
+     ]
+    },
+    {
+     "text": " Então",
+     "timestamp": [
+      13.86,
+      14.06
+     ]
+    },
+    {
+     "text": " procura",
+     "timestamp": [
+      14.06,
+      14.24
+     ]
+    },
+    {
+     "text": " um",
+     "timestamp": [
+      14.24,
+      14.44
+     ]
+    },
+    {
+     "text": " lugar",
+     "timestamp": [
+      14.44,
+      14.62
+     ]
+    },
+    {
+     "text": " silencioso",
+     "timestamp": [
+      14.62,
+      14.98
+     ]
+    },
+    {
+     "text": " ou",
+     "timestamp": [
+      14.98,
+      15.18
+     ]
+    },
+    {
+     "text": " compra",
+     "timestamp": [
+      15.18,
+      15.3
+     ]
+    },
+    {
+     "text": " um",
+     "timestamp": [
+      15.3,
+      15.5
+     ]
+    },
+    {
+     "text": " microfone",
+     "timestamp": [
+      15.5,
+      15.76
+     ]
+    },
+    {
+     "text": " de",
+     "timestamp": [
+      15.76,
+      15.9
+     ]
+    },
+    {
+     "text": " lapela,",
+     "timestamp": [
+      15.9,
+      16.36
+     ]
+    },
+    {
+     "text": " que",
+     "timestamp": [
+      16.42,
+      16.5
+     ]
+    },
+    {
+     "text": " é",
+     "timestamp": [
+      16.5,
+      16.64
+     ]
+    },
+    {
+     "text": " baratinho.",
+     "timestamp": [
+      16.64,
+      16.9
+     ]
+    },
+    {
+     "text": " E",
+     "timestamp": [
+      17,
+      17.04
+     ]
+    },
+    {
+     "text": " o",
+     "timestamp": [
+      17.04,
+      17.2
+     ]
+    },
+    {
+     "text": " terceiro,",
+     "timestamp": [
+      17.2,
+      17.52
+     ]
+    },
+    {
+     "text": " que",
+     "timestamp": [
+      17.58,
+      17.66
+     ]
+    },
+    {
+     "text": " é",
+     "timestamp": [
+      17.66,
+      17.68
+     ]
+    },
+    {
+     "text": " o",
+     "timestamp": [
+      17.68,
+      17.82
+     ]
+    },
+    {
+     "text": " mais",
+     "timestamp": [
+      17.82,
+      18.26
+     ]
+    },
+    {
+     "text": " importante,",
+     "timestamp": [
+      18.26,
+      18.5
+     ]
+    },
+    {
+     "text": " é",
+     "timestamp": [
+      18.5,
+      18.56
+     ]
+    },
+    {
+     "text": " o",
+     "timestamp": [
+      18.56,
+      18.76
+     ]
+    },
+    {
+     "text": " começo",
+     "timestamp": [
+      18.76,
+      18.88
+     ]
+    },
+    {
+     "text": " do",
+     "timestamp": [
+      18.88,
+      19.08
+     ]
+    },
+    {
+     "text": " vídeo.",
+     "timestamp": [
+      19.08,
+      19.4
+     ]
+    },
+    {
+     "text": " Você",
+     "timestamp": [
+      19.56,
+      19.68
+     ]
+    },
+    {
+     "text": " tem",
+     "timestamp": [
+      19.68,
+      19.82
+     ]
+    },
+    {
+     "text": " 2",
+     "timestamp": [
+      19.82,
+      20.06
+     ]
+    },
+    {
+     "text": " segundos",
+     "timestamp": [
+      20.06,
+      20.24
+     ]
+    },
+    {
+     "text": " para",
+     "timestamp": [
+      20.24,
+      20.44
+     ]
+    },
+    {
+     "text": " aprender",
+     "timestamp": [
+      20.44,
+      20.58
+     ]
+    },
+    {
+     "text": " a",
+     "timestamp": [
+      20.58,
+      20.84
+     ]
+    },
+    {
+     "text": " pessoa,",
+     "timestamp": [
+      20.84,
+      21
+     ]
+    },
+    {
+     "text": " então",
+     "timestamp": [
+      21.2,
+      21.34
+     ]
+    },
+    {
+     "text": " já",
+     "timestamp": [
+      21.34,
+      21.54
+     ]
+    },
+    {
+     "text": " começa",
+     "timestamp": [
+      21.54,
+      21.82
+     ]
+    },
+    {
+     "text": " falando",
+     "timestamp": [
+      21.82,
+      21.98
+     ]
+    },
+    {
+     "text": " o",
+     "timestamp": [
+      21.98,
+      22
+     ]
+    },
+    {
+     "text": " que",
+     "timestamp": [
+      22,
+      22.12
+     ]
+    },
+    {
+     "text": " ela",
+     "timestamp": [
+      22.12,
+      22.24
+     ]
+    },
+    {
+     "text": " vai",
+     "timestamp": [
+      22.24,
+      22.24
+     ]
+    },
+    {
+     "text": " ganhar",
+     "timestamp": [
+      22.4,
+      22.66
+     ]
+    },
+    {
+     "text": " assistindo",
+     "timestamp": [
+      22.66,
+      22.88
+     ]
+    },
+    {
+     "text": " até",
+     "timestamp": [
+      22.88,
+      22.96
+     ]
+    },
+    {
+     "text": " o",
+     "timestamp": [
+      22.96,
+      23.14
+     ]
+    },
+    {
+     "text": " final.",
+     "timestamp": [
+      23.14,
+      23.34
+     ]
+    },
+    {
+     "text": " Sem",
+     "timestamp": [
+      23.52,
+      23.64
+     ]
+    },
+    {
+     "text": " enrolação",
+     "timestamp": [
+      23.64,
+      24
+     ]
+    },
+    {
+     "text": " nenhum.",
+     "timestamp": [
+      24,
+      24.16
+     ]
+    },
+    {
+     "text": " Bate",
+     "timestamp": [
+      24.22,
+      24.5
+     ]
+    },
+    {
+     "text": " tudo",
+     "timestamp": [
+      24.5,
+      24.62
+     ]
+    },
+    {
+     "text": " no",
+     "timestamp": [
+      24.62,
+      24.76
+     ]
+    },
+    {
+     "text": " liquidificador",
+     "timestamp": [
+      24.76,
+      25.26
+     ]
+    },
+    {
+     "text": " por",
+     "timestamp": [
+      25.26,
+      25.38
+     ]
+    },
+    {
+     "text": " uns",
+     "timestamp": [
+      25.38,
+      25.48
+     ]
+    },
+    {
+     "text": " 2",
+     "timestamp": [
+      25.48,
+      25.72
+     ]
+    },
+    {
+     "text": " minutos.",
+     "timestamp": [
+      25.74,
+      25.98
+     ]
+    },
+    {
+     "text": " Até",
+     "timestamp": [
+      26.14,
+      26.24
+     ]
+    },
+    {
+     "text": " a",
+     "timestamp": [
+      26.24,
+      26.3
+     ]
+    },
+    {
+     "text": " massa",
+     "timestamp": [
+      26.3,
+      26.54
+     ]
+    },
+    {
+     "text": " ficar",
+     "timestamp": [
+      26.54,
+      26.74
+     ]
+    },
+    {
+     "text": " bem",
+     "timestamp": [
+      26.74,
+      26.84
+     ]
+    },
+    {
+     "text": " lhezinha.",
+     "timestamp": [
+      26.84,
+      27.2
+     ]
+    },
+    {
+     "text": " Enquanto",
+     "timestamp": [
+      27.46,
+      27.86
+     ]
+    },
+    {
+     "text": " isso,",
+     "timestamp": [
+      27.86,
+      28.06
+     ]
+    },
+    {
+     "text": " esquenta",
+     "timestamp": [
+      28.14,
+      28.38
+     ]
+    },
+    {
+     "text": " a",
+     "timestamp": [
+      28.38,
+      28.48
+     ]
+    },
+    {
+     "text": " frigideira",
+     "timestamp": [
+      28.48,
+      28.84
+     ]
+    },
+    {
+     "text": " com",
+     "timestamp": [
+      28.84,
+      28.98
+     ]
+    },
+    {
+     "text": " um",
+     "timestamp": [
+      28.98,
+      29.02
+     ]
+    },
+    {
+     "text": " fio",
+     "timestamp": [
+      29.02,
+      29.2
+     ]
+    },
+    {
+     "text": " de",
+     "timestamp": [
+      29.2,
+      29.36
+     ]
+    },
+    {
+     "text": " óleo.",
+     "timestamp": [
+      29.36,
+      29.52
+     ]
+    },
+    {
+     "text": " Mais",
+     "timestamp": [
+      29.64,
+      29.86
+     ]
+    },
+    {
+     "text": " cuidado",
+     "timestamp": [
+      29.86,
+      30.06
+     ]
+    },
+    {
+     "text": " para",
+     "timestamp": [
+      30.06,
+      30.2
+     ]
+    },
+    {
+     "text": " não",
+     "timestamp": [
+      30.2,
+      30.44
+     ]
+    },
+    {
+     "text": " deixar",
+     "timestamp": [
+      30.44,
+      30.6
+     ]
+    },
+    {
+     "text": " queimar.",
+     "timestamp": [
+      30.6,
+      30.9
+     ]
+    },
+    {
+     "text": " Beleza!",
+     "timestamp": [
+      31,
+      31.2
+     ]
+    }
+   ],
+   "segments": [
+    {
+     "start": 0.3,
+     "end": 1.48,
+     "text": "Olha só, hoje eu vou te mostrar",
+     "words": [
+      {
+       "start": 0.3,
+       "end": 0.5,
+       "text": "Olha"
+      },
+      {
+       "start": 0.5,
+       "end": 0.64,
+       "text": "só,"
+      },
+      {
+       "start": 0.76,
+       "end": 0.84,
+       "text": "hoje"
+      },
+      {
+       "start": 0.84,
+       "end": 0.92,
+       "text": "eu"
+      },
+      {
+       "start": 0.92,
+       "end": 1,
+       "text": "vou"
+      },
+      {
+       "start": 1,
+       "end": 1.18,
+       "text": "te"
+      },
+      {
+       "start": 1.18,
+       "end": 1.48,
+       "text": "mostrar"
+      }
+     ]
+    },
+    {
+     "start": 1.48,
+     "end": 2.98,
+     "text": "3 erros que todo mundo comete quando",
+     "words": [
+      {
+       "start": 1.48,
+       "end": 1.64,
+       "text": "3"
+      },
+      {
+       "start": 1.64,
+       "end": 1.82,
+       "text": "erros"
+      },
+      {
+       "start": 1.82,
+       "end": 1.98,
+       "text": "que"
+      },
+      {
+       "start": 1.98,
+       "end": 2.16,
+       "text": "todo"
+      },
+      {
+       "start": 2.16,
+       "end": 2.36,
+       "text": "mundo"
+      },
+      {
+       "start": 2.36,
+       "end": 2.64,
+       "text": "comete"
+      },
+      {
+       "start": 2.64,
+       "end": 2.98,
+       "text": "quando"
+      }
+     ]
+    },
+    {
+     "start": 2.98,
+     "end": 4.3,
+     "text": "começar a gravar vídeo para o Instagram.",
+     "words": [
+      {
+       "start": 2.98,
+       "end": 3.06,
+       "text": "começar"
+      },
+      {
+       "start": 3.06,
+       "end": 3.14,
+       "text": "a"
+      },
+      {
+       "start": 3.14,
+       "end": 3.44,
+       "text": "gravar"
+      },
+      {
+       "start": 3.44,
+       "end": 3.48,
+       "text": "vídeo"
+      },
+      {
+       "start": 3.6,
+       "end": 3.62,
+       "text": "para"
+      },
+      {
+       "start": 3.62,
+       "end": 3.82,
+       "text": "o"
+      },
+      {
+       "start": 3.82,
+       "end": 4.3,
+       "text": "Instagram."
+      }
+     ]
+    },
+    {
+     "start": 4.36,
+     "end": 5.12,
+     "text": "O primeiro é a luz.",
+     "words": [
+      {
+       "start": 4.36,
+       "end": 4.58,
+       "text": "O"
+      },
+      {
+       "start": 4.58,
+       "end": 4.72,
+       "text": "primeiro"
+      },
+      {
+       "start": 4.72,
+       "end": 4.76,
+       "text": "é"
+      },
+      {
+       "start": 4.76,
+       "end": 4.88,
+       "text": "a"
+      },
+      {
+       "start": 4.88,
+       "end": 5.12,
+       "text": "luz."
+      }
+     ]
+    },
+    {
+     "start": 5.18,
+     "end": 6.82,
+     "text": "Gada sempre de frente para janela, nunca",
+     "words": [
+      {
+       "start": 5.18,
+       "end": 5.48,
+       "text": "Gada"
+      },
+      {
+       "start": 5.48,
+       "end": 5.66,
+       "text": "sempre"
+      },
+      {
+       "start": 5.66,
+       "end": 5.8,
+       "text": "de"
+      },
+      {
+       "start": 5.8,
+       "end": 6,
+       "text": "frente"
+      },
+      {
+       "start": 6,
+       "end": 6.18,
+       "text": "para"
+      },
+      {
+       "start": 6.18,
+       "end": 6.5,
+       "text": "janela,"
+      },
+      {
+       "start": 6.66,
+       "end": 6.82,
+       "text": "nunca"
+      }
+     ]
+    },
+    {
+     "start": 6.82,
+     "end": 8.26,
+     "text": "de costas, senão o seu rosto fique",
+     "words": [
+      {
+       "start": 6.82,
+       "end": 6.98,
+       "text": "de"
+      },
+      {
+       "start": 6.98,
+       "end": 7.36,
+       "text": "costas,"
+      },
+      {
+       "start": 7.44,
+       "end": 7.64,
+       "text": "senão"
+      },
+      {
+       "start": 7.64,
+       "end": 7.68,
+       "text": "o"
+      },
+      {
+       "start": 7.68,
+       "end": 7.84,
+       "text": "seu"
+      },
+      {
+       "start": 7.84,
+       "end": 8.06,
+       "text": "rosto"
+      },
+      {
+       "start": 8.06,
+       "end": 8.26,
+       "text": "fique"
+      }
+     ]
+    },
+    {
+     "start": 8.26,
+     "end": 9.4,
+     "text": "escuro e tem ninguém para essa atenção.",
+     "words": [
+      {
+       "start": 8.26,
+       "end": 8.4,
+       "text": "escuro"
+      },
+      {
+       "start": 8.44,
+       "end": 8.46,
+       "text": "e"
+      },
+      {
+       "start": 8.52,
+       "end": 8.66,
+       "text": "tem"
+      },
+      {
+       "start": 8.66,
+       "end": 8.86,
+       "text": "ninguém"
+      },
+      {
+       "start": 8.86,
+       "end": 8.98,
+       "text": "para"
+      },
+      {
+       "start": 8.98,
+       "end": 9.24,
+       "text": "essa"
+      },
+      {
+       "start": 9.24,
+       "end": 9.4,
+       "text": "atenção."
+      }
+     ]
+    },
+    {
+     "start": 9.46,
+     "end": 10.26,
+     "text": "O segundo é o áudio.",
+     "words": [
+      {
+       "start": 9.46,
+       "end": 9.66,
+       "text": "O"
+      },
+      {
+       "start": 9.66,
+       "end": 9.8,
+       "text": "segundo"
+      },
+      {
+       "start": 9.8,
+       "end": 9.86,
+       "text": "é"
+      },
+      {
+       "start": 9.86,
+       "end": 9.94,
+       "text": "o"
+      },
+      {
+       "start": 9.94,
+       "end": 10.26,
+       "text": "áudio."
+      }
+     ]
+    },
+    {
+     "start": 10.38,
+     "end": 11.68,
+     "text": "O microfone do celular pere a tudo.",
+     "words": [
+      {
+       "start": 10.38,
+       "end": 10.56,
+       "text": "O"
+      },
+      {
+       "start": 10.56,
+       "end": 10.82,
+       "text": "microfone"
+      },
+      {
+       "start": 10.82,
+       "end": 11.08,
+       "text": "do"
+      },
+      {
+       "start": 11.08,
+       "end": 11.24,
+       "text": "celular"
+      },
+      {
+       "start": 11.24,
+       "end": 11.36,
+       "text": "pere"
+      },
+      {
+       "start": 11.36,
+       "end": 11.5,
+       "text": "a"
+      },
+      {
+       "start": 11.5,
+       "end": 11.68,
+       "text": "tudo."
+      }
+     ]
+    },
+    {
+     "start": 11.78,
+     "end": 13.34,
+     "text": "O barulho da rua, o ventilador, a",
+     "words": [
+      {
+       "start": 11.78,
+       "end": 11.88,
+       "text": "O"
+      },
+      {
+       "start": 11.88,
+       "end": 12.08,
+       "text": "barulho"
+      },
+      {
+       "start": 12.08,
+       "end": 12.22,
+       "text": "da"
+      },
+      {
+       "start": 12.22,
+       "end": 12.42,
+       "text": "rua,"
+      },
+      {
+       "start": 12.48,
+       "end": 12.62,
+       "text": "o"
+      },
+      {
+       "start": 12.62,
+       "end": 13.1,
+       "text": "ventilador,"
+      },
+      {
+       "start": 13.14,
+       "end": 13.34,
+       "text": "a"
+      }
+     ]
+    },
+    {
+     "start": 13.34,
+     "end": 13.66,
+     "text": "televisão.",
+     "words": [
+      {
+       "start": 13.34,
+       "end": 13.66,
+       "text": "televisão."
+      }
+     ]
+    },
+    {
+     "start": 13.86,
+     "end": 15.3,
+     "text": "Então procura um lugar silencioso ou compra",
+     "words": [
+      {
+       "start": 13.86,
+       "end": 14.06,
+       "text": "Então"
+      },
+      {
+       "start": 14.06,
+       "end": 14.24,
+       "text": "procura"
+      },
+      {
+       "start": 14.24,
+       "end": 14.44,
+       "text": "um"
+      },
+      {
+       "start": 14.44,
+       "end": 14.62,
+       "text": "lugar"
+      },
+      {
+       "start": 14.62,
+       "end": 14.98,
+       "text": "silencioso"
+      },
+      {
+       "start": 14.98,
+       "end": 15.18,
+       "text": "ou"
+      },
+      {
+       "start": 15.18,
+       "end": 15.3,
+       "text": "compra"
+      }
+     ]
+    },
+    {
+     "start": 15.3,
+     "end": 16.9,
+     "text": "um microfone de lapela, que é baratinho.",
+     "words": [
+      {
+       "start": 15.3,
+       "end": 15.5,
+       "text": "um"
+      },
+      {
+       "start": 15.5,
+       "end": 15.76,
+       "text": "microfone"
+      },
+      {
+       "start": 15.76,
+       "end": 15.9,
+       "text": "de"
+      },
+      {
+       "start": 15.9,
+       "end": 16.36,
+       "text": "lapela,"
+      },
+      {
+       "start": 16.42,
+       "end": 16.5,
+       "text": "que"
+      },
+      {
+       "start": 16.5,
+       "end": 16.64,
+       "text": "é"
+      },
+      {
+       "start": 16.64,
+       "end": 16.9,
+       "text": "baratinho."
+      }
+     ]
+    },
+    {
+     "start": 17,
+     "end": 18.26,
+     "text": "E o terceiro, que é o mais",
+     "words": [
+      {
+       "start": 17,
+       "end": 17.04,
+       "text": "E"
+      },
+      {
+       "start": 17.04,
+       "end": 17.2,
+       "text": "o"
+      },
+      {
+       "start": 17.2,
+       "end": 17.52,
+       "text": "terceiro,"
+      },
+      {
+       "start": 17.58,
+       "end": 17.66,
+       "text": "que"
+      },
+      {
+       "start": 17.66,
+       "end": 17.68,
+       "text": "é"
+      },
+      {
+       "start": 17.68,
+       "end": 17.82,
+       "text": "o"
+      },
+      {
+       "start": 17.82,
+       "end": 18.26,
+       "text": "mais"
+      }
+     ]
+    },
+    {
+     "start": 18.26,
+     "end": 19.4,
+     "text": "importante, é o começo do vídeo.",
+     "words": [
+      {
+       "start": 18.26,
+       "end": 18.5,
+       "text": "importante,"
+      },
+      {
+       "start": 18.5,
+       "end": 18.56,
+       "text": "é"
+      },
+      {
+       "start": 18.56,
+       "end": 18.76,
+       "text": "o"
+      },
+      {
+       "start": 18.76,
+       "end": 18.88,
+       "text": "começo"
+      },
+      {
+       "start": 18.88,
+       "end": 19.08,
+       "text": "do"
+      },
+      {
+       "start": 19.08,
+       "end": 19.4,
+       "text": "vídeo."
+      }
+     ]
+    },
+    {
+     "start": 19.56,
+     "end": 20.84,
+     "text": "Você tem 2 segundos para aprender a",
+     "words": [
+      {
+       "start": 19.56,
+       "end": 19.68,
+       "text": "Você"
+      },
+      {
+       "start": 19.68,
+       "end": 19.82,
+       "text": "tem"
+      },
+      {
+       "start": 19.82,
+       "end": 20.06,
+       "text": "2"
+      },
+      {
+       "start": 20.06,
+       "end": 20.24,
+       "text": "segundos"
+      },
+      {
+       "start": 20.24,
+       "end": 20.44,
+       "text": "para"
+      },
+      {
+       "start": 20.44,
+       "end": 20.58,
+       "text": "aprender"
+      },
+      {
+       "start": 20.58,
+       "end": 20.84,
+       "text": "a"
+      }
+     ]
+    },
+    {
+     "start": 20.84,
+     "end": 22.12,
+     "text": "pessoa, então já começa falando o que",
+     "words": [
+      {
+       "start": 20.84,
+       "end": 21,
+       "text": "pessoa,"
+      },
+      {
+       "start": 21.2,
+       "end": 21.34,
+       "text": "então"
+      },
+      {
+       "start": 21.34,
+       "end": 21.54,
+       "text": "já"
+      },
+      {
+       "start": 21.54,
+       "end": 21.82,
+       "text": "começa"
+      },
+      {
+       "start": 21.82,
+       "end": 21.98,
+       "text": "falando"
+      },
+      {
+       "start": 21.98,
+       "end": 22,
+       "text": "o"
+      },
+      {
+       "start": 22,
+       "end": 22.12,
+       "text": "que"
+      }
+     ]
+    },
+    {
+     "start": 22.12,
+     "end": 23.34,
+     "text": "ela vai ganhar assistindo até o final.",
+     "words": [
+      {
+       "start": 22.12,
+       "end": 22.24,
+       "text": "ela"
+      },
+      {
+       "start": 22.24,
+       "end": 22.4,
+       "text": "vai"
+      },
+      {
+       "start": 22.4,
+       "end": 22.66,
+       "text": "ganhar"
+      },
+      {
+       "start": 22.66,
+       "end": 22.88,
+       "text": "assistindo"
+      },
+      {
+       "start": 22.88,
+       "end": 22.96,
+       "text": "até"
+      },
+      {
+       "start": 22.96,
+       "end": 23.14,
+       "text": "o"
+      },
+      {
+       "start": 23.14,
+       "end": 23.34,
+       "text": "final."
+      }
+     ]
+    },
+    {
+     "start": 23.52,
+     "end": 24.16,
+     "text": "Sem enrolação nenhum.",
+     "words": [
+      {
+       "start": 23.52,
+       "end": 23.64,
+       "text": "Sem"
+      },
+      {
+       "start": 23.64,
+       "end": 24,
+       "text": "enrolação"
+      },
+      {
+       "start": 24,
+       "end": 24.16,
+       "text": "nenhum."
+      }
+     ]
+    },
+    {
+     "start": 24.22,
+     "end": 25.72,
+     "text": "Bate tudo no liquidificador por uns 2",
+     "words": [
+      {
+       "start": 24.22,
+       "end": 24.5,
+       "text": "Bate"
+      },
+      {
+       "start": 24.5,
+       "end": 24.62,
+       "text": "tudo"
+      },
+      {
+       "start": 24.62,
+       "end": 24.76,
+       "text": "no"
+      },
+      {
+       "start": 24.76,
+       "end": 25.26,
+       "text": "liquidificador"
+      },
+      {
+       "start": 25.26,
+       "end": 25.38,
+       "text": "por"
+      },
+      {
+       "start": 25.38,
+       "end": 25.48,
+       "text": "uns"
+      },
+      {
+       "start": 25.48,
+       "end": 25.72,
+       "text": "2"
+      }
+     ]
+    },
+    {
+     "start": 25.74,
+     "end": 25.98,
+     "text": "minutos.",
+     "words": [
+      {
+       "start": 25.74,
+       "end": 25.98,
+       "text": "minutos."
+      }
+     ]
+    },
+    {
+     "start": 26.14,
+     "end": 27.2,
+     "text": "Até a massa ficar bem lhezinha.",
+     "words": [
+      {
+       "start": 26.14,
+       "end": 26.24,
+       "text": "Até"
+      },
+      {
+       "start": 26.24,
+       "end": 26.3,
+       "text": "a"
+      },
+      {
+       "start": 26.3,
+       "end": 26.54,
+       "text": "massa"
+      },
+      {
+       "start": 26.54,
+       "end": 26.74,
+       "text": "ficar"
+      },
+      {
+       "start": 26.74,
+       "end": 26.84,
+       "text": "bem"
+      },
+      {
+       "start": 26.84,
+       "end": 27.2,
+       "text": "lhezinha."
+      }
+     ]
+    },
+    {
+     "start": 27.46,
+     "end": 29.02,
+     "text": "Enquanto isso, esquenta a frigideira com um",
+     "words": [
+      {
+       "start": 27.46,
+       "end": 27.86,
+       "text": "Enquanto"
+      },
+      {
+       "start": 27.86,
+       "end": 28.06,
+       "text": "isso,"
+      },
+      {
+       "start": 28.14,
+       "end": 28.38,
+       "text": "esquenta"
+      },
+      {
+       "start": 28.38,
+       "end": 28.48,
+       "text": "a"
+      },
+      {
+       "start": 28.48,
+       "end": 28.84,
+       "text": "frigideira"
+      },
+      {
+       "start": 28.84,
+       "end": 28.98,
+       "text": "com"
+      },
+      {
+       "start": 28.98,
+       "end": 29.02,
+       "text": "um"
+      }
+     ]
+    },
+    {
+     "start": 29.02,
+     "end": 29.52,
+     "text": "fio de óleo.",
+     "words": [
+      {
+       "start": 29.02,
+       "end": 29.2,
+       "text": "fio"
+      },
+      {
+       "start": 29.2,
+       "end": 29.36,
+       "text": "de"
+      },
+      {
+       "start": 29.36,
+       "end": 29.52,
+       "text": "óleo."
+      }
+     ]
+    },
+    {
+     "start": 29.64,
+     "end": 30.9,
+     "text": "Mais cuidado para não deixar queimar.",
+     "words": [
+      {
+       "start": 29.64,
+       "end": 29.86,
+       "text": "Mais"
+      },
+      {
+       "start": 29.86,
+       "end": 30.06,
+       "text": "cuidado"
+      },
+      {
+       "start": 30.06,
+       "end": 30.2,
+       "text": "para"
+      },
+      {
+       "start": 30.2,
+       "end": 30.44,
+       "text": "não"
+      },
+      {
+       "start": 30.44,
+       "end": 30.6,
+       "text": "deixar"
+      },
+      {
+       "start": 30.6,
+       "end": 30.9,
+       "text": "queimar."
+      }
+     ]
+    },
+    {
+     "start": 31,
+     "end": 31.2,
+     "text": "Beleza!",
+     "words": [
+      {
+       "start": 31,
+       "end": 31.2,
+       "text": "Beleza!"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

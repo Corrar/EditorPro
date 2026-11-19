@@ -1,0 +1,329 @@
+{
+ "model": "onnx-community/whisper-small_timestamped",
+ "dtype": "q8",
+ "variant": "app",
+ "opts": {
+  "language": "portuguese",
+  "task": "transcribe",
+  "return_timestamps": "word",
+  "chunk_length_s": 30,
+  "stride_length_s": 5,
+  "max_new_tokens": 220,
+  "no_repeat_ngram_size": 4
+ },
+ "split": 60,
+ "loadMs": 2404,
+ "clips": [
+  {
+   "id": "N_music_only",
+   "duration": 20.0106875,
+   "ms": 6650,
+   "rtf": 0.3323224152093725,
+   "cuts": [
+    0,
+    20.0106875
+   ],
+   "pieces": [
+    {
+     "a": 0,
+     "b": 20.0106875,
+     "speech": true,
+     "ms": 6636,
+     "text": " Ainda não tem mais um vídeo para mais vídeos, mas eu espero que tenham gostado!",
+     "nWords": 15
+    }
+   ],
+   "words": [
+    {
+     "text": " Ainda",
+     "timestamp": [
+      18.46,
+      18.46
+     ]
+    },
+    {
+     "text": " não",
+     "timestamp": [
+      18.46,
+      18.46
+     ]
+    },
+    {
+     "text": " tem",
+     "timestamp": [
+      18.46,
+      18.46
+     ]
+    },
+    {
+     "text": " mais",
+     "timestamp": [
+      18.46,
+      18.46
+     ]
+    },
+    {
+     "text": " um",
+     "timestamp": [
+      18.46,
+      18.46
+     ]
+    },
+    {
+     "text": " vídeo",
+     "timestamp": [
+      18.46,
+      18.46
+     ]
+    },
+    {
+     "text": " para",
+     "timestamp": [
+      18.46,
+      18.46
+     ]
+    },
+    {
+     "text": " mais",
+     "timestamp": [
+      18.46,
+      18.46
+     ]
+    },
+    {
+     "text": " vídeos,",
+     "timestamp": [
+      18.46,
+      18.46
+     ]
+    },
+    {
+     "text": " mas",
+     "timestamp": [
+      18.46,
+      18.46
+     ]
+    },
+    {
+     "text": " eu",
+     "timestamp": [
+      18.46,
+      18.46
+     ]
+    },
+    {
+     "text": " espero",
+     "timestamp": [
+      18.46,
+      18.46
+     ]
+    },
+    {
+     "text": " que",
+     "timestamp": [
+      18.46,
+      18.46
+     ]
+    },
+    {
+     "text": " tenham",
+     "timestamp": [
+      18.46,
+      18.46
+     ]
+    },
+    {
+     "text": " gostado!",
+     "timestamp": [
+      18.46,
+      18.46
+     ]
+    }
+   ],
+   "segments": [
+    {
+     "start": 18.46,
+     "end": 18.94,
+     "text": "gostado!",
+     "words": [
+      {
+       "start": 18.46,
+       "end": 18.94,
+       "text": "gostado!"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "N_intro_music",
+   "duration": 16.2346875,
+   "ms": 4367,
+   "rtf": 0.2689919347077053,
+   "cuts": [
+    0,
+    16.2346875
+   ],
+   "pieces": [
+    {
+     "a": 0,
+     "b": 16.2346875,
+     "speech": true,
+     "ms": 4359,
+     "text": " Se você gostou dessa dica, deixe o seu comentário aqui embaixo.",
+     "nWords": 11
+    }
+   ],
+   "words": [
+    {
+     "text": " Se",
+     "timestamp": [
+      12.1,
+      12.28
+     ]
+    },
+    {
+     "text": " você",
+     "timestamp": [
+      12.28,
+      12.48
+     ]
+    },
+    {
+     "text": " gostou",
+     "timestamp": [
+      12.48,
+      12.9
+     ]
+    },
+    {
+     "text": " dessa",
+     "timestamp": [
+      12.9,
+      13.1
+     ]
+    },
+    {
+     "text": " dica,",
+     "timestamp": [
+      13.1,
+      13.58
+     ]
+    },
+    {
+     "text": " deixe",
+     "timestamp": [
+      13.72,
+      13.88
+     ]
+    },
+    {
+     "text": " o",
+     "timestamp": [
+      13.88,
+      13.98
+     ]
+    },
+    {
+     "text": " seu",
+     "timestamp": [
+      13.98,
+      14.22
+     ]
+    },
+    {
+     "text": " comentário",
+     "timestamp": [
+      14.22,
+      14.66
+     ]
+    },
+    {
+     "text": " aqui",
+     "timestamp": [
+      14.66,
+      15.02
+     ]
+    },
+    {
+     "text": " embaixo.",
+     "timestamp": [
+      15.02,
+      15.24
+     ]
+    }
+   ],
+   "segments": [
+    {
+     "start": 12.1,
+     "end": 13.98,
+     "text": "Se você gostou dessa dica, deixe o",
+     "words": [
+      {
+       "start": 12.1,
+       "end": 12.28,
+       "text": "Se"
+      },
+      {
+       "start": 12.28,
+       "end": 12.48,
+       "text": "você"
+      },
+      {
+       "start": 12.48,
+       "end": 12.9,
+       "text": "gostou"
+      },
+      {
+       "start": 12.9,
+       "end": 13.1,
+       "text": "dessa"
+      },
+      {
+       "start": 13.1,
+       "end": 13.58,
+       "text": "dica,"
+      },
+      {
+       "start": 13.72,
+       "end": 13.88,
+       "text": "deixe"
+      },
+      {
+       "start": 13.88,
+       "end": 13.98,
+       "text": "o"
+      }
+     ]
+    },
+    {
+     "start": 13.98,
+     "end": 15.24,
+     "text": "seu comentário aqui embaixo.",
+     "words": [
+      {
+       "start": 13.98,
+       "end": 14.22,
+       "text": "seu"
+      },
+      {
+       "start": 14.22,
+       "end": 14.66,
+       "text": "comentário"
+      },
+      {
+       "start": 14.66,
+       "end": 15.02,
+       "text": "aqui"
+      },
+      {
+       "start": 15.02,
+       "end": 15.24,
+       "text": "embaixo."
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
