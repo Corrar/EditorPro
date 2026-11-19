@@ -17,6 +17,8 @@ import { shouldCheck, sourceIsBlack } from './blackCheck';
 const JUMP_RESEEK = 3;
 /** máximo de quadros decodificados/em decodificação à frente (Android: poucos buffers de saída no MediaCodec) */
 const MAX_AHEAD = 8;
+/** sem quadro novo por este tempo com amostras pendentes = decoder travado */
+const STALL_MS = 5000;
 
 /** o clipe pode ir pelo decodificador sequencial? (null = sim; senão, o motivo do fallback) */
 export function decodeFallbackReason(clip: Clip, asset: MediaAsset | undefined): string | null {
@@ -123,13 +125,18 @@ class ClipDecoder {
 
   /** quadro exibido no tempo de origem t (segundos) — válido até a próxima chamada */
   async frameAt(t: number): Promise<VideoFrame | null> {
-    const us = t * 1e6 + 1; // tolerância de 1 µs
+    const us = t * 1e6 + 1000; // tolerância de 1 ms (arredondamento de t = i/fps não pode cair no quadro anterior)
     const samples = this.track.v.samples;
     const fed = samples[Math.max(0, this.next - 1)]?.cts ?? 0;
     const back = this.current && us < this.current.timestamp - 1 && this.current.timestamp > samples[keyIndexFor(samples, t)].cts * 1e6;
     if (!this.dec || back || t - fed > JUMP_RESEEK) this.start(t);
     const dec = this.dec!;
+    let lastProgress = performance.now();
+    let seen = this.queue.length;
     for (;;) {
+      // decoder travado (hardware que para de entregar quadros): erro → o pool cai no <video>
+      if (this.queue.length !== seen || !dec.decodeQueueSize) { seen = this.queue.length; lastProgress = performance.now(); }
+      else if (performance.now() - lastProgress > STALL_MS) throw new Error(`decodificador parado há ${STALL_MS / 1000} s`);
       if (this.failure) throw this.failure;
       if (this.reader.failure) throw this.reader.failure;
       // avança: o quadro atual passa a ser o último decodificado com timestamp ≤ t

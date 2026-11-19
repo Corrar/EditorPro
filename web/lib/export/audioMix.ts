@@ -30,9 +30,10 @@ function segment(ctx: BaseAudioContext, buf: AudioBuffer, from: number, dur: num
 
 export const MIX_RATE = 48000;
 
-const bufferCache = new Map<string, Promise<AudioBuffer | null>>();
+/** cache POR MIXAGEM (antes era global e nunca liberava: vídeo longo = centenas de MB presos) */
+type BufferCache = Map<string, Promise<AudioBuffer | null>>;
 
-async function decodeAsset(asset: MediaAsset, ctx: BaseAudioContext): Promise<AudioBuffer | null> {
+async function decodeAsset(asset: MediaAsset, ctx: BaseAudioContext, bufferCache: BufferCache): Promise<AudioBuffer | null> {
   const key = `${asset.id}:${asset.url}`;
   let p = bufferCache.get(key);
   if (!p) {
@@ -66,9 +67,10 @@ export async function mixProjectAudio(
   const ctx = new OfflineAudioContext(2, length, MIX_RATE);
   let any = false;
   let done = 0;
+  const cache: BufferCache = new Map();
   for (const { clip, track, asset } of items) {
     if (opts.signal?.aborted) throw new DOMException('Exportação cancelada', 'AbortError');
-    const buf = await decodeAsset(asset, ctx);
+    const buf = await decodeAsset(asset, ctx, cache);
     done++;
     opts.onProgress?.(done / items.length);
     if (!buf) continue;
