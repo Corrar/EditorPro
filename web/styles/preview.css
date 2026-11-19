@@ -279,3 +279,5 @@
 .ep-pv-guides b { position:absolute; border:1.5px dashed #fff; border-radius:6px; box-shadow:0 0 0 1px rgba(0,0,0,.35); }
 /* com zoom (100%/200%), o toque no quadro rola o palco em vez de arrastar camadas */
 .ep-pv-box.zoomed .ep-pv-canvas { touch-action:pan-x pan-y pinch-zoom; }
+.ep-ex-prog .warn { margin:-6px 0 10px; font-size:12px; font-weight:600; color:var(--amberInk, #8a5a00); }
+.ep-ex-seg { flex-wrap:wrap; max-width:100%; }
