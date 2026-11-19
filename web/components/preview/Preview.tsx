@@ -189,7 +189,7 @@ export default function Preview() {
         if (!waitSinceRef.current) waitSinceRef.current = now;
         if (now - waitSinceRef.current < 2500) { showTime(st.playhead); window.setTimeout(requestStill, 120); return; }
       }
-      if (!draw(st.playhead) && now - (waitSinceRef.current || now) < 900) {
+      if (!draw(st.playhead) && now - (waitSinceRef.current || now) < 2500) {
         if (!waitSinceRef.current) waitSinceRef.current = now;
         window.setTimeout(requestStill, 120);
         return;
