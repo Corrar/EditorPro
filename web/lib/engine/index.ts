@@ -103,3 +103,5 @@ export { TEXT_ANIMATION_LABELS } from './text';
 export { MASK_LABELS } from './masks';
 export { SHAPE_LABELS } from './shapes';
 export { segEvents, segmentationStatus } from './segment';
+export { assetEvents, ensureFontLoaded, ensureProjectFonts } from './fonts';
+export { unitKindOf, unitFx, staggerStarts } from './textUnits';

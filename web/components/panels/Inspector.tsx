@@ -1,4 +1,5 @@
 'use client';
+import Icon from '@/components/ui/Icon';
 /* =====================================================================
    Inspetor — abas por ferramenta (Texto, Legendas, Efeitos, Transições,
    Áudio), editando a seleção via dispatch. Dono: sessão "shell".
@@ -48,7 +49,7 @@ function SelectionChip() {
         <b>{TYPE_LABEL[c.type]}</b>
         <span>{name}</span>
       </span>
-      <button type="button" className="ep-askai" onClick={ask} title="Pedir à IA para este clipe" aria-label="Pedir à IA para este clipe">✨ IA</button>
+      <button type="button" className="ep-askai" onClick={ask} title="Pedir à IA para este clipe" aria-label="Pedir à IA para este clipe"><Icon name="ai" size={14} /> IA</button>
     </span>
   );
 }

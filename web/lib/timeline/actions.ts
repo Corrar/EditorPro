@@ -5,13 +5,14 @@
    despacham UMA lista de ops (1 desfazer). Aplicam a trilha magnética.
    Outros módulos podem importar daqui (ex.: engine chama freezeFrame).
    ===================================================================== */
-import type { Clip, Id, MediaAsset, Marker, Project, Seconds, TrackKind } from '../types';
+import { useMemo } from 'react';
+import type { Clip, Id, MediaAsset, Marker, Project, Seconds, Track, TrackKind } from '../types';
 import { applyOps, clipEnd, findClip, TRACK_NAMES, type EditOp } from '../ops';
 import { useEditor } from '../store';
 import { emit } from '../events';
 import { formatTime, uid } from '../util';
 import {
-  copyItems, deleteOps, detachAudioOps, duplicateOps, mainTrackId, packOps, pasteOps, speedOps, splitOps,
+  copyItems, deleteOps, detachAudioOps, duplicateWithGroups, mainTrackId, packOps, pasteOps, speedOps, splitOps,
 } from './edit';
 import { useTimelineUi } from './ui';
 import { captureFrame } from '../media/tools';
@@ -66,7 +67,7 @@ export function removeClips(ids?: Id[], ripple = false) {
 
 export function duplicateClips(ids?: Id[]) {
   const st = useEditor.getState();
-  const { ops, newIds } = duplicateOps(st.project, ids ?? st.selection);
+  const { ops, newIds } = duplicateWithGroups(st.project, ids ?? st.selection);
   if (!ops.length) return;
   commit(ops);
   st.select(newIds);
@@ -218,3 +219,32 @@ export function askAiAboutCaption(segmentId: Id) {
   toast('Legenda enviada ao chat — escreva o que quer mudar', 'ok');
 }
 
+
+/* ---------- seleção (p/ a barra contextual do shell) ---------- */
+
+export function clearSelection() {
+  useEditor.getState().select([]);
+  useTimelineUi.getState().set({ captionSel: null, menu: null });
+}
+
+export interface SelectedClipInfo {
+  /** primeiro clipe selecionado (o "principal") */
+  clip: Clip;
+  track: Track;
+  /** tipo do clipe principal: 'video' | 'audio' | 'text' | 'image' | 'sticker' | 'shape' | 'adjustment' */
+  kind: Clip['type'];
+  /** todos os ids selecionados (grupo/multi) */
+  ids: Id[];
+  count: number;
+}
+
+/**
+ * Clipe selecionado na timeline (ou null). Seletores com referências estáveis:
+ * só re-renderiza quando a seleção ou o próprio clipe mudam.
+ */
+export function useSelectedClip(): SelectedClipInfo | null {
+  const ids = useEditor((s) => s.selection);
+  const clip = useEditor((s) => (s.selection[0] ? findClip(s.project, s.selection[0])?.clip ?? null : null));
+  const track = useEditor((s) => (s.selection[0] ? findClip(s.project, s.selection[0])?.track ?? null : null));
+  return useMemo(() => (clip && track ? { clip, track, kind: clip.type, ids, count: ids.length } : null), [clip, track, ids]);
+}

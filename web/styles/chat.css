@@ -123,8 +123,8 @@
   .ep-ch-foot { padding-left:12px; padding-right:12px; }
   .ep-ch-hint { display:none; }
   .ep-ch-input textarea { font-size:16px; } /* iOS não dá zoom com ≥16px */
-  .ep-ch-aicard .d { display:none; }
 }
+@container epch (max-width: 340px) { .ep-ch-aicard .d { display:none; } }
 @media (pointer: coarse) {
   .ep-ch-input textarea { font-size:16px; }
   .ep-ch-chip.ep-pill2 { height:44px; font-size:14px; padding:0 17px; }

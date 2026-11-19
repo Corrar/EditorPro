@@ -484,3 +484,58 @@ export function markerSnapPoints(p: Project, assets: Record<Id, MediaAsset>, exc
   }
   return pts.concat(beatTimes(p, assets));
 }
+
+/* ---------- grupos (clipes de um mesmo modelo compartilham groupId) ---------- */
+
+/** expande ids para incluir todos os clipes dos grupos tocados (ordem estável, sem repetição) */
+export function expandGroups(p: Project, ids: Id[]): Id[] {
+  const groups = new Set<Id>();
+  for (const id of ids) {
+    const g = findClip(p, id)?.clip.groupId;
+    if (g) groups.add(g);
+  }
+  if (!groups.size) return ids;
+  const out = new Set(ids);
+  for (const t of p.tracks) for (const c of t.clips) if (c.groupId && groups.has(c.groupId)) out.add(c.id);
+  return [...out];
+}
+
+/** grupos inteiros contidos na seleção: groupId -> clipes */
+export function groupsIn(p: Project, ids: Id[]): Map<Id, Clip[]> {
+  const sel = new Set(ids);
+  const map = new Map<Id, Clip[]>();
+  for (const t of p.tracks) for (const c of t.clips) if (c.groupId) {
+    const arr = map.get(c.groupId) ?? [];
+    arr.push(c);
+    map.set(c.groupId, arr);
+  }
+  for (const [g, cs] of map) if (!cs.every((c) => sel.has(c.id))) map.delete(g);
+  return map;
+}
+
+/**
+ * duplica preservando grupos: um grupo inteiro selecionado é copiado em bloco logo após o fim
+ * do grupo (mesmo arranjo entre trilhas) com um groupId novo; o resto duplica clipe a clipe.
+ */
+export function duplicateWithGroups(p: Project, ids: Id[]): { ops: EditOp[]; newIds: Id[] } {
+  const groups = groupsIn(p, ids);
+  const inGroup = new Set([...groups.values()].flat().map((c) => c.id));
+  const ops: EditOp[] = [];
+  const newIds: Id[] = [];
+  for (const [, cs] of groups) {
+    const g0 = Math.min(...cs.map((c) => c.start));
+    const g1 = Math.max(...cs.map(clipEnd));
+    const offset = g1 - g0;
+    const ng = uid('grp');
+    for (const c of cs) {
+      const f = findClip(p, c.id);
+      if (!f || f.track.locked) continue;
+      const newId = uid('clip');
+      ops.push({ op: 'duplicate_clip', clipId: c.id, newId, start: c.start + offset });
+      ops.push({ op: 'update_clip', clipId: newId, patch: { groupId: ng } });
+      newIds.push(newId);
+    }
+  }
+  const rest = duplicateOps(p, ids.filter((id) => !inGroup.has(id)));
+  return { ops: [...ops, ...rest.ops], newIds: [...newIds, ...rest.newIds] };
+}

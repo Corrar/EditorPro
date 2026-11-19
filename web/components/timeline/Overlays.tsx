@@ -4,9 +4,10 @@ import { useEffect, useRef, useState } from 'react';
 import { useEditor } from '@/lib/store';
 import { findClip, clipEnd } from '@/lib/ops';
 import { useTimelineUi } from '@/lib/timeline/ui';
-import { IAsk, IAudioSplit, IClipboard, ICopy, IDiamond, IEye, IEyeOff, IGauge, ILock, IMute, IRipple, ISnowflake, ISparkle, ISplit, ITrash, IUnlock, IVolume } from './icons';
+import { ISliders, IAsk, IAudioSplit, IClipboard, ICopy, IDiamond, IEye, IEyeOff, IGauge, ILock, IMute, IRipple, ISnowflake, ISparkle, ISplit, ITrash, IUnlock, IVolume } from './icons';
 import { askAiAboutCaption, askAiAboutClips, copyClips, detachAudio, freezeFrame, pasteClips, removeClips, setSpeed, toggleKeyframe } from '@/lib/timeline/actions';
 import { supportsKeyframes } from '@/lib/timeline/keyframes';
+import { expandGroups } from '@/lib/timeline/edit';
 
 export function LiveBanner() {
   const running = useEditor((s) => s.live.running);
@@ -112,6 +113,11 @@ export function ClipMenu({ actions }: { actions: MenuActions }) {
     <div ref={ref} className="ep-tl-menu" style={{ left: x, top: y }} role="menu" onContextMenu={(e) => e.preventDefault()}>
       <div className="ep-tl-menuhead">{ids.length > 1 ? `${ids.length} clipes selecionados` : found.track.name}</div>
       <button role="menuitem" onClick={run(() => askAiAboutClips(ids))}><IAsk size={14} /> Perguntar à IA sobre isto</button>
+      {c.groupId && (ids.length > 1 ? (
+        <button role="menuitem" onClick={run(() => useEditor.getState().select([clipId]))}><ISliders size={14} /> Editar só este <kbd>Alt</kbd></button>
+      ) : (
+        <button role="menuitem" onClick={run(() => useEditor.getState().select(expandGroups(project, [clipId])))}><ISliders size={14} /> Selecionar o modelo inteiro</button>
+      ))}
       <div className="ep-tl-menusep" />
       <button role="menuitem" disabled={!canSplit || locked} onClick={run(() => actions.split(ids))}>
         <ISplit size={14} /> Dividir no cursor <kbd>S</kbd>

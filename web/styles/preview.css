@@ -47,26 +47,25 @@
 .ep-pv-safe .title-safe { position:absolute; inset:10%; border:1.5px dashed rgba(255,255,255,.7); border-radius:6px; }
 .ep-pv-safe .action-safe { position:absolute; inset:5%; border:1px dashed rgba(242,104,31,.85); border-radius:6px; }
 
-/* estado vazio — texto curto e que se adapta à largura do quadro */
-.ep-pv-empty { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; text-align:center; padding:20px 14px;
-  background:radial-gradient(120% 70% at 50% 25%, rgba(242,104,31,.22), transparent 70%), #141416; color:#C9CBCF; }
-.ep-pv-empty .ic { width:56px; height:56px; border-radius:50%; display:grid; place-items:center; background:rgba(242,104,31,.16); color:#FFAE7D; margin-bottom:4px; }
-.ep-pv-empty h4 { font-size:17px; font-weight:800; color:#fff; letter-spacing:-.02em; line-height:1.2; text-wrap:balance; }
-.ep-pv-empty p { font-size:12.5px; line-height:1.45; max-width:220px; color:#A9ACB1; text-wrap:balance; overflow-wrap:normal; word-break:keep-all; hyphens:none; }
-.ep-pv-upload { display:inline-flex; align-items:center; justify-content:center; gap:8px; margin-top:8px; min-height:46px; padding:0 20px; border-radius:999px;
-  background:var(--green); color:#fff; font-size:14px; font-weight:700; cursor:pointer; white-space:nowrap; box-shadow:0 10px 24px rgba(242,104,31,.35); transition:transform .12s, filter .15s; }
+/* estado vazio — card neutro, texto curto que cabe em quadro estreito */
+.ep-pv-empty { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; text-align:center; padding:16px 12px;
+  background:#17181A; color:#C4C6CA; }
+.ep-pv-empty .ic { width:52px; height:52px; border-radius:50%; display:grid; place-items:center; background:rgba(255,255,255,.08); color:#F5F5F3; margin-bottom:6px; }
+.ep-pv-empty h4 { font-size:17px; font-weight:800; color:#fff; letter-spacing:-.02em; line-height:1.2; white-space:nowrap; }
+.ep-pv-empty p { font-size:12.5px; line-height:1.4; color:#8D9197; white-space:nowrap; }
+.ep-pv-upload { display:inline-flex; align-items:center; justify-content:center; gap:8px; margin-top:12px; min-height:44px; padding:0 20px; border-radius:999px;
+  background:var(--green); color:#fff; font-size:14px; font-weight:700; cursor:pointer; white-space:nowrap; box-shadow:0 8px 20px rgba(242,104,31,.32); transition:transform .12s, filter .15s; }
 .ep-pv-upload:hover { filter:brightness(1.06); }
 .ep-pv-upload:active { transform:scale(.97); }
-@container (max-width: 240px) {
-  .ep-pv-empty p { display:none; }
+@container (max-width: 200px) {
   .ep-pv-empty h4 { font-size:15px; }
-  .ep-pv-empty .ic { width:46px; height:46px; }
-  .ep-pv-upload { padding:0 14px; font-size:13px; min-height:42px; }
+  .ep-pv-empty .ic { width:44px; height:44px; }
+  .ep-pv-upload { padding:0 14px; font-size:13px; }
 }
-@container (max-width: 170px) {
-  .ep-pv-upload span { display:none; }
-  .ep-pv-upload { width:46px; padding:0; }
-  .ep-pv-empty h4 { font-size:13.5px; }
+@container (max-width: 150px) {
+  .ep-pv-empty h4 { font-size:13px; }
+  .ep-pv-empty p { font-size:11px; }
+  .ep-pv-upload { padding:0 10px; font-size:12px; min-height:40px; }
 }
 
 /* ---------- controles: pílula flutuante ---------- */
@@ -85,14 +84,16 @@
 .ep-pv-scrub::before { content:''; position:absolute; left:0; right:0; height:6px; border-radius:999px; background:var(--tile); }
 .ep-pv-scrub .fill { position:absolute; left:0; right:0; height:6px; border-radius:999px; background:var(--green); transform-origin:left center; transform:scaleX(0); }
 .ep-pv-tools { flex:none; display:flex; gap:6px; }
-/* pílula estreita: barra vai para uma linha própria em cima */
-@container (max-width: 520px) {
-  .ep-pv-controls { flex-wrap:wrap; }
-}
-@media (max-width: 640px) {
-  .ep-pv-controls { flex-wrap:wrap; border-radius:28px; padding:8px 10px 8px; row-gap:2px; }
-  .ep-pv-scrub { order:-1; flex-basis:100%; height:24px; margin:0 6px; }
-  .ep-pv-tools { margin-left:auto; }
+/* celular (layout empilhado ≤899px): uma linha só e baixa — barra fina em cima, play 44px,
+   tempo, Apontar / Área segura / Tela cheia (Exportar e "voltar ao início" saem: já estão no topo / na barra) */
+@media (max-width: 899px) {
+  .ep-pv-controls { position:relative; flex-wrap:nowrap; width:100%; gap:6px; border-radius:22px; padding:10px 8px 6px 8px; }
+  .ep-pv-scrub { position:absolute; left:18px; right:18px; top:-6px; height:18px; min-width:0; flex:none; margin:0; }
+  .ep-pv-scrub::before, .ep-pv-scrub .fill { height:3px; }
+  .ep-pv-play { width:44px; height:44px; box-shadow:0 6px 16px rgba(242,104,31,.32); }
+  .ep-pv-rew, .ep-pv-exp { display:none; }
+  .ep-pv-tools { margin-left:auto; gap:4px; }
+  .ep-pv-time { font-size:12.5px; }
 }
 
 /* "apontar para qualquer coisa" */
@@ -107,20 +108,19 @@
 /* palco baixo (celular deitado / timeline alta): compacta */
 @media (max-height: 560px) {
   .ep-pv { padding:8px 10px; gap:8px; }
-  .ep-pv-box { padding:8px; border-radius:18px; }
   .ep-pv-empty p { display:none; }
-  .ep-pv-controls { flex-wrap:nowrap; border-radius:999px; padding:4px 6px; }
-  .ep-pv-scrub { order:0; flex-basis:auto; }
   .ep-pv-play { width:44px; height:44px; }
 }
+@media (max-width: 899px) {
+  /* celular: sem caixa extra em volta do quadro — ganha largura */
+  .ep-pv { padding:8px 10px; gap:8px; }
+  .ep-pv-box { padding:0; background:transparent; border-radius:0; }
+}
 @media (max-width: 700px) {
-  .ep-pv { padding:10px; gap:10px; }
-  .ep-pv-box { padding:10px; border-radius:20px; }
   .ep-pv-live .txt { display:none; }
 }
-@media (max-width: 480px) {
-  .ep-pv-rew, .ep-pv-time .tot, .ep-pv-time i { display:none; }
-  .ep-pv-tools { gap:4px; }
+@media (max-width: 380px) {
+  .ep-pv-time .tot, .ep-pv-time i { display:none; }
 }
 @media (pointer: coarse) {
   .ep-pv-controls .ep-circle.sm { width:44px; height:44px; }

@@ -51,6 +51,7 @@
   Root Directory = `web`. URL: **https://editorpro-ia.vercel.app** (público, com login próprio;
   previews ficam atrás do login da Vercel). Produção acompanha a branch `claude/ai-video-editor-r0tr67`
   (push nela = deploy). Envs: `ANTHROPIC_MODEL`, `DASH_PASSWORD` (sensível), `ANTHROPIC_API_KEY` (Bruno coloca).
+- **Limite do plano grátis da Vercel: 100 deploys/dia.** `web/vercel.json` desliga deploy das branches de módulo; só a integração publica. Agrupar integrações (evitar muitos pushes seguidos na integração).
 - Login por senha (`middleware.ts` + `lib/auth.ts`, portado do Radar) protege `/`, `/dev/*`, `/api/ai/*` e `/api/gen/*`.
 - Sem backend extra: as rotas `/api/ai/*` do Next rodam como funções da Vercel. Render/Neon/R2 só
   quando houver salvar na nuvem (projetos em Neon, mídia/efeitos em R2) — hoje tudo fica no navegador.

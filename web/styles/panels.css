@@ -336,3 +336,9 @@
 .ep-mini.ok { color:#2f8a4c; }
 .ep-menucell .c.nb { background:var(--red); color:#fff; }
 .ep-bnitem .bdot { position:absolute; top:-4px; right:-7px; width:8px; height:8px; border-radius:50%; background:var(--red); border:1.5px solid var(--card); }
+.ep-rot90 { transform:rotate(90deg); }
+.ep-dot { display:inline-block; width:12px; height:12px; border-radius:50%; vertical-align:-1px; }
+.ep-askai, .ep-segask, .ep-mini { display:inline-flex; align-items:center; gap:5px; }
+.ep-segask { justify-content:center; color:var(--green); }
+.ep-act > span { color:var(--ink); }
+.ep-act.on > span, .ep-act.danger > span { color:inherit; }

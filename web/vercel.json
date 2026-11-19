@@ -1,1 +1,12 @@
-{"framework":"nextjs"}
+{
+  "framework": "nextjs",
+  "git": {
+    "deploymentEnabled": {
+      "claude/ai-video-editor-r0tr67-timeline": false,
+      "claude/ai-video-editor-r0tr67-engine": false,
+      "claude/ai-video-editor-r0tr67-ai": false,
+      "claude/ai-video-editor-r0tr67-shell": false,
+      "claude/ai-video-editor-r0tr67-library": false
+    }
+  }
+}

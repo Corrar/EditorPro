@@ -23,6 +23,9 @@ export const FILTER_KINDS: FilterKind[] = [
 export const TEXT_ANIMATIONS: TextAnimation[] = [
   'none', 'fade', 'pop', 'slide-up', 'typewriter', 'bounce', 'karaoke',
   'slide-down', 'slide-left', 'slide-right', 'zoom', 'blur', 'wave', 'glitch', 'flicker', 'spin',
+  'word-pop', 'word-fade', 'word-slide', 'word-bounce', 'word-drop', 'word-highlight',
+  'char-wave', 'char-fade', 'char-pop', 'char-typewriter',
+  'scale-in', 'blur-in', 'stomp', 'drop', 'highlight-sweep', 'underline-draw', 'box-reveal', 'shake',
 ];
 export const EFFECT_KINDS: VisualEffectKind[] = [
   'shake', 'glitch', 'rgb-split', 'zoom-pulse', 'vhs', 'film-grain', 'light-leak', 'pixelate', 'mirror', 'kaleidoscope',
@@ -166,6 +169,14 @@ export function sanitizeTextStyle(v: unknown): Partial<TextStyle> | undefined {
   const lh = clampNum(v.lineHeight, 0.7, 3); if (lh !== undefined) out.lineHeight = lh;
   const br = clampNum(v.backgroundRadius, 0, 80); if (br !== undefined) out.backgroundRadius = br;
   const op = clampNum(v.opacity, 0, 1); if (op !== undefined) out.opacity = op;
+  const shc = color(v.shadowColor); if (shc !== undefined) out.shadowColor = shc;
+  const shb = clampNum(v.shadowBlur, 0, 120); if (shb !== undefined) out.shadowBlur = shb;
+  if (isObj(v.shadowOffset)) out.shadowOffset = { x: clampNum(v.shadowOffset.x, -80, 80) ?? 0, y: clampNum(v.shadowOffset.y, -80, 80) ?? 0 };
+  const bp = clampNum(v.backgroundPadding, 0, 120); if (bp !== undefined) out.backgroundPadding = bp;
+  if (isObj(v.glow)) {
+    const gc = color(v.glow.color);
+    if (gc) out.glow = { color: gc, blur: clampNum(v.glow.blur, 0, 120) ?? 24 };
+  } else if (v.glow === null) out.glow = undefined;
   if (isObj(v.gradient)) {
     const from = color(v.gradient.from); const to = color(v.gradient.to);
     if (from && to) out.gradient = { from, to, angle: clampNum(v.gradient.angle, -360, 360) ?? 90 };
@@ -188,6 +199,15 @@ export function sanitizeCaptionStyle(v: unknown, base?: CaptionStyle): Partial<C
   const position = sanitizePosition(v.position, base?.position); if (position) out.position = position;
   const animation = oneOf(v.animation, TEXT_ANIMATIONS); if (animation) out.animation = animation;
   const maxWords = clampNum(v.maxWords, 1, 12); if (maxWords !== undefined) out.maxWords = Math.round(maxWords);
+  if (isObj(v.wordBox)) {
+    const wc = color(v.wordBox.color);
+    if (wc) out.wordBox = { color: wc, radius: clampNum(v.wordBox.radius, 0, 60) ?? 12, padding: clampNum(v.wordBox.padding, 0, 60) ?? 10 };
+  } else if (v.wordBox === null) out.wordBox = undefined;
+  const as = clampNum(v.activeScale, 0.5, 2); if (as !== undefined) out.activeScale = as;
+  const io = clampNum(v.inactiveOpacity, 0, 1); if (io !== undefined) out.inactiveOpacity = io;
+  const ae = bool(v.autoEmoji); if (ae !== undefined) out.autoEmoji = ae;
+  const lines = clampNum(v.lines, 1, 2); if (lines !== undefined) out.lines = Math.round(lines) as 1 | 2;
+  const jit = clampNum(v.jitter, 0, 15); if (jit !== undefined) out.jitter = jit;
   return Object.keys(out).length ? out : undefined;
 }
 

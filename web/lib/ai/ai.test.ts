@@ -374,3 +374,30 @@ describe('demo: chat', () => {
     expect(clip.label).toBe('gancho');
   });
 });
+
+describe('contrato: biblioteca profissional', () => {
+  it('aceita animações por palavra/letra, estilo pro, wordBox e groupId', async () => {
+    const { sanitizeCaptionStyle, sanitizeTextStyle, TEXT_ANIMATIONS } = await import('./sanitize');
+    expect(TEXT_ANIMATIONS).toContain('word-pop');
+    expect(TEXT_ANIMATIONS).toContain('char-typewriter');
+    const cs = sanitizeCaptionStyle({ animation: 'word-pop', wordBox: { color: '#F2681F', radius: 99 }, activeScale: 9, inactiveOpacity: 0.4, autoEmoji: true, lines: 3, jitter: 4 });
+    expect(cs).toMatchObject({ animation: 'word-pop', wordBox: { color: '#F2681F', radius: 60, padding: 10 }, activeScale: 2, inactiveOpacity: 0.4, autoEmoji: true, lines: 2, jitter: 4 });
+    const ts = sanitizeTextStyle({ glow: { color: '#00FFFF', blur: 30 }, shadowColor: '#000000', shadowBlur: 12, shadowOffset: { x: 4, y: 999 }, backgroundPadding: 16 });
+    expect(ts).toMatchObject({ glow: { color: '#00FFFF', blur: 30 }, shadowBlur: 12, shadowOffset: { x: 4, y: 80 }, backgroundPadding: 16 });
+  });
+});
+
+describe('groupId', () => {
+  it('add_clip e update_clip mantêm groupId', () => {
+    const r = sanitizeOps([
+      { op: 'add_clip', clip: { type: 'text', text: 'Bruno', start: 1, duration: 3, groupId: 'lt1', animation: 'word-slide' } },
+      { op: 'update_clip', clipId: 'c1', patch: { groupId: 'lt1' } },
+    ], base(), assets);
+    expect(r.ops).toHaveLength(2);
+    const p = applyOps(base(), r.ops).project;
+    const txt = p.tracks.flatMap((t) => t.clips).find((c) => c.type === 'text') as TextClip;
+    expect(txt.groupId).toBe('lt1');
+    expect(txt.animation).toBe('word-slide');
+    expect(findClip(p, 'c1')?.clip.groupId).toBe('lt1');
+  });
+});

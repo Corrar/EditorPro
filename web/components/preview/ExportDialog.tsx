@@ -10,7 +10,7 @@ import {
   exportVideo, safeFileName, shareFile, toFCPXML, toSRT, toVTT, type ExportOptions,
 } from '@/lib/export';
 import { formatTime } from '@/lib/util';
-import { IcAudio, IcCaption, IcClose, IcDownload, IcExport, IcImage, IcProject } from './icons';
+import Icon from '@/components/ui/Icon';
 
 type Phase = 'idle' | 'running' | 'done' | 'error';
 
@@ -131,7 +131,7 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
             <b id="ep-ex-title">Exportar</b>
             <span>{project.name} · {formatTime(duration, { decimals: true })}</span>
           </div>
-          <button className="ep-circle" onClick={close} aria-label="Fechar" disabled={busy}><IcClose size={18} /></button>
+          <button className="ep-circle" onClick={close} aria-label="Fechar" disabled={busy}><Icon name="close" size={18}/></button>
         </div>
 
         <div className="ep-ex-sect">
@@ -195,7 +195,7 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
               {canShareFiles() && (
                 <button className="ep-ex-pill" onClick={() => shareFile(result.blob, result.name)}>Compartilhar</button>
               )}
-              <a className="ep-ex-pill accent" href={result.url} download={result.name} target="_blank" rel="noopener"><IcDownload size={16} /> Baixar</a>
+              <a className="ep-ex-pill accent" href={result.url} download={result.name} target="_blank" rel="noopener"><Icon name="download" size={16}/> Baixar</a>
             </div>
           </div>
         )}
@@ -204,29 +204,29 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
           <button className="ep-ex-cta cancel" onClick={cancel}>Cancelar exportação</button>
         ) : (
           <button className="ep-cta accent ep-ex-cta" onClick={start} disabled={duration <= 0 || path?.path === 'none'}>
-            <IcExport size={20} /> {phase === 'done' ? 'Exportar de novo' : 'Exportar vídeo'}
+            <Icon name="export" size={20}/> {phase === 'done' ? 'Exportar de novo' : 'Exportar vídeo'}
           </button>
         )}
 
         <span className="ep-ex-h sep">Outros formatos</span>
         <div className="ep-rows">
           <button className="ep-row" disabled={duration <= 0 || busy} onClick={() => startAudio('wav')}>
-            <span className="ep-ex-rowtxt"><b>Só áudio (.wav)</b><span className="meta">Sem perdas</span></span><IcAudio size={20} />
+            <span className="ep-ex-rowtxt"><b>Só áudio (.wav)</b><span className="meta">Sem perdas</span></span><Icon name="music" size={20}/>
           </button>
           <button className="ep-row" disabled={duration <= 0 || busy || !m4a} onClick={() => startAudio('m4a')}>
-            <span className="ep-ex-rowtxt"><b>Só áudio (.m4a)</b><span className="meta">{m4a ? 'AAC, arquivo menor' : 'Indisponível neste navegador'}</span></span><IcAudio size={20} />
+            <span className="ep-ex-rowtxt"><b>Só áudio (.m4a)</b><span className="meta">{m4a ? 'AAC, arquivo menor' : 'Indisponível neste navegador'}</span></span><Icon name="music" size={20}/>
           </button>
           <button className="ep-row" disabled={duration <= 0 || frameBusy} onClick={saveFrame}>
-            <span className="ep-ex-rowtxt"><b>{frameBusy ? 'Gerando imagem…' : 'Quadro atual (.png)'}</b><span className="meta">Capa ou miniatura da posição do cursor</span></span><IcImage size={20} />
+            <span className="ep-ex-rowtxt"><b>{frameBusy ? 'Gerando imagem…' : 'Quadro atual (.png)'}</b><span className="meta">Capa ou miniatura da posição do cursor</span></span><Icon name="image" size={20}/>
           </button>
           <button className="ep-row" disabled={!cues} onClick={() => downloadBlob(toSRT(project), safeFileName(project.name, 'srt'), 'application/x-subrip;charset=utf-8')}>
-            <span className="ep-ex-rowtxt"><b>Legendas (.srt)</b><span className="meta">{cues ? `${cues} blocos · YouTube, CapCut, Premiere` : 'Sem legendas no projeto'}</span></span><IcCaption size={20} />
+            <span className="ep-ex-rowtxt"><b>Legendas (.srt)</b><span className="meta">{cues ? `${cues} blocos · YouTube, CapCut, Premiere` : 'Sem legendas no projeto'}</span></span><Icon name="captions" size={20}/>
           </button>
           <button className="ep-row" disabled={!cues} onClick={() => downloadBlob(toVTT(project), safeFileName(project.name, 'vtt'), 'text/vtt;charset=utf-8')}>
-            <span className="ep-ex-rowtxt"><b>Legendas web (.vtt)</b><span className="meta">Para players HTML5</span></span><IcCaption size={20} />
+            <span className="ep-ex-rowtxt"><b>Legendas web (.vtt)</b><span className="meta">Para players HTML5</span></span><Icon name="captions" size={20}/>
           </button>
           <button className="ep-row" disabled={duration <= 0} onClick={() => downloadBlob(toFCPXML(project, assets), safeFileName(project.name, 'fcpxml'), 'application/xml;charset=utf-8')}>
-            <span className="ep-ex-rowtxt"><b>DaVinci / Final Cut (.fcpxml)</b><span className="meta">Cortes, textos e legendas; reconecte a mídia ao abrir</span></span><IcProject size={20} />
+            <span className="ep-ex-rowtxt"><b>DaVinci / Final Cut (.fcpxml)</b><span className="meta">Cortes, textos e legendas; reconecte a mídia ao abrir</span></span><Icon name="projects" size={20}/>
           </button>
         </div>
       </div>
