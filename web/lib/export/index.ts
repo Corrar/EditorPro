@@ -48,6 +48,22 @@ export async function shareFile(blob: Blob, filename: string): Promise<boolean> 
   }
 }
 
+/** compartilha vários arquivos de uma vez (ex.: vídeo + capa); cai para só o primeiro se o navegador não aceitar todos */
+export async function shareFiles(items: { blob: Blob; name: string }[]): Promise<boolean> {
+  if (!items.length) return false;
+  try {
+    const files = items.map((i) => new File([i.blob], i.name, { type: i.blob.type }));
+    const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
+    if (nav.share && files.length > 1 && nav.canShare?.({ files })) {
+      await nav.share({ files, title: items[0].name });
+      return true;
+    }
+  } catch (e) {
+    if ((e as Error)?.name === 'AbortError') return true;
+  }
+  return shareFile(items[0].blob, items[0].name);
+}
+
 export function canShareFiles(): boolean {
   try {
     const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
