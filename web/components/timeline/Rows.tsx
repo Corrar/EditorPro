@@ -6,10 +6,12 @@ import { useEditor } from '@/lib/store';
 import { findClip } from '@/lib/ops';
 import { type RowInfo, useDims, useTimelineUi, useVisibleWindow } from '@/lib/timeline/ui';
 import { assetOf } from '@/lib/timeline/clip';
+import { emit } from '@/lib/events';
+import { formatTime } from '@/lib/util';
 import { keyframesOf } from '@/lib/timeline/keyframes';
 import { ClipView } from './ClipView';
 import { CaptionBody, ClipBody } from './ClipBody';
-import { ISliders, ISticker, IAudio, ICaptions, IEye, IEyeOff, ILock, IMute, IPlus, IText, IUnlock, IVideo, IVolume } from './icons';
+import { ISparkle, ISliders, ISticker, IAudio, ICaptions, IEye, IEyeOff, ILock, IMute, IPlus, IText, IUnlock, IVideo, IVolume } from './icons';
 
 /* ---------------- cabeçalho ---------------- */
 
@@ -134,14 +136,40 @@ function CaptionHeader({ height }: { height: number }) {
 
 /* ---------------- faixas ---------------- */
 
-function TrackLaneInner({ track, zoom, height, width }: { track: Track; zoom: number; height: number; width: number }) {
+const ADD_LINE: Record<TrackKind, { label: string; tool: string }> = {
+  video: { label: 'Adicionar mídia', tool: 'media' },
+  audio: { label: 'Adicionar áudio', tool: 'audio' },
+  text: { label: 'Adicionar texto', tool: 'text' },
+  overlay: { label: 'Adicionar sticker', tool: 'stickers' },
+  effect: { label: 'Adicionar ajuste', tool: 'adjust' },
+};
+
+function TrackLaneInner({ track, zoom, height, width, main }: { track: Track; zoom: number; height: number; width: number; main?: boolean }) {
   const [w0, w1] = useVisibleWindow(zoom);
   const hint = useTimelineUi((s) => s.dropHint?.rowId === track.id || (s.drag?.mode === 'move' && s.drag.trackId === track.id && !s.drag.newTrack));
+  const center = useTimelineUi((s) => s.dims.center);
+  const end = track.clips.reduce((m, c) => Math.max(m, c.start + c.duration), 0);
+  const Icon = TRACK_ICONS[track.kind] ?? IVideo;
   return (
-    <div className={`ep-tl-lane k-${track.kind}${track.hidden ? ' hidden' : ''}${track.locked ? ' locked' : ''}${hint ? ' hint' : ''}`} style={{ width, height }} data-row={track.id}>
+    <div className={`ep-tl-lane k-${track.kind}${track.hidden ? ' hidden' : ''}${track.locked ? ' locked' : ''}${hint ? ' hint' : ''}${main ? ' main' : ''}`} style={{ width, height }} data-row={track.id}>
       {track.clips.filter((c) => c.start <= w1 && c.start + c.duration >= w0).map((c) => (
         <ClipView key={c.id} clip={c} kind={track.kind} zoom={zoom} height={height} locked={!!track.locked} />
       ))}
+      {center && !track.clips.length && (
+        <button className="ep-tl-addline" onClick={() => emit('ep:open-tool', { tool: ADD_LINE[track.kind].tool })}>
+          <Icon size={15} /> <span>+ {ADD_LINE[track.kind].label}</span>
+        </button>
+      )}
+      {center && main && track.clips.length > 0 && (
+        <button
+          className="ep-tl-addend"
+          style={{ transform: `translate(${end * zoom + 10}px, -50%)` }}
+          onClick={() => emit('ep:open-tool', { tool: 'media' })}
+          aria-label="Adicionar mídia"
+        >
+          <IPlus size={20} />
+        </button>
+      )}
     </div>
   );
 }
@@ -155,9 +183,16 @@ function CaptionLane({ zoom, height, width }: { zoom: number; height: number; wi
   const sel = useTimelineUi((s) => s.captionSel);
   const drag = useTimelineUi((s) => (s.drag && s.drag.mode.startsWith('cap') ? (s.drag as { id: string; start: number; end: number }) : null));
   const compact = useTimelineUi((s) => s.dims.compact);
+  const center = useTimelineUi((s) => s.dims.center);
   return (
     <div className={`ep-tl-lane k-captions${enabled ? '' : ' hidden'}`} style={{ width, height }} data-row="captions">
-      {!allSegs.length && <span className="ep-tl-lanehint">{compact ? 'Sem legendas' : 'Sem legendas — gere no painel Legendas ou peça no chat'}</span>}
+      {!allSegs.length && (center ? (
+        <button className="ep-tl-addline" onClick={() => emit('ep:open-tool', { tool: 'captions' })}>
+          <ICaptions size={15} /> <span>+ Adicionar legendas</span>
+        </button>
+      ) : (
+        <span className="ep-tl-lanehint">{compact ? 'Sem legendas' : 'Sem legendas — gere no painel Legendas ou peça no chat'}</span>
+      ))}
       {segs.map((s) => {
         const st = drag?.id === s.id ? drag.start : s.start;
         const en = drag?.id === s.id ? drag.end : s.end;
@@ -191,7 +226,27 @@ function NewTrackLane({ height, width }: { height: number; width: number }) {
 /* ---------------- linhas ---------------- */
 
 export const Rows = memo(function Rows({ rows, zoom, width }: { rows: RowInfo[]; zoom: number; width: number }) {
-  const { headerW, compact } = useDims();
+  const { headerW, compact, center } = useDims();
+  const firstVideo = useEditor((s) => s.project.tracks.find((t) => t.kind === 'video')?.id);
+  if (center)
+    return (
+      <>
+        {rows.map((r) => (
+          <div key={r.id} className="ep-tl-row" style={{ top: r.top, height: r.height }}>
+            <div className="ep-tl-lead" style={{ width: headerW, height: r.height }}>
+              {r.id === firstVideo && <MainLead height={r.height} />}
+            </div>
+            {r.kind === 'captions' ? (
+              <CaptionLane zoom={zoom} height={r.height} width={width} />
+            ) : r.kind === 'new' ? (
+              <NewTrackLane height={r.height} width={width} />
+            ) : (
+              <TrackLane track={r.track!} zoom={zoom} height={r.height} width={width} main={r.id === firstVideo} />
+            )}
+          </div>
+        ))}
+      </>
+    );
   return (
     <>
       {rows.map((r) => (
@@ -284,12 +339,12 @@ export const PlayheadLine = memo(function PlayheadLine({ zoom, height, scrollRef
   const playing = useEditor((s) => s.playing);
   const live = useEditor((s) => s.live.running);
   const dragging = useTimelineUi((s) => !!s.drag);
-  const { headerW: HEADER_W } = useDims();
+  const { headerW: HEADER_W, center } = useDims();
   const last = useRef(t);
 
   useEffect(() => {
     const el = scrollRef.current;
-    if (!el || dragging) return;
+    if (!el || dragging || center) return; // modo centro: a própria timeline mantém o playhead no meio
     const x = HEADER_W + t * zoom;
     const left = el.scrollLeft + HEADER_W;
     const right = el.scrollLeft + el.clientWidth;
@@ -442,3 +497,47 @@ export const GroupOutlines = memo(function GroupOutlines({ project, rows, zoom }
     </>
   );
 });
+
+/* ---------------- modo celular: "Capa" e "Editar com IA" antes do início da trilha principal ---------------- */
+
+/** id do marcador usado ANTES de existir Project.coverTime (migrado automaticamente pela Timeline) */
+export const COVER_MARKER_ID = 'cover';
+
+function MainLead({ height }: { height: number }) {
+  const coverTime = useEditor((s) => s.project.coverTime);
+  const thumb = useEditor((s) => {
+    const t = coverTime ?? 0;
+    const main = s.project.tracks.find((tr) => tr.kind === 'video');
+    const c = main?.clips.find((cl) => t >= cl.start && t < cl.start + cl.duration) ?? main?.clips[0];
+    if (!c || !('assetId' in c) || !c.assetId) return undefined;
+    const a = s.assets[c.assetId];
+    if (!a) return undefined;
+    if (c.type === 'image') return a.thumbnails?.[0] ?? a.url;
+    const th = a.thumbnails ?? [];
+    if (!th.length || c.type !== 'video') return undefined;
+    const src = c.in + Math.max(0, t - c.start) * (c.speed || 1);
+    return th[Math.max(0, Math.min(th.length - 1, Math.floor((src / Math.max(a.duration, 0.001)) * th.length)))];
+  });
+  const h = Math.max(36, height - 6);
+  const setCover = () => {
+    const st = useEditor.getState();
+    st.dispatch({ op: 'set_project', patch: { coverTime: st.playhead }, explain: 'Definindo a capa' });
+    emit('ep:toast', { text: `Capa definida em ${formatTime(st.playhead)} — role e toque de novo para trocar`, kind: 'ok' });
+  };
+  return (
+    <div className="ep-tl-mainlead">
+      <button className="ep-tl-leadbtn ai" style={{ height: h }} onClick={() => { useEditor.getState().setChatContext(undefined); emit('ep:open-ai-popup', {}); }}>
+        <ISparkle size={16} />
+        <span>Editar com IA</span>
+      </button>
+      <button
+        className="ep-tl-leadbtn cover"
+        style={{ height: h, backgroundImage: thumb ? `url("${thumb}")` : undefined }}
+        onClick={setCover}
+        title="Usa o quadro no cursor como capa"
+      >
+        <span>Capa</span>
+      </button>
+    </div>
+  );
+}

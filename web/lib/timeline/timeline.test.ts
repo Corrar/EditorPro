@@ -182,7 +182,8 @@ describe('responsivo', () => {
     expect(desk.headerW).toBe(204);
     const phone = dimsFor(390, 300, true);
     expect(phone.compact).toBe(true);
-    expect(phone.headerW).toBeLessThan(64);
+    expect(phone.center).toBe(true);
+    expect(phone.headerW).toBe(195); // metade da largura (espaço antes do t=0)
     expect(phone.rowH.video).toBeLessThan(desk.rowH.video);
     const low = dimsFor(1200, 150, false);
     expect(low.short).toBe(true);
@@ -373,5 +374,14 @@ describe('grupos', () => {
     expect(copies.map((c) => c.start).sort()).toEqual([5, 6]); // deslocados pela largura do grupo (5s)
     expect(new Set(copies.map((c) => c.groupId)).size).toBe(1);
     expect(copies[0].groupId).not.toBe('g1');
+  });
+});
+
+describe('capa', () => {
+  it('coverTime via set_project substitui o marcador legado', () => {
+    const p = applyOps(mock(), [{ op: 'add_marker', marker: { id: 'cover', t: 3, kind: 'chapter', label: 'Capa' } }]).project;
+    const q = applyOps(p, [{ op: 'set_project', patch: { coverTime: 3 } }, { op: 'remove_marker', markerId: 'cover' }]).project;
+    expect(q.coverTime).toBe(3);
+    expect(q.markers?.some((m) => m.id === 'cover')).toBe(false);
   });
 });
