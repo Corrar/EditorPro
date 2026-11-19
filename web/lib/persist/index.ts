@@ -8,11 +8,11 @@ import { create } from 'zustand';
 import { useEditor } from '../store';
 import type { MediaAsset } from '../types';
 import { deleteProject as dbDelete, getBlob, getKV, getProjectRecord, idbAvailable, listProjects, saveProjectRecord, setKV } from './db';
-import { buildRecord, debounce, isBlank } from './pure';
+import { buildRecord, debounce, isBlank, proxyBlobId } from './pure';
 
 export { listProjects, putBlob, getBlob, gcBlobs } from './db';
 export type { ProjectSummary, ProjectRecord } from './pure';
-export { relativeTime } from './pure';
+export { relativeTime, proxyBlobId } from './pure';
 
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error' | 'unavailable';
 
@@ -70,7 +70,10 @@ export function flushAutosave(): void {
 
 /** libera as object URLs dos assets em memória */
 export function revokeAssetUrls(assets: Record<string, MediaAsset>): void {
-  for (const a of Object.values(assets)) if (a.url?.startsWith('blob:')) URL.revokeObjectURL(a.url);
+  for (const a of Object.values(assets)) {
+    if (a.url?.startsWith('blob:')) URL.revokeObjectURL(a.url);
+    if (a.proxyUrl?.startsWith('blob:')) URL.revokeObjectURL(a.proxyUrl);
+  }
 }
 
 /** abre um projeto salvo: carrega projeto, mensagens e recria os object URLs */
@@ -82,11 +85,19 @@ export async function openProject(id: string): Promise<boolean> {
   await Promise.all(
     rec.assets.map(async (a) => {
       let url: string | undefined;
+      let proxyUrl: string | undefined;
       try {
         const blob = await getBlob(a.id);
         if (blob) url = URL.createObjectURL(blob);
       } catch {}
-      assets[a.id] = { ...a, url };
+      if (a.proxyStatus === 'ready') {
+        try {
+          const pb = await getBlob(proxyBlobId(a.id));
+          if (pb) proxyUrl = URL.createObjectURL(pb);
+        } catch {}
+      }
+      // proxy perdido: volta para a original (sem estado)
+      assets[a.id] = { ...a, url, proxyUrl, proxyStatus: a.proxyStatus === 'ready' && !proxyUrl ? undefined : a.proxyStatus };
     }),
   );
   const st = useEditor.getState();

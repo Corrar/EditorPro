@@ -13,6 +13,7 @@ import { putBlob } from '../persist/db';
 import { useEditor } from '../store';
 import type { MediaAsset, MediaRole } from '../types';
 import { uid } from '../util';
+import { startPreviewProxy } from './proxy';
 import { defaultRoleFor, mediaKindOf, peakCountFor, reducePeaks, thumbCountFor, thumbSize, thumbTimes } from './pure';
 
 /* ---------- fila de importação (p/ a UI mostrar progresso) ---------- */
@@ -161,6 +162,7 @@ export async function ingestFile(file: File, role?: MediaRole): Promise<MediaAss
         asset = { ...asset, width: v.videoWidth || undefined, height: v.videoHeight || undefined };
       }
       addAsset(asset);
+      if (kind === 'video') startPreviewProxy(file, asset); // cópia leve em segundo plano (vídeo pesado)
       if (kind === 'video') {
         setJob({ id, name: file.name, stage: 'Gerando miniaturas…' });
         const thumbnails = await videoThumbnails(el as HTMLVideoElement, duration);
