@@ -48,7 +48,7 @@ function Steps({ run }: { run: RunState }) {
   );
 }
 
-function AssistantBubble({ m, run, canUndo, onUndo, canUndoTo, onUndoTo, onAnswer, onSkip }: { m: ChatMessage; run?: RunState; canUndo: boolean; onUndo: () => void; canUndoTo: boolean; onUndoTo: () => void; onAnswer: (id: string) => void; onSkip: () => void }) {
+function AssistantBubble({ m, run, canUndo, onUndo, canUndoTo, onUndoTo, editNo, onAnswer, onSkip }: { m: ChatMessage; run?: RunState; canUndo: boolean; onUndo: () => void; canUndoTo: boolean; onUndoTo: () => void; editNo?: number; onAnswer: (id: string) => void; onSkip: () => void }) {
   const working = run && !run.done;
   return (
     <div className={`ep-ch-msg ai${m.status === 'error' ? ' err' : ''}`}>
@@ -90,8 +90,8 @@ function AssistantBubble({ m, run, canUndo, onUndo, canUndoTo, onUndoTo, onAnswe
             <Icon name="undo" size={13} /> Desfazer esta edição
           </button>
         ) : run && canUndoTo ? (
-          <button className="ep-ch-undo" onClick={onUndoTo} title="Desfaz esta edição e tudo o que veio depois (dá para refazer)">
-            <Icon name="undo" size={13} /> Voltar para antes desta edição
+          <button className="ep-ch-undo" onClick={onUndoTo} data-edit={editNo} title={`Volta o projeto ao estado de antes da ${editNo}ª edição, desfazendo também as seguintes (dá para refazer)`}>
+            <Icon name="undo" size={13} /> Voltar para antes desta edição{editNo ? <span className="ep-ch-editno"> · {editNo}ª</span> : null}
           </button>
         ) : null}
       </div>
@@ -133,6 +133,14 @@ export default function ChatPanel() {
     el.style.height = 'auto';
     el.style.height = `${Math.min(140, el.scrollHeight)}px`;
   }, [text]);
+
+  // número de cada edição da IA na conversa (1ª, 2ª…) — deixa claro qual "Voltar para antes" é qual
+  const editNos = useMemo(() => {
+    const out: Record<string, number> = {};
+    let n = 0;
+    for (const m of messages) if (m.role === 'assistant' && runs[m.id]?.steps.length) out[m.id] = ++n;
+    return out;
+  }, [messages, runs]);
 
   const lastEditId = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -229,7 +237,7 @@ export default function ChatPanel() {
             const run = runs[m.id];
             const canUndo = m.id === lastEditId && !busy && !!run?.after && project === run.after;
             const canTo = !canUndo && !busy && useAIChat.getState().canUndoTo(m.id);
-            return <AssistantBubble key={m.id} m={m} run={run} canUndo={canUndo} onUndo={() => undoRun(m.id)} canUndoTo={canTo} onUndoTo={() => useAIChat.getState().undoTo(m.id)} onAnswer={(id) => answer(m.id, id)} onSkip={() => skip(m.id)} />;
+            return <AssistantBubble key={m.id} m={m} run={run} canUndo={canUndo} onUndo={() => undoRun(m.id)} canUndoTo={canTo} onUndoTo={() => useAIChat.getState().undoTo(m.id)} editNo={editNos[m.id]} onAnswer={(id) => answer(m.id, id)} onSkip={() => skip(m.id)} />;
           })
         )}
       </div>
