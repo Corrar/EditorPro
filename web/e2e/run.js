@@ -10,11 +10,11 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const L = require('./lib');
-const { ensureMedia, analyzeExport } = require('./media');
+const { ensureMedia, analyzeExport, frameRGB } = require('./media');
 
 const argv = Object.fromEntries(process.argv.slice(2).map((a) => { const [k, v] = a.replace(/^--/, '').split('='); return [k, v ?? '1']; }));
 const PROFILE_IDS = (argv.profiles || 'desktop,pixel7,iphonese').split(',');
-const CASES = (argv.cases || 'flow,playback,fluidity,export,layout,cursor,popup,formats').split(',');
+const CASES = (argv.cases || 'flow,playback,fluidity,export,layout,cursor,popup,formats,fx,color').split(',');
 const results = []; // { profile, case, status, metrics, shots, notes }
 const rec = (profile, kase, status, metrics = {}, shots = [], notes = '') => {
   const r = { profile, case: kase, status, metrics, shots: shots.filter(Boolean), notes };
@@ -234,6 +234,70 @@ async function exportCase(page, tag, profile, file, quality) {
   // miniatura do meio do vídeo exportado
   try { require('child_process').execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-ss', String(expected / 2), '-i', f, '-frames:v', '1', '-vf', 'scale=270:-1', path.join(L.SHOTS, `${tag}-export-mid.png`)]); } catch {}
   return { ok: true, ms, size: out.size, type: out.type, expected, analysis: a, file: `shots/${path.basename(f)}`, thumb: `shots/${tag}-export-mid.png`, info, stages: out.stages };
+}
+
+/* ---------------- casos 9/10: FX e COR ---------------- */
+
+async function exportProject(page, tag, quality = 'draft') {
+  const out = await page.evaluate(async (q) => {
+    const st = window.__ep.useEditor.getState();
+    try { const blob = await window.__ep.exportVideo(st.project, st.assets, { format: 'mp4', quality: q }); return { ok: true, b64: await window.__ep.blobToBase64(blob) }; }
+    catch (e) { return { ok: false, err: String(e && e.message || e) }; }
+  }, quality);
+  if (!out.ok) return { ok: false, err: out.err };
+  const f = path.join(L.SHOTS, `${tag}.mp4`);
+  fs.writeFileSync(f, Buffer.from(out.b64, 'base64'));
+  return { ok: true, file: f };
+}
+
+/** efeito 'snow' no clipB + transição 'cube-left' na entrada dele: preview sem preto, efeito visível, export sem preto */
+async function fxCase(page, tag, file) {
+  await loadHarness(page, file);
+  const ev = (f, a) => page.evaluate(f, a);
+  await ev(() => { window.__ep.buildDemo(window.__ep.assetsList(), { captions: false }); const d = window.__ep.useEditor.getState().dispatch; d({ op: 'update_clip', clipId: 'clipC', patch: { fadeOut: 0 } }); });
+  await ev(() => window.__ep.useEditor.getState().setPlayhead(3.0)); await L.sleep(1200);
+  const before = await L.frameShotLuma(page);
+  const bufBefore = (await page.locator('.ep-pv-frame').first().screenshot()).toString('base64');
+  await ev(() => { const d = window.__ep.useEditor.getState().dispatch; d({ op: 'update_clip', clipId: 'clipB', patch: { effects: [{ kind: 'snow', intensity: 1 }], transitionIn: { kind: 'cube-left', duration: 0.6 } } }); });
+  await ev(() => window.__ep.useEditor.getState().setPlayhead(3.0)); await L.sleep(1500);
+  const after = await L.frameShotLuma(page);
+  const bufAfter = (await page.locator('.ep-pv-frame').first().screenshot()).toString('base64');
+  // diferença média por pixel (0..255) em 96×96 — partículas pequenas quase não mexem na média geral
+  const pixDiff = await page.evaluate(async ([a, b]) => {
+    const load = async (x) => { const i = new Image(); i.src = `data:image/png;base64,${x}`; await i.decode(); const c = document.createElement('canvas'); c.width = 96; c.height = 96; const g = c.getContext('2d'); g.drawImage(i, 0, 0, 96, 96); return g.getImageData(0, 0, 96, 96).data; };
+    const A = await load(a), B = await load(b); let d = 0, n = 0;
+    for (let i = 0; i < A.length; i += 4) { const v = Math.abs(A[i] - B[i]) + Math.abs(A[i + 1] - B[i + 1]) + Math.abs(A[i + 2] - B[i + 2]); if (v > 60) n++; d += v / 3; }
+    return { mean: +(d / (A.length / 4)).toFixed(2), changedPct: +((100 * n) / (A.length / 4)).toFixed(1) };
+  }, [bufBefore, bufAfter]);
+  const shotFx = await L.shot(page, `${tag}-fx-snow`);
+  // varre a transição pausado (2,0–2,6 s) e tocando
+  const mids = [];
+  for (const t of [2.1, 2.3, 2.5]) { await ev((tt) => window.__ep.useEditor.getState().setPlayhead(tt), t); await L.sleep(700); mids.push(await L.frameShotLuma(page)); }
+  const shotTr = await L.shot(page, `${tag}-fx-cube`);
+  const play = await samplePhase(page, 'fxPlay', async () => { await ev(() => { const s = window.__ep.useEditor.getState(); s.setPlayhead(1.5); s.setPlaying(true); }); await L.sleep(2200); await ev(() => window.__ep.useEditor.getState().setPlaying(false)); });
+  const mode = await ev(() => window.__epPreviewStats && window.__epPreviewStats.mode);
+  const ex = await exportProject(page, `${tag}-fx-export`);
+  const an = ex.ok ? analyzeExport(ex.file) : null;
+  const diff = pixDiff.changedPct;
+  const pausedBlack = mids.filter((m) => m && m.mean < 6 && m.max < 24).length;
+  return { before, after, diff: +diff.toFixed(1), mids, pausedBlack, play, mode, ex, an, shots: [shotFx, shotTr] };
+}
+
+/** colorGrade gain R −0,4: o vermelho cai no preview e no export */
+async function colorCase(page, tag, file) {
+  await loadHarness(page, file);
+  const ev = (f, a) => page.evaluate(f, a);
+  await ev(() => { window.__ep.buildDemo(window.__ep.assetsList(), { captions: false }); const d = window.__ep.useEditor.getState().dispatch; d({ op: 'update_clip', clipId: 'clipA', patch: { colorPreset: undefined, filters: [], keyframes: [] } }); window.__ep.useEditor.getState().setPlayhead(1.0); });
+  await L.sleep(1500);
+  const base = await L.frameShotLuma(page);
+  const ex0 = await exportProject(page, `${tag}-cor-base`);
+  await ev(() => window.__ep.useEditor.getState().dispatch({ op: 'update_clip', clipId: 'clipA', patch: { colorGrade: { gain: { r: -0.4, g: 0, b: 0, y: 0 } } } }));
+  await ev(() => window.__ep.useEditor.getState().setPlayhead(1.0)); await L.sleep(1500);
+  const graded = await L.frameShotLuma(page);
+  const shot = await L.shot(page, `${tag}-cor-gainR`);
+  const ex1 = await exportProject(page, `${tag}-cor-gainR`);
+  const e0 = ex0.ok ? frameRGB(ex0.file, 1.0) : null, e1 = ex1.ok ? frameRGB(ex1.file, 1.0) : null;
+  return { base, graded, e0, e1, err: (!ex0.ok && ex0.err) || (!ex1.ok && ex1.err) || null, shot };
 }
 
 /* ---------------- caso 5: layout de menus ---------------- */
@@ -470,6 +534,35 @@ async function runProfile(profile, media) {
       if (errs.length) rec(profile, '2. (erros no harness)', 'falha', { pageerrors: errs.length }, [], errs[0].text.split('\n')[0]);
     } catch (e) {
       rec(profile, '2. Reprodução sem tela preta', 'falha', {}, [await L.shot(page, `${tag}-erro-harness`)], `exceção: ${e.message.split('\n')[0]}`);
+    } finally { await ctx.close(); }
+  }
+
+  // 9/10 — FX e COR (harness)
+  if (want('fx') || want('color')) {
+    const { ctx, page, errors } = await L.openContext(profile);
+    try {
+      if (want('fx')) {
+        const r = await fxCase(page, tag, media.h264);
+        const blackEx = r.an ? r.an.black.reduce((n, b) => n + b.dur, 0) : null;
+        const errs = L.relevantErrors(errors).filter((e) => e.type === 'pageerror');
+        const ok = r.diff >= 1 && !r.pausedBlack && r.play.black === 0 && r.ex.ok && blackEx === 0 && !r.an.darkFrames && !errs.length;
+        rec(profile, "9. FX: efeito 'snow' + transição 'cube-left'", ok ? 'ok' : 'falha',
+          { 'pixels mudados pelo efeito (%)': r.diff, 'pretos pausado na transição': `${r.pausedBlack}/3`, 'pretos tocando': `${r.play.black}/${r.play.samples}`, 'modo do preview': r.mode, export: r.ex.ok ? `preto ${blackEx} s, escuros ${r.an.darkFrames}` : `erro: ${r.ex.err}`, pageerrors: errs.length },
+          r.shots, [r.diff < 1 ? 'efeito snow sem diferença visível no preview' : '', errs[0] ? errs[0].text.split('\n')[0] : ''].filter(Boolean).join(' · '));
+      }
+      if (want('color')) {
+        const r = await colorCase(page, tag, media.h264);
+        const pvDrop = r.base && r.graded ? +(r.base.r - r.graded.r).toFixed(1) : null;
+        const pvG = r.base && r.graded ? +(r.base.g - r.graded.g).toFixed(1) : null;
+        const exDrop = r.e0 && r.e1 ? +(r.e0.r - r.e1.r).toFixed(1) : null;
+        const exG = r.e0 && r.e1 ? +(r.e0.g - r.e1.g).toFixed(1) : null;
+        const ok = pvDrop > 10 && exDrop > 10 && Math.abs(pvG) < pvDrop / 2 && Math.abs(exG) < exDrop / 2;
+        rec(profile, '10. COR: colorGrade gain R −0,4', ok ? 'ok' : 'falha',
+          { 'queda R preview': pvDrop, 'queda G preview': pvG, 'queda R export': exDrop, 'queda G export': exG, 'preview R/G/B': r.graded ? `${r.graded.r}/${r.graded.g}/${r.graded.b}` : '-', 'export R/G/B': r.e1 ? `${r.e1.r}/${r.e1.g}/${r.e1.b}` : '-' },
+          [r.shot], r.err ? `erro export: ${r.err}` : '');
+      }
+    } catch (e) {
+      rec(profile, '9/10. FX/COR', 'falha', {}, [await L.shot(page, `${tag}-erro-fxcor`)], `exceção: ${e.message.split('\n')[0]}`);
     } finally { await ctx.close(); }
   }
 

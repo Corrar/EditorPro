@@ -46,9 +46,18 @@ function analyzeExport(file) {
   }
   return { duration, video: v ? { codec: v.codec_name, w: v.width, h: v.height, frames: +v.nb_frames || null } : null, audio: a ? { codec: a.codec_name, sr: +a.sample_rate } : null, black, meanVolume, minYavg: yavg.length ? +Math.min(...yavg).toFixed(1) : null, darkFrames: darkFrames.length, firstDark: darkFrames.slice(0, 5).map(([i]) => i) };
 }
+/** médias R/G/B (0..255) de um quadro do vídeo no tempo t */
+function frameRGB(file, t) {
+  const r = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-ss', String(t), '-i', file, '-frames:v', '1', '-vf', 'scale=32:32', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'], { maxBuffer: 1 << 20 });
+  const d = r.stdout; if (!d || !d.length) return null;
+  let R = 0, G = 0, B = 0; const n = d.length / 3;
+  for (let i = 0; i < d.length; i += 3) { R += d[i]; G += d[i + 1]; B += d[i + 2]; }
+  return { r: +(R / n).toFixed(1), g: +(G / n).toFixed(1), b: +(B / n).toFixed(1) };
+}
+
 function parseBlack(s) {
   return [...s.matchAll(/black_start:([\d.]+) black_end:([\d.]+) black_duration:([\d.]+)/g)].map((m) => ({ start: +m[1], end: +m[2], dur: +m[3] }));
 }
 function parseVol(s) { const m = s.match(/mean_volume:\s*(-?[\d.]+) dB/); return m ? +m[1] : null; }
 
-module.exports = { ensureMedia, analyzeExport, FILES };
+module.exports = { ensureMedia, analyzeExport, frameRGB, FILES };

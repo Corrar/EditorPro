@@ -281,7 +281,7 @@ async function persona2(media) {
       for (let i = 0; i < 12 && n < 2; i++) { await L.sleep(1000); n = await page.locator('[data-ep-clip]').count(); }
       let p = await readProject(page);
       if (n < 2) {
-        s.friction({ step: 'Importar', kind: 'fluxo', sev: 2, text: 'No editor vazio, "Importar" só coloca na biblioteca; é preciso achar o "+" pequeno no card (title "Adicionar no fim da timeline") para cada mídia.', file: 'components/media/MediaBin.tsx:93', owner: 'shell' });
+        s.friction({ step: 'Importar', kind: 'fluxo', sev: 2, text: 'Desktop, editor vazio: "Importar" só coloca as mídias na biblioteca (25 s depois, timeline ainda vazia); é preciso achar o "+" que só aparece no hover do card (title "Adicionar no fim da timeline") para cada mídia. No celular o seletor "Adicionar mídia" já põe na timeline.', file: 'components/media/MediaBin.tsx:93', owner: 'shell' });
         const adds = page.locator('button[title="Adicionar no fim da timeline"]');
         const n = await adds.count();
         for (let i = 0; i < n; i++) { await adds.nth(i).hover().catch(() => {}); await s.tap(adds.nth(i), { force: true }); }
@@ -337,7 +337,7 @@ async function persona2(media) {
       const pt = await page.evaluate(() => { const x = window.__epTimeToClientX && window.__epTimeToClientX(2.3); const r = [...document.querySelectorAll('[data-ep-clip]')].map((e) => e.getBoundingClientRect()).filter((q) => q.left <= x && q.right >= x && q.height > 20).sort((a, b) => b.height - a.height)[0]; return r ? { x, y: r.top + r.height / 2 } : null; });
       if (!pt) throw new Error('clipe em 2,3 s não encontrado');
       await page.mouse.click(pt.x, pt.y); s.taps++;
-      await s.key('k');                          // keyframe em 2 s
+      await s.key('Shift+K');                    // keyframe em 2 s (K virou shuttle J/K/L)
       await s.key('Shift+ArrowRight');           // 3 s
       let sc = page.getByRole('slider', { name: /^Escala/ }).first();
       if (!(await visible(sc))) {
@@ -349,13 +349,18 @@ async function persona2(media) {
           if (clipped) s.friction({ step: 'Keyframe de zoom', kind: 'rótulo', sev: 1, text: 'No painel "Editar" do desktop, as abas (Editar, Velocidade, Volume, Anim…) passam da largura e "Posição" fica escondida, sem seta/indicador de rolagem.', file: 'components/panels/EditTab.tsx:42 (.ep-subtabs)', owner: 'shell' });
           await t.scrollIntoViewIfNeeded().catch(() => {}); await s.tap(t);
         }
-        else s.friction({ step: 'Keyframe de zoom', kind: 'beco', sev: 2, text: 'Com o clipe selecionado no desktop, não há aba/atalho visível para "Posição e escala".', file: 'components/panels/EditTab.tsx', owner: 'shell' });
         sc = page.getByRole('slider', { name: /^Escala/ }).first();
+        if (!(await visible(sc))) s.friction({ step: 'Keyframe de zoom', kind: 'beco', sev: 2, text: 'Com o clipe selecionado no desktop, não há aba/atalho visível para "Posição e escala".', file: 'components/panels/EditTab.tsx', owner: 'shell' });
       }
       if (!(await visible(sc))) throw new Error('não achei o controle de escala/zoom');
       await sc.focus(); await s.key('ArrowRight', 10);
-      const p = await readProject(page);
-      const kf = Math.max(...p.video.map((v) => v.kf));
+      let p = await readProject(page);
+      let kf = Math.max(...p.video.map((v) => v.kf));
+      if (kf < 2) {
+        // losango de keyframe ao lado do parâmetro (estilo DaVinci), se existir
+        const dia = page.locator('label:has-text("Escala") button, .ep-slider:has-text("Escala") button[title*="eyframe" i], button[aria-label*="eyframe" i]').first();
+        if (await visible(dia)) { await s.tap(dia); await sc.focus(); await s.key('ArrowRight', 5); p = await readProject(page); kf = Math.max(...p.video.map((v) => v.kf)); }
+      }
       if (kf < 2) {
         s.friction({ step: 'Keyframe de zoom', kind: 'bug', sev: 3, text: 'Com 1 keyframe no clipe (K em 2 s), mover o cursor para 3 s e mudar "Escala" NÃO cria nem atualiza keyframe: o slider edita o transform base (que os keyframes sobrepõem). Não há como fazer zoom animado pelo painel; só via "Zoom punch-in aqui".', file: 'components/panels/ClipSections.tsx:406 (setTf → patch transform)', owner: 'shell' });
         throw new Error(`keyframes no clipe: ${kf} (esperado ≥ 2)`);
@@ -394,9 +399,10 @@ async function persona3(media) {
         const cell = pick.locator('.ep-mpick-cell[aria-label*="h264"]').first(); if (await visible(cell) && await addBtn.isDisabled().catch(() => false)) await s.tap(cell);
         const add = pick.getByRole('button', { name: /Adicionar/ }).last(); if (await visible(add)) await s.tap(add);
       }
-      const p = await readProject(page);
-      if (!p?.video.length) throw new Error('vídeo não entrou na timeline');
-      return `clipes ${p.video.length}`;
+      let n = 0;
+      for (let i = 0; i < 8 && !n; i++) { await L.sleep(700); n = await page.locator('[data-ep-clip]').count(); }
+      if (!n) throw new Error('vídeo não entrou na timeline');
+      return `clipes na timeline: ${n}`;
     });
     await s.step('Gerar legendas (Legendas → Gerar com IA)', async () => {
       await s.tap(mtool(page, 'Legendas'));

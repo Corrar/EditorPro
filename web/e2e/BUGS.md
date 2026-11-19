@@ -1,8 +1,9 @@
-## Bugs encontrados (rodada 3 — `48c7e7e`, inclui `0df4eca`; rodada 2 em `71e9ee2`; rodada 1 em `70b8304`)
+## Bugs encontrados (rodada 4 — `5c3b0e6`; rodadas anteriores: `48c7e7e`, `71e9ee2`, `70b8304`)
 
-> Rodada 3: **B1 corrigido** (0 quadros pretos no fim/seek no fim) e 4K passou. **B3 piorou**: o menu ⋯ do preview cresceu e agora sai pelo TOPO no Pixel 7 (top −43 px) e no iPhone SE (top −134 px, direita +7 px); a pílula "IA: N edições feitas" fica por cima do menu. B2, B4 seguem. B5–B8 não foram reverificados (usabilidade fica para a próxima rodada).
-
-> Rodada 2: preview híbrido (`<video>` nativo + canvas transparente). A medição de tela preta compõe os `<video>` visíveis + canvas e confere com captura real da área `.ep-pv-frame`. B1–B4 continuam. Export ficou ~4× mais rápido (31 s → 8 s a 1080p).
+> Rodada 4: **corrigidos** B1 (preto no fim), B6 (transição no celular) e B7 (keyframe de escala — atalho agora é **Shift+K**; K virou shuttle J/K/L).
+> Novos casos 9 (FX `snow` + `cube-left`) e 10 (COR `gain.r = −0,4`) passam nos 3 perfis.
+> **Ainda presentes:** B2, B3 (piorou na rodada 3), B4, B5, B8 e as fricções de usabilidade em `USABILIDADE.md`.
+> Novo: **B9** — desktop, editor vazio: "Importar" não põe nada na timeline (só biblioteca; "+" aparece só no hover).
 
 > QA só documenta: nenhum destes foi corrigido aqui. Arquivo:linha é o ponto provável.
 
@@ -25,7 +26,8 @@
   `styles/shell.css:641`) não testa se cabe à esquerda. Com o cursor no meio de tela estreita, nenhum dos dois lados cabe
   (balão até `min(240px, 62vw)`). Precisa limitar/clampar a posição horizontal do balão. Dono: **shell**.
 
-### B3 — Menu "⋯" do preview cortado à direita no iPhone SE · média
+### B3 — Menu "⋯" do preview sai da tela · alta (piorou na rodada 3)
+- Rodada 3/4: o menu cresceu (Velocidade, Zoom, Repetir, Antes/depois, Grade, Zonas, Mostrar desempenho) e abre para cima sem limite: Pixel 7 top −43 px; iPhone SE top −134 px e direita +7 px; a pílula "IA: N edições feitas" fica por cima. Sem `max-height`/rolagem. Captura `pixel7-menu-preview_mais.png`.
 - **Passos:** iPhone SE (320 px) → editor → faixa sob o vídeo → "⋯ Mais opções".
 - **Obtido:** `.ep-pv-menu` vai de x=54 a x=327 (viewport 320) — "ou toque longo" cortado. Captura `iphonese-menu-preview_mais.png`.
 - **Causa provável:** `styles/preview.css:214` — `left:0` ancorado no botão (que está a ~54 px da borda) + `min-width:260px`;
@@ -44,11 +46,11 @@
 - **Obtido:** resposta com a lista de comandos e nada muda — embora a própria IA sugira "corta os primeiros 2 s".
 - **Causa:** `lib/ai/demo.ts:784-785` aceita só `corta|cortar|tira|tirar|remove|remover|apaga|apagar`. Dono: **ai**.
 
-### B6 — Sem caminho para aplicar transição no celular · alta (rodada 2, usabilidade P1)
+### ✅ B6 (corrigido na rodada 4) — Sem caminho para aplicar transição no celular · alta (rodada 2, usabilidade P1)
 - **Passos:** celular → barra "Transições" → gaveta diz "Selecione um clipe"; selecionar o clipe troca a barra para a do clipe (Dividir, Velocidade, Volume, Animações…), que não tem "Transições".
 - **Causa provável:** `components/shell/MobileToolbar.tsx:135-170` (itens do clipe sem `transitions`); timeline sem botão entre clipes. Dono: **shell** (+ **timeline**).
 
-### B7 — Mudar "Escala" com keyframes não cria/atualiza keyframe · alta (rodada 2, usabilidade P2)
+### ✅ B7 (corrigido na rodada 4) — Mudar "Escala" com keyframes não cria/atualiza keyframe · alta (rodada 2, usabilidade P2)
 - **Passos:** desktop → selecionar clipe → K em 2 s → cursor em 3 s → Editar › Posição › Escala.
 - **Obtido:** continua 1 keyframe; o slider muda o transform base (sobreposto pelos keyframes): zoom animado só pelo "Zoom punch-in aqui".
 - **Causa provável:** `components/panels/ClipSections.tsx:406` (`setTf` → `patch({ transform })`). Dono: **shell** (painéis).
@@ -57,6 +59,11 @@
 - **Passos:** celular → Legendas → "Gerar legendas com IA".
 - **Obtido:** a gaveta continua na frente; só aparece a pílula "IA aguardando você" (a pergunta "Transcrever (~41 MB)?" está no pop-up fechado).
 - **Arquivo provável:** `components/panels/CaptionsTab.tsx` (emite generate-captions) / `components/shell/AiPopupHost.tsx`. Dono: **shell**.
+
+### B9 — Desktop: "Importar" no editor vazio não põe as mídias na timeline · média (rodada 4)
+- **Passos:** desktop → Começar → Abrir editor vazio → Importar → escolher 2 vídeos.
+- **Obtido:** cards "Pronto para editar" na biblioteca; timeline vazia 25 s depois. É preciso passar o mouse em cada card e achar o "+" (title "Adicionar no fim da timeline").
+- **Arquivo provável:** `components/media/MediaBin.tsx` (importFiles) / `lib/media/ingest.ts`. Dono: **shell**. (No celular o seletor "Adicionar mídia" já coloca na timeline.)
 
 ### Observações (não são falhas)
 - Export no Chromium sai com **áudio Opus dentro de MP4** (sem encoder AAC). Toca no Chrome/Android; pode não tocar em players

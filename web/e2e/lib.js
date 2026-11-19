@@ -216,8 +216,9 @@ async function frameShotLuma(page) {
     const img = new Image(); img.src = `data:image/png;base64,${b64}`; await img.decode();
     const c = document.createElement('canvas'); c.width = 32; c.height = 32; const x = c.getContext('2d');
     x.drawImage(img, 0, 0, 32, 32); const d = x.getImageData(0, 0, 32, 32).data; let s = 0, m = 0;
-    for (let i = 0; i < d.length; i += 4) { const y = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]; s += y; if (y > m) m = y; }
-    return { mean: +(s / 1024).toFixed(1), max: Math.round(m) };
+    let R = 0, G = 0, B = 0;
+    for (let i = 0; i < d.length; i += 4) { const y = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]; s += y; if (y > m) m = y; R += d[i]; G += d[i + 1]; B += d[i + 2]; }
+    return { mean: +(s / 1024).toFixed(1), max: Math.round(m), r: +(R / 1024).toFixed(1), g: +(G / 1024).toFixed(1), b: +(B / 1024).toFixed(1) };
   }, buf.toString('base64'));
 }
 
