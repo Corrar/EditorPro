@@ -6,8 +6,8 @@ import { useEditor } from '@/lib/store';
 import { emit } from '@/lib/events';
 import { projectDuration } from '@/lib/ops';
 import {
-  canExportM4A, canShareFiles, captionCues, detectExportPath, downloadBlob, exportAudio, exportFrame, exportSize,
-  exportVideo, safeFileName, shareFile, toFCPXML, toSRT, toVTT, type ExportOptions,
+  canExportM4A, canShareFiles, shareFiles, captionCues, detectExportPath, downloadBlob, exportAudio, exportFrame, exportSize,
+  exportVideo, safeFileName, toFCPXML, toSRT, toVTT, type ExportOptions,
 } from '@/lib/export';
 import { formatTime } from '@/lib/util';
 import Icon from '@/components/ui/Icon';
@@ -46,7 +46,7 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
   const [progress, setProgress] = useState(0);
   const [stage, setStage] = useState('');
   const [error, setError] = useState('');
-  const [result, setResult] = useState<{ url: string; blob: Blob; name: string; size: number; type: string; secs: number } | null>(null);
+  const [result, setResult] = useState<{ url: string; blob: Blob; name: string; size: number; type: string; secs: number; cover?: { blob: Blob; name: string } } | null>(null);
   const [path, setPath] = useState<Awaited<ReturnType<typeof detectExportPath>> | null>(null);
   const [smallDevice, setSmallDevice] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -90,7 +90,15 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
       const blob = await make(ac.signal);
       const ext = extOf(blob);
       const url = URL.createObjectURL(blob);
-      setResult({ url, blob, name: safeFileName(project.name, ext), size: blob.size, type: ext, secs: (performance.now() - startedRef.current) / 1000 });
+      // capa escolhida na timeline acompanha o vídeo (compartilhar/baixar)
+      let cover: { blob: Blob; name: string } | undefined;
+      if (kind === 'video' && project.coverTime !== undefined) {
+        try {
+          setStage('Gerando capa');
+          cover = { blob: await exportFrame(project, assets, coverT(), quality === '4k' ? 'fhd' : quality), name: safeFileName(`${project.name}-capa`, 'png') };
+        } catch { /* sem capa */ }
+      }
+      setResult({ url, blob, name: safeFileName(project.name, ext), size: blob.size, type: ext, secs: (performance.now() - startedRef.current) / 1000, cover });
       setPhase('done');
       emit('ep:toast', { text: kind === 'video' ? 'Vídeo exportado! Clique em Baixar.' : 'Áudio exportado! Clique em Baixar.', kind: 'ok' });
     } catch (e) {
@@ -107,6 +115,18 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
   const start = () => run('video', (signal) => exportVideo(project, assets, { format, quality, fps, signal, onProgress }));
   const startAudio = (fmt: 'wav' | 'm4a') => run('audio', (signal) => exportAudio(project, assets, { format: fmt, signal, onProgress }));
   const [frameBusy, setFrameBusy] = useState(false);
+  /** tempo da capa: Project.coverTime (escolhida na timeline) ou o 1º quadro */
+  const coverT = () => Math.min(Math.max(0, project.coverTime ?? 0), Math.max(0, duration - 1 / fps));
+  const [coverBusy, setCoverBusy] = useState(false);
+  const saveCover = async () => {
+    setCoverBusy(true);
+    try {
+      const blob = await exportFrame(project, assets, coverT(), quality === '4k' ? 'fhd' : quality);
+      downloadBlob(blob, safeFileName(`${project.name}-capa`, 'png'));
+    } catch (e) {
+      emit('ep:toast', { text: `Não deu para gerar a capa: ${e instanceof Error ? e.message : e}`, kind: 'error' });
+    } finally { setCoverBusy(false); }
+  };
   const saveFrame = async () => {
     setFrameBusy(true);
     try {
@@ -188,14 +208,14 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
             <div className="ok" aria-hidden="true">✓</div>
             <div className="meta">
               <b>{result.name}</b>
-              <span>{fmtSize(result.size)} · {result.type.toUpperCase()} · pronto em {result.secs.toFixed(1)} s
+              <span>{fmtSize(result.size)} · {result.type.toUpperCase()} · pronto em {result.secs.toFixed(1)} s{result.cover ? ' · com capa' : ''}
                 {job === 'video' && format === 'mp4' && result.type !== 'mp4' ? ' · MP4 indisponível aqui, salvo em WebM' : ''}</span>
             </div>
             <div className="ep-ex-dlrow">
               {canShareFiles() && (
-                <button className="ep-ex-pill" onClick={() => shareFile(result.blob, result.name)}>Compartilhar</button>
+                <button className="ep-ex-pill" onClick={() => shareFiles(result.cover ? [{ blob: result.blob, name: result.name }, result.cover] : [{ blob: result.blob, name: result.name }])}>Compartilhar</button>
               )}
-              <a className="ep-ex-pill accent" href={result.url} download={result.name} target="_blank" rel="noopener"><Icon name="download" size={16}/> Baixar</a>
+              <a className="ep-ex-pill accent" href={result.url} download={result.name} target="_blank" rel="noopener" onClick={() => { if (result.cover) setTimeout(() => downloadBlob(result.cover!.blob, result.cover!.name), 400); }}><Icon name="download" size={16}/> Baixar</a>
             </div>
           </div>
         )}
@@ -215,6 +235,9 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
           </button>
           <button className="ep-row" disabled={duration <= 0 || busy || !m4a} onClick={() => startAudio('m4a')}>
             <span className="ep-ex-rowtxt"><b>Só áudio (.m4a)</b><span className="meta">{m4a ? 'AAC, arquivo menor' : 'Indisponível neste navegador'}</span></span><Icon name="music" size={20}/>
+          </button>
+          <button className="ep-row" disabled={duration <= 0 || coverBusy} onClick={saveCover}>
+            <span className="ep-ex-rowtxt"><b>{coverBusy ? 'Gerando capa…' : 'Baixar capa (.png)'}</b><span className="meta">{project.coverTime !== undefined ? `Capa escolhida na timeline · ${formatTime(project.coverTime, { decimals: true })}` : 'Sem capa escolhida: usa o 1º quadro'}</span></span><Icon name="image" size={20} />
           </button>
           <button className="ep-row" disabled={duration <= 0 || frameBusy} onClick={saveFrame}>
             <span className="ep-ex-rowtxt"><b>{frameBusy ? 'Gerando imagem…' : 'Quadro atual (.png)'}</b><span className="meta">Capa ou miniatura da posição do cursor</span></span><Icon name="image" size={20}/>
