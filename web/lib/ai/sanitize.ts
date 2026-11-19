@@ -93,6 +93,42 @@ export function sanitizeTransform(v: unknown, base?: Transform): Partial<Transfo
   return base ? { ...base, ...out } : out;
 }
 
+/* ---------- keyframes universais (Keyframe.props) ---------- */
+const PROP_PATH = /^[a-zA-Z][a-zA-Z0-9]{0,30}(\.[a-zA-Z0-9]{1,30}){0,3}$/;
+const FORBIDDEN_SEG = new Set(['__proto__', 'prototype', 'constructor', 'id', 'type', 'assetId', 'start', 'duration', 'in', 'code', 'svg', 'keyframes']);
+
+/**
+ * props de keyframe: caminho simples ('volume', 'style.color', 'effects.0.intensity') -> número ou cor '#RRGGBB'.
+ * Aceita objeto {path: valor} ou lista [{path, value}] (formato do schema). Até 16 por keyframe.
+ */
+export function sanitizeKeyframeProps(v: unknown): Record<string, number | string> | undefined {
+  const pairs: [string, unknown][] = Array.isArray(v)
+    ? v.filter(isObj).map((x) => [String(x.path ?? ''), x.value])
+    : isObj(v) ? Object.entries(v) : [];
+  const out: Record<string, number | string> = {};
+  for (const [path, val] of pairs.slice(0, 16)) {
+    if (!PROP_PATH.test(path) || path.split('.').some((seg) => FORBIDDEN_SEG.has(seg))) continue;
+    if (typeof val === 'number' && Number.isFinite(val)) out[path] = r3(Math.max(-1e5, Math.min(1e5, val)));
+    else { const c = color(val); if (c) out[path] = c; }
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+/* ---------- efeitos/transições escritos pela IA (GLSL) ---------- */
+export const MAX_SHADER_CHARS = 8000;
+function shaderCode(v: unknown, entry: 'effect' | 'transition'): string | undefined {
+  if (typeof v !== 'string') return undefined;
+  const code = v.replace(/\r\n/g, '\n').trim();
+  if (code.length < 20 || code.length > MAX_SHADER_CHARS) return undefined;
+  if (!new RegExp(`vec4\\s+${entry}\\s*\\(`).test(code)) return undefined;
+  return code;
+}
+function shaderParams(v: unknown): number[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const out = v.slice(0, 8).map((x) => clampNum(x, -1e4, 1e4)).filter((x): x is number => x !== undefined).map(r3);
+  return out.length ? out : undefined;
+}
+
 export function sanitizeKeyframes(v: unknown, clipDuration: number): Keyframe[] | undefined {
   if (!Array.isArray(v)) return undefined;
   const out: Keyframe[] = [];
@@ -100,9 +136,10 @@ export function sanitizeKeyframes(v: unknown, clipDuration: number): Keyframe[] 
     if (!isObj(k)) continue;
     const t = clampNum(k.t, 0, Math.max(0, clipDuration));
     const transform = sanitizeTransform(k.transform);
-    if (t === undefined || !transform) continue;
+    const props = sanitizeKeyframeProps(k.props);
+    if (t === undefined || (!transform && !props)) continue;
     const easing = oneOf(k.easing, EASINGS);
-    out.push({ t: r3(t), transform, ...(easing ? { easing } : {}) });
+    out.push({ t: r3(t), transform: transform ?? {}, ...(props ? { props } : {}), ...(easing ? { easing } : {}) });
   }
   out.sort((a, b) => a.t - b.t);
   return out.slice(0, 64);
@@ -125,6 +162,15 @@ export function sanitizeFilters(v: unknown): Filter[] | undefined {
 
 export function sanitizeTransition(v: unknown, clipDuration = Infinity): Transition | undefined {
   if (!isObj(v)) return undefined;
+  if (v.kind === 'custom') {
+    const code = shaderCode(v.code, 'transition');
+    if (!code) return undefined;
+    const maxD = Math.max(0.05, Math.min(3, clipDuration / 2));
+    const easing = oneOf(v.easing, EASINGS);
+    const params = shaderParams(v.params);
+    const name = str(v.name, 40);
+    return { kind: 'custom', duration: r3(clampNum(v.duration, 0.05, maxD) ?? Math.min(0.6, maxD)), code, ...(name ? { name } : {}), ...(params ? { params } : {}), ...(easing ? { easing } : {}) };
+  }
   const kind = oneOf(v.kind, TRANSITIONS);
   if (!kind) return undefined;
   const maxD = Math.max(0.05, Math.min(1.5, clipDuration / 2));
@@ -382,6 +428,17 @@ export function sanitizeEffects(v: unknown): VisualEffect[] | undefined {
   const seen = new Set<VisualEffectKind>();
   for (const e of v) {
     if (!isObj(e)) continue;
+    if (e.kind === 'custom') {
+      // efeito inventado pela IA (GLSL); vários permitidos, cada um com seu código
+      const code = shaderCode(e.code, 'effect');
+      if (!code) continue;
+      const params = shaderParams(e.params);
+      const name = str(e.name, 40);
+      const c = color(e.color);
+      const speed = clampNum(e.speed, 0, 2);
+      out.push({ kind: 'custom', intensity: clampNum(e.intensity, 0, 1) ?? 1, code, ...(name ? { name } : {}), ...(params ? { params } : {}), ...(c ? { color: c } : {}), ...(speed !== undefined ? { speed } : {}) });
+      continue;
+    }
     const kind = oneOf(e.kind, EFFECT_KINDS);
     if (!kind || seen.has(kind)) continue;
     seen.add(kind);

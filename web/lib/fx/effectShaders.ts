@@ -26,7 +26,7 @@ const HEAD = GLSL_PRECISION +
   'vec4 spiral(vec2 uv,float r){if(r<.0005)return T(uv);vec4 a=vec4(0.);vec2 k=vec2(u_res.y/u_res.x,1.);' +
   'for(int i=0;i<32;i++){float f=float(i);float an=f*2.39996;float d=sqrt((f+.5)/32.)*r;a+=T(uv+vec2(cos(an),sin(an))*d*k);}return a/32.;}' +
   /* borda de Sobel na luminância (passo proporcional à resolução) */
-  'float sobel(vec2 uv,float s){vec2 p=s*max(1.,u_res.y/720.)/u_res;' +
+  'float sobel(vec2 uv,float s){vec2 p=s*max(.5,u_res.y/720.)/u_res;' +
   'float tl=lum(T(uv-p).rgb),tc=lum(T(uv+vec2(0.,-p.y)).rgb),tr=lum(T(uv+vec2(p.x,-p.y)).rgb),' +
   'l=lum(T(uv+vec2(-p.x,0.)).rgb),r=lum(T(uv+vec2(p.x,0.)).rgb),' +
   'bl=lum(T(uv+vec2(-p.x,p.y)).rgb),bc=lum(T(uv+vec2(0.,p.y)).rgb),br=lum(T(uv+p).rgb);' +
@@ -129,19 +129,19 @@ const B: Partial<Record<VisualEffectKind, string>> = {
     'a+=s*smoothstep(.55,.95,lum(unp(s)));}vec3 g=a.rgb/24.*2.*u_int;' +
     'float oa=max(c.a,min(1.,max(g.r,max(g.g,g.b))));gl_FragColor=vec4(min(c.rgb+g,vec3(oa)),oa);',
   'neon-glow':
-    'float e=sobel(v_uv,1.);float eg=0.;for(int i=0;i<4;i++){float an=float(i)*1.5708+.785;eg+=sobel(v_uv+vec2(cos(an),sin(an))*5.*max(1.,u_res.y/720.)/u_res,1.);}' +
+    'float e=sobel(v_uv,1.);float eg=0.;for(int i=0;i<4;i++){float an=float(i)*1.5708+.785;eg+=sobel(v_uv+vec2(cos(an),sin(an))*5.*max(.5,u_res.y/720.)/u_res,1.);}' +
     'eg*=.25;vec4 c=T(v_uv);vec3 col=unp(c)*(1.-.75*u_int);col+=u_color*(smoothstep(.1,.4,e)*1.4+eg*1.3)*u_int;gl_FragColor=pm(col,c.a);',
 
   /* ---------- estilizar ---------- */
   cartoon:
-    'vec4 c=T(v_uv);vec2 p=max(1.,u_res.y/720.)/u_res;vec3 s=(unp(c)*2.+unp(T(v_uv+vec2(p.x,0.)))+unp(T(v_uv-vec2(p.x,0.)))+unp(T(v_uv+vec2(0.,p.y)))+unp(T(v_uv-vec2(0.,p.y))))/6.;' +
+    'vec4 c=T(v_uv);vec2 p=max(.5,u_res.y/720.)/u_res;vec3 s=(unp(c)*2.+unp(T(v_uv+vec2(p.x,0.)))+unp(T(v_uv-vec2(p.x,0.)))+unp(T(v_uv+vec2(0.,p.y)))+unp(T(v_uv-vec2(0.,p.y))))/6.;' +
     'vec3 q=floor(s*6.+.5)/6.;q=mix(vec3(lum(q)),q,1.25);q*=1.-smoothstep(.22,.5,sobel(v_uv,1.));gl_FragColor=pm(mix(unp(c),q,u_int),c.a);',
   sketch:
-    'vec4 c=T(v_uv);float e=sobel(v_uv,1.);float l=lum(unp(c));vec2 px=v_uv*u_res/max(1.,u_res.y/720.);float h=0.;' +
+    'vec4 c=T(v_uv);float e=sobel(v_uv,1.);float l=lum(unp(c));vec2 px=v_uv*u_res/max(.5,u_res.y/720.);float h=0.;' +
     'if(l<.55)h+=step(.5,fract((px.x+px.y)/7.))*.22;if(l<.3)h+=step(.5,fract((px.x-px.y)/7.))*.25;' +
     'float ink=clamp(e*1.7+h,0.,1.);gl_FragColor=pm(mix(unp(c),vec3(.97,.95,.9)*(1.-ink),u_int),c.a);',
   halftone:
-    'float cs=(6.+9.*u_int)*max(1.,u_res.y/1080.);vec2 px=v_uv*u_res;float ca=.7071,sa=.7071;' +
+    'float cs=max(1.,(6.+9.*u_int)*(u_res.y/1080.));vec2 px=v_uv*u_res;float ca=.7071,sa=.7071;' +
     'vec2 q=vec2(ca*px.x-sa*px.y,sa*px.x+ca*px.y);vec2 cl=(floor(q/cs)+.5)*cs;vec2 cp=vec2(ca*cl.x+sa*cl.y,-sa*cl.x+ca*cl.y);' +
     'vec4 cc=T(cp/u_res);vec3 col=unp(cc);float rad=sqrt(1.-lum(col))*cs*.62;float dt=1.-smoothstep(rad-1.,rad+1.,length(q-cl));' +
     'vec4 c=T(v_uv);gl_FragColor=pm(mix(unp(c),mix(vec3(.98,.97,.94),col*.85,dt),smoothstep(0.,.25,u_int)),c.a);',
@@ -150,7 +150,7 @@ const B: Partial<Record<VisualEffectKind, string>> = {
   posterize:
     'vec4 c=T(v_uv);float n=mix(14.,3.,u_int);gl_FragColor=pm(floor(unp(c)*n+.5)/n,c.a);',
   ascii:
-    'float cs=(7.+5.*(1.-u_int))*max(1.,u_res.y/720.);vec2 px=v_uv*u_res;vec2 cell=floor(px/cs);vec2 q=fract(px/cs)-.5;' +
+    'float cs=max(2.,(7.+5.*(1.-u_int))*(u_res.y/720.));vec2 px=v_uv*u_res;vec2 cell=floor(px/cs);vec2 q=fract(px/cs)-.5;' +
     'vec4 cc=T((cell+.5)*cs/u_res);vec3 col=unp(cc);float l=lum(col);float g=0.;' +
     'if(l>.75)g=max(step(abs(abs(q.x)-.18),.05),step(abs(abs(q.y)-.18),.05))*step(max(abs(q.x),abs(q.y)),.42);' +
     'else if(l>.55)g=max(step(abs(q.x),.06)*step(abs(q.y),.35),step(abs(q.y),.06)*step(abs(q.x),.35));' +
@@ -158,7 +158,7 @@ const B: Partial<Record<VisualEffectKind, string>> = {
     'else if(l>.15)g=step(length(q-vec2(0.,.2)),.1);vec4 c=T(v_uv);' +
     'gl_FragColor=pm(mix(unp(c),col*g*1.5,smoothstep(0.,.3,u_int)),c.a);',
   'pixel-art':
-    'float cs=(3.+13.*u_int)*max(1.,u_res.y/1080.);vec4 cc=T((floor(v_uv*u_res/cs)+.5)*cs/u_res);gl_FragColor=pm(floor(unp(cc)*5.+.5)/5.,cc.a);',
+    'float cs=max(1.,(3.+13.*u_int)*(u_res.y/1080.));vec4 cc=T((floor(v_uv*u_res/cs)+.5)*cs/u_res);gl_FragColor=pm(floor(unp(cc)*5.+.5)/5.,cc.a);',
   outline:
     'float e=smoothstep(.15,.45,sobel(v_uv,1.));vec4 c=T(v_uv);gl_FragColor=pm(mix(unp(c),u_color,e*u_int),c.a);',
   thermal:

@@ -32,8 +32,8 @@ export class ColorGrader {
   private srcTex: WebGLTexture | null = null;
   private curveTex: WebGLTexture | null = null;
   private curveKey: unknown = null;
-  private lutTex: WebGLTexture | null = null;
-  private lutKey: Lut3D | null = null;
+  /** uma textura por LUT (alternar looks nas miniaturas não refaz o atlas nem o upload) */
+  private lutTex = new WeakMap<Lut3D, { tex: WebGLTexture; cols: number; width: number; height: number }>();
   private lutInfo = { cols: 1, width: 1, height: 1 };
   private lost = false;
   private failed = false;
@@ -51,8 +51,8 @@ export class ColorGrader {
     this.lost = false;
     this.gl = null;
     this.progs.clear();
-    this.buf = this.srcTex = this.curveTex = this.lutTex = null;
-    this.curveKey = null; this.lutKey = null;
+    this.buf = this.srcTex = this.curveTex = null;
+    this.curveKey = null; this.lutTex = new WeakMap();
   }
 
   /** contexto pronto (cria sob demanda); null se WebGL indisponível */
@@ -169,15 +169,16 @@ export class ColorGrader {
     }
     if (f.lut && R.lut) {
       gl.activeTexture(gl.TEXTURE2);
-      if (!this.lutTex) this.lutTex = makeTex(gl, gl.LINEAR);
-      gl.bindTexture(gl.TEXTURE_2D, this.lutTex);
-      if (this.lutKey !== R.lut) {
+      let info = this.lutTex.get(R.lut);
+      if (!info) {
         const a = lutAtlasData(R.lut);
+        const tex = makeTex(gl, gl.LINEAR);
         gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, a.width, a.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, a.data);
-        this.lutKey = R.lut;
-        this.lutInfo = { cols: a.cols, width: a.width, height: a.height };
-      }
+        info = { tex, cols: a.cols, width: a.width, height: a.height };
+        this.lutTex.set(R.lut, info);
+      } else gl.bindTexture(gl.TEXTURE_2D, info.tex);
+      this.lutInfo = info;
       gl.uniform1i(u.uLut, 2);
       gl.uniform1f(u.uLutN, R.lut.size);
       gl.uniform1f(u.uLutCols, this.lutInfo.cols);

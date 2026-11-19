@@ -10,7 +10,7 @@ import type { Frame } from './frames';
 import type { ReferenceSample } from './analysis';
 import { slimAssets } from './summary';
 
-export interface AIStatus { configured: boolean; provider: 'anthropic' | 'demo'; model?: string; /** a checagem falhou (rede/sessão): não é demo de verdade, tenta de novo no próximo pedido */ offline?: boolean }
+export interface AIStatus { configured: boolean; provider: 'anthropic' | 'demo'; model?: string; /** a checagem falhou (rede/sessão): não é demo de verdade, tenta de novo no próximo pedido */ offline?: boolean; /** transcrição no servidor disponível (Whisper large) */ transcribe?: 'groq' | 'openai' | null }
 
 export interface EditFrame extends Frame { assetId: string }
 
@@ -20,7 +20,7 @@ export interface EditRequest {
   messages: ChatMessage[];
   userText: string;
   /** 'first' = 1ª edição a partir do brief; 'chat' = ajuste pontual (padrão); 'comments' = aplicar comentários de revisão */
-  mode?: 'first' | 'chat' | 'comments';
+  mode?: 'first' | 'chat' | 'comments' | 'repair' | 'review';
   /** para onde o usuário apontou */
   context?: ChatContext;
   /** miniaturas do material p/ o Claude "ver" o vídeo */
@@ -34,6 +34,12 @@ export interface EditResponse {
   comments?: { markerId: string; reply: string }[];
   /** efeitos sonoros da biblioteca pedidos pela IA (o navegador gera e insere) */
   sfx?: { sfxId: string; at: number; volume?: number; explain?: string }[];
+  /** pedidos executados no navegador (script, gráfico, transcrição) */
+  deferred?: unknown[];
+  /** motivos das ops descartadas na validação do servidor (p/ conserto) */
+  droppedReasons?: string[];
+  /** mode 'review': o resultado está bom */
+  ok?: boolean;
 }
 
 /** erro com código vindo da rota (ex.: 'rate_limited', 'not_configured', 'refusal') */
@@ -123,8 +129,8 @@ export async function requestEdit(req: EditRequest): Promise<EditResponse> {
   let frames = req.frames ?? [];
   const baseLen = JSON.stringify(base).length;
   while (frames.length && baseLen + JSON.stringify(frames).length > MAX_BODY) frames = frames.length > 2 ? frames.filter((_, i) => i % 2 === 0) : [];
-  const { reply, ops, comments, sfx } = await postJson<EditResponse>('/api/ai/edit', { ...base, frames });
-  return { reply, ops, comments, sfx };
+  const r = await postJson<EditResponse>('/api/ai/edit', { ...base, frames });
+  return { reply: r.reply, ops: r.ops, comments: r.comments, sfx: r.sfx, deferred: r.deferred, droppedReasons: r.droppedReasons, ok: r.ok };
 }
 
 /** traduz legendas (Claude); devolve o texto novo por id de segmento */

@@ -565,6 +565,8 @@ export interface FirstEditInput {
   /** silêncios por asset, em tempo da MÍDIA (vazio se não deu p/ analisar) */
   silencesByAsset: Record<Id, Range[]>;
   style?: StyleProfile;
+  /** só testes/harness: legendas de exemplo (texto do brief). No app, legenda vem só da transcrição. */
+  allowExampleCaptions?: boolean;
 }
 
 export function planFirstEdit(input: FirstEditInput): DemoResult {
@@ -594,7 +596,8 @@ export function planFirstEdit(input: FirstEditInput): DemoResult {
   // 1) legendas de exemplo nos trechos de fala (antes dos cortes: o ripple leva junto)
   const durations: Record<Id, number> = {};
   for (const id of Object.keys(silencesByAsset)) durations[id] = assets[id]?.duration ?? 0;
-  if (intent.captions && !p.captions.segments.length) {
+  // legenda é SEMPRE a fala transcrita: sem transcrição, nada de texto inventado (pedido do Bruno)
+  if (intent.captions && !p.captions.segments.length && input.allowExampleCaptions) {
     const speech: Record<Id, Range[]> = {};
     for (const [id, sil] of Object.entries(silencesByAsset)) speech[id] = speechRanges(sil, durations[id]);
     const segs = demoCaptions(p, speech, brief);
@@ -817,12 +820,7 @@ export function chatIntent(text: string, ctx: ChatContext): DemoResult {
     push([{ op: 'toggle_captions', enabled: false, explain: 'Escondendo as legendas' }], 'escondi as legendas');
   } else if (mentionsCaption && CAPTION_ADD.test(t) && !/(maior|menor|estilo|cor\b)/.test(t)) {
     if (hasCaps && !p.captions.enabled) push([{ op: 'toggle_captions', enabled: true, explain: 'Mostrando as legendas' }], 'liguei as legendas');
-    else if (!hasCaps && ctx.silencesByAsset) {
-      const speech: Record<Id, Range[]> = {};
-      for (const [id, sil] of Object.entries(ctx.silencesByAsset)) speech[id] = speechRanges(sil, assets[id]?.duration ?? 0);
-      const segs = demoCaptions(p, speech, p.brief);
-      if (segs.length) push([{ op: 'set_captions', segments: segs, language: 'pt-BR', explain: `Gerando ${segs.length} legendas de exemplo` }], 'gerei legendas de exemplo (modo demo)');
-    }
+    else if (!hasCaps) said.push('para legendar preciso transcrever a fala — toque em "Gerar legendas"');
   }
 
   // --- legendas: tamanho / estilo / cor / posição
@@ -1117,10 +1115,39 @@ export function chatIntent(text: string, ctx: ChatContext): DemoResult {
     if (p.captions.segments.length) push([{ op: 'set_caption_style', style: captionLookFrom('tiktok')!.style, explain: 'Legendas rápidas estilo TikTok' }], 'legendas rápidas');
   }
 
-  if (!ops.length && !said.length) return { reply: `Não entendi esse pedido no modo demonstração. ${HELP}`, ops: [] };
+  if (!ops.length && !said.length) { const sim = similarCommands(text); return { reply: `Não entendi esse pedido no modo demonstração. Você quis dizer ${sim.slice(0, -1).map((c) => `“${c}”`).join(', ')} ou “${sim[sim.length - 1]}”? (Diga “ajuda” para ver tudo o que eu entendo.)`, ops: [] }; }
   const msg = said.length ? said.join(', ') : 'pronto';
   const all = [...ops, ...macros];
   return { reply: all.length ? `Feito: ${msg}.` : `${msg.charAt(0).toUpperCase()}${msg.slice(1)}.`, ops: all };
 }
 
 export { HELP as DEMO_HELP };
+
+/** comandos que o modo demo entende (tirados da ajuda) */
+export const DEMO_COMMANDS: string[] = [...HELP.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+
+const trigrams = (s: string): Set<string> => {
+  const t = ` ${s} `;
+  const out = new Set<string>();
+  for (let i = 0; i < t.length - 2; i++) out.add(t.slice(i, i + 3));
+  return out;
+};
+
+/** os N comandos do demo mais parecidos com o texto (palavras em comum + trigramas) */
+export function similarCommands(text: string, n = 3): string[] {
+  const q = norm(text);
+  if (!q) return DEMO_COMMANDS.slice(0, n);
+  const qw = new Set(q.split(/\s+/).filter((w) => w.length > 2));
+  const qt = trigrams(q);
+  const score = (cmd: string) => {
+    const c = norm(cmd);
+    const cw = c.split(/\s+/).filter((w) => w.length > 2);
+    const common = cw.filter((w) => qw.has(w) || [...qw].some((x) => x.length > 3 && (w.startsWith(x.slice(0, 4)) || x.startsWith(w.slice(0, 4))))).length;
+    const ct = trigrams(c);
+    let inter = 0;
+    for (const g of ct) if (qt.has(g)) inter++;
+    const jac = inter / (qt.size + ct.size - inter || 1);
+    return common * 0.6 + jac * 2;
+  };
+  return DEMO_COMMANDS.map((c, i) => ({ c, s: score(c), i })).sort((a, b) => b.s - a.s || a.i - b.i).slice(0, n).map((x) => x.c);
+}

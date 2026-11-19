@@ -26,22 +26,45 @@ export function shapeAspect(shape: ShapeClip['shape']): number {
 }
 
 const cache = new Map<string, AnyCanvas>();
+/** limite do cache de formas em bytes (w·h·4): ~48 MB, no máx. 12 canvases */
+const CACHE_BYTES = 48 * 1024 * 1024, CACHE_MAX = 12;
+let cacheBytes = 0;
+let lastGood: AnyCanvas | null = null;
 
 function key(parts: unknown[]) { return parts.join('|'); }
+
+/** altura quantizada em degraus de 2^(1/4) (~19%): escala animada reaproveita poucos canvases */
+export function quantizeShapeSize(px: number): number {
+  const v = Math.max(4, Math.min(2048, Number.isFinite(px) ? px : 4));
+  return Math.min(2048, Math.ceil(Math.pow(2, Math.ceil(Math.log2(v) * 4) / 4)));
+}
+
+function evict(need: number) {
+  for (const [k, cv] of cache) {
+    if (cache.size < CACHE_MAX && cacheBytes + need <= CACHE_BYTES) break;
+    cache.delete(k);
+    cacheBytes -= cv.width * cv.height * 4;
+    cv.width = cv.height = 1; // libera o backing já, sem esperar o GC (iOS tem teto de memória de canvas)
+  }
+}
+
+/** estatística p/ testes */
+export function shapeCacheStats() { return { entries: cache.size, bytes: cacheBytes }; }
 
 export function shapeCanvas(c: ShapeClip, sizePx: number): AnyCanvas {
   const asp = clipShapeAspect(c);
   // lado maior limitado (faixas finas muito largas não estouram a memória)
-  let h = Math.max(4, Math.min(2048, Math.round(sizePx)));
+  let h = quantizeShapeSize(sizePx);
   let w = Math.round(h * asp);
   if (w > 4096) { w = 4096; h = Math.max(2, Math.round(w / asp)); }
   w = Math.max(4, w);
   const k = key([c.shape, c.fill, c.stroke, c.strokeWidth, c.cornerRadius, asp.toFixed(4), w, h]);
   const hit = cache.get(k);
-  if (hit) return hit;
-  if (cache.size > 64) cache.clear();
+  if (hit) { cache.delete(k); cache.set(k, hit); return hit; } // LRU
+  evict(w * h * 4);
   const cv = makeCanvas(w, h);
-  const ctx = cv.getContext('2d') as Ctx;
+  const ctx = cv.getContext('2d') as Ctx | null;
+  if (!ctx) return lastGood ?? cv; // sem memória de canvas: não derruba o renderFrame
   const sw = c.stroke && c.strokeWidth ? Math.max(1, (c.strokeWidth * h) / 200) : 0;
   const pad = sw / 2 + 1;
   const iw = w - pad * 2, ih = h - pad * 2;
@@ -77,6 +100,8 @@ export function shapeCanvas(c: ShapeClip, sizePx: number): AnyCanvas {
   ctx.fill();
   if (sw) { ctx.lineWidth = sw; ctx.strokeStyle = c.stroke!; ctx.lineJoin = 'round'; ctx.stroke(); }
   cache.set(k, cv);
+  cacheBytes += w * h * 4;
+  lastGood = cv;
   return cv;
 }
 

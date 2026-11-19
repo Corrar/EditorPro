@@ -10,6 +10,9 @@ import { findClip } from '@/lib/ops';
 import type { Clip, ColorGrade, Id } from '@/lib/types';
 import { gradesEqual, normalizeGrade } from '@/lib/color/grade';
 
+/** grade vazia ESTÁVEL (objeto novo a cada render reabria os efeitos de escopos/miniaturas) */
+export const EMPTY_GRADE: ColorGrade = Object.freeze({}) as ColorGrade;
+
 export type GradableClip = Extract<Clip, { type: 'video' | 'image' | 'adjustment' }>;
 export const isGradable = (c?: Clip | null): c is GradableClip => !!c && (c.type === 'video' || c.type === 'image' || c.type === 'adjustment');
 
@@ -38,7 +41,7 @@ export function writeGrade(clipId: Id, grade: ColorGrade | undefined, history: b
 /** API de edição: set(fn, gesto) onde gesto = 'start' | 'move' | 'end' | 'once' */
 export function useGradeEditor(clip: GradableClip | null) {
   const clipId = clip?.id;
-  const grade: ColorGrade = clip?.colorGrade ?? {};
+  const grade: ColorGrade = clip?.colorGrade ?? EMPTY_GRADE;
   const needHistory = useRef(false);
   const inGesture = useRef(false);
 

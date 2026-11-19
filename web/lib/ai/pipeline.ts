@@ -10,7 +10,7 @@ import { useEditor } from '../store';
 import { AIClientError, analyzeReference, getStatus, requestEdit, translateSegments, type AIStatus, type EditFrame } from './client';
 import { beatsOf, colorStatsOf, sampleReference, silencesFor } from './analysis';
 import { colorGradeOps, matchColorGrade } from './colormatch';
-import { CAPTION_ADD, canonVerbs, chatIntent, demoCaptions, demoNeeds, planFirstEdit, silenceCutOps, silenceOptsFromText, speechRanges, type Range } from './demo';
+import { CAPTION_ADD, canonVerbs, chatIntent, demoNeeds, planFirstEdit, silenceCutOps, silenceOptsFromText, speechRanges, type Range } from './demo';
 import { deviceProfile, framesFromThumbnails, sampleVideo } from './frames';
 import { captionsMediaToTimeline } from './timemap';
 import { sanitizeOps } from './validate';
@@ -20,6 +20,11 @@ import { trackSubject } from './reframe';
 import { distributeWords } from './sanitize';
 import { describeStyle, modelRequestText, styleOps, styleScopeFromText, type StyleScope } from './model';
 import { materializeSfx, sanitizeSfxRequests, type SfxRequest } from './library';
+import { finalizeClaude, type FinalizeDeps, type Finalized } from './finalize';
+import { runScript } from './script/run';
+import { createGraphicAsset, updateGraphicAsset } from './svg';
+import { isVisualChange, renderResultFrames, reviewEnabled, reviewTimes } from './review';
+import type { EditResponse } from './client';
 import { backgroundMusicClips, catalogIdOf, catalogMusicOps, catalogMusicOpsById, chatMusicRequest, needsCatalogMusic, userMusic } from './catalogMusic';
 
 /** acrescenta às ops os AudioClips dos efeitos sonoros pedidos (gera o WAV no aparelho) */
@@ -42,6 +47,66 @@ async function withSfx(ops: EditOp[], sfx: SfxRequest[] | undefined, onStatus?: 
     return [...ops, ...(await materializeSfx(reqs, after, (p, o) => applyOps(p, o).project))];
   } catch {
     return ops; // sem WebAudio (ex.: navegador antigo): segue sem os sons
+  }
+}
+
+/* ---------- resposta do Claude: conserto, adiados, conferência ---------- */
+
+export const finalizeDeps: FinalizeDeps = {
+  request: (r) => requestEdit(r),
+  runScript: (code, p, a) => runScript(code, p, a),
+  createGraphic: (svg, name, p) => createGraphicAsset(svg, name, p),
+  updateGraphic: (id, svg, p) => updateGraphicAsset(id, svg, p),
+};
+
+/** valida + executa script/gráficos + 1 rodada de conserto; devolve as ops prontas (com SFX) */
+async function claudeOps(res: EditResponse, userText: string, opts: PipelineOptions): Promise<Finalized> {
+  const f = await finalizeClaude(res, store().project, {
+    ...finalizeDeps, userText, getAssets: () => store().assets, messages: store().messages, context: opts.context, onStatus: (t) => opts.onStatus?.(t),
+  });
+  return { ...f, ops: await withSfx(f.ops, f.sfx, opts.onStatus) };
+}
+
+/** depois de aplicar: legendas pedidas pela IA, erros que sobraram e a conferência visual */
+async function afterClaude(f: Finalized, before: Project, userText: string, apply: NonNullable<PipelineOptions['apply']>, opts: PipelineOptions, warnings: string[]): Promise<string> {
+  const notes: string[] = [];
+  if (f.captions && !store().project.captions.segments.length) {
+    try {
+      const r = await generateCaptions({ ...opts, apply, language: f.captions.language });
+      if (r.ops.length) notes.push(r.reply);
+    } catch (e) { warnings.push(`legendas: ${errText(e)}`); }
+  }
+  if (f.errors.length) {
+    warnings.push(...f.errors);
+    notes.push(`Algumas partes não deram certo${f.repaired ? ' nem depois do conserto' : ''}: ${f.errors.slice(0, 3).join('; ')}`);
+  }
+  const reviewed = await reviewPass(before, userText, apply, opts);
+  if (reviewed) notes.push(reviewed);
+  return notes.length ? `\n${notes.join('\n')}` : '';
+}
+
+/** "Conferindo o resultado…": renderiza quadros do resultado e deixa o Claude ajustar (1 rodada) */
+async function reviewPass(before: Project, userText: string, apply: NonNullable<PipelineOptions['apply']>, opts: PipelineOptions): Promise<string | null> {
+  const after = store().project;
+  if (!reviewEnabled() || !isVisualChange(before, after)) return null;
+  try {
+    opts.onStatus?.('Conferindo o resultado…');
+    const frames = await renderResultFrames(after, store().assets, reviewTimes(before, after));
+    if (!frames.length) return null;
+    const s = store();
+    const res = await requestEdit({ project: s.project, assets: s.assets, messages: s.messages, userText, mode: 'review', frames, context: opts.context });
+    if (res.ok || (!res.ops.length && !res.deferred?.length)) return null;
+    const f = await finalizeClaude(res, store().project, {
+      ...finalizeDeps, userText, getAssets: () => store().assets, messages: store().messages, context: opts.context, onStatus: (t) => opts.onStatus?.(t), repair: false,
+    });
+    const ops = await withSfx(f.ops, f.sfx, opts.onStatus);
+    if (!ops.length) return null;
+    opts.onStatus?.('Ajustando…');
+    await apply(ops);
+    return `Conferi o resultado e ajustei: ${res.reply}`;
+  } catch (e) {
+    console.warn('[ai] conferência do resultado falhou:', e);
+    return null;
   }
 }
 
@@ -179,12 +244,17 @@ const triedTranscription = new Set<string>();
 /** transcreve as fontes com Whisper e converte p/ tempos da timeline. null = pulada/falhou/desligada. */
 async function whisperCaptions(sources: MediaAsset[], language: string, opts: PipelineOptions, warnings: string[]): Promise<CaptionSegment[] | null> {
   const media = sources.filter((a) => (a.kind === 'video' || a.kind === 'audio') && a.url && !triedTranscription.has(`${a.id}|${a.url}`));
-  if (!media.length || opts.whisper === false) return null;
+  if (!media.length) return null;
+  const server = !!(await getStatus()).transcribe; // Whisper large no servidor: não baixa nada no aparelho
+  if (!server && opts.whisper === false) {
+    warnings.push('sem transcrição (a transcrição no aparelho está desligada no botão CC)');
+    return null;
+  }
   const dev = deviceProfile();
   const total = media.reduce((n, a) => n + (a.duration || 0), 0);
   const choice = await chooseWhisper();
   // aparelho fraco ou áudio longo no celular: pergunta antes de baixar/processar
-  if (opts.ask && (dev.weak || (dev.mobile && total > 600))) {
+  if (!server && opts.ask && (dev.weak || (dev.mobile && total > 600))) {
     const pick = await opts.ask(
       `Para legendar, transcrevo a fala aqui no aparelho (${choice.label}, ~${choice.sizeMB} MB na 1ª vez${total > 120 ? `, ${Math.round(total / 60)} min de áudio` : ''}). Neste aparelho pode demorar.`,
       [{ id: 'go', label: `Transcrever (~${choice.sizeMB} MB)` }, { id: 'skip', label: 'Pular legendas' }],
@@ -282,9 +352,11 @@ export async function runFirstEdit(opts: PipelineOptions & { brief: string }): P
         project: store().project, assets: store().assets, messages: store().messages, mode: 'first', frames,
         userText: brief || 'Edite este vídeo de forma profissional.',
       });
-      const san = sanitizeOps(res.ops, store().project, store().assets);
-      let ops = await withSfx(san.ops, [...(res.sfx ?? []), ...san.sfx], opts.onStatus);
-      let reply = res.reply;
+      const userText = brief || 'Edite este vídeo de forma profissional.';
+      const fin = await claudeOps(res, userText, opts);
+      let ops = fin.ops;
+      let reply = fin.reply;
+      const before = store().project;
       // pediu música e não mandou arquivo: faixa do catálogo gerado por código
       const simC = applyOps(store().project, ops).project;
       if (needsCatalogMusic(brief, simC, store().assets)) {
@@ -296,6 +368,7 @@ export async function runFirstEdit(opts: PipelineOptions & { brief: string }): P
       }
       opts.onStatus?.('Editando…');
       const appliedIds = ops.length ? await apply(ops) : [];
+      reply += await afterClaude(fin, before, userText, apply, opts, warnings);
       return { reply, ops, appliedIds, provider: 'anthropic' as const, warnings };
     }
 
@@ -359,17 +432,12 @@ export async function generateCaptions(opts: PipelineOptions & { language?: stri
   // pedido explícito do usuário: pode tentar de novo
   for (const a of used) triedTranscription.delete(`${a.id}|${a.url}`);
 
-  let segs = await whisperCaptions(used, language, opts, warnings);
-  let real = !!segs;
+  const segs = await whisperCaptions(used, language, opts, warnings);
+  const real = true;
   if (!segs) {
-    // sem transcrição: no demo, legendas de exemplo nos trechos de fala
-    if (status.configured && warnings.length) throw new AIClientError(warnings[0], 500, 'transcribe_failed');
-    opts.onStatus?.('Ouvindo o áudio…');
-    const silences = await silencesFor(used);
-    const speech: Record<Id, Range[]> = {};
-    for (const a of used) speech[a.id] = speechRanges(silences[a.id] ?? [], a.duration);
-    segs = demoCaptions(store().project, speech, store().project.brief);
-    real = false;
+    // legenda é SEMPRE a fala de verdade: sem transcrição, explica em vez de inventar texto
+    const why = warnings[0] ? ` (${warnings[0].replace(/^sem transcrição \(|\)$/g, '')})` : '';
+    return { reply: `Não consegui transcrever a fala${why}, então não coloquei legendas — legenda inventada não serve. Toque em "Gerar legendas" para tentar de novo.`, ops: [], appliedIds: [], provider: status.provider, warnings };
   }
   if (!segs.length) return { reply: 'Não encontrei fala para legendar neste vídeo.', ops: [], appliedIds: [], provider: status.provider, warnings };
   const ops = sanitizeOps(
@@ -377,9 +445,8 @@ export async function generateCaptions(opts: PipelineOptions & { language?: stri
     store().project, store().assets,
   ).ops;
   const appliedIds = await apply(ops, { delayMs: 300 });
-  const reply = real
-    ? `Pronto! Gerei ${segs.length} legendas sincronizadas com a fala. Quer mudar o estilo (ex.: "legendas estilo TikTok")?`
-    : `Coloquei ${segs.length} legendas de exemplo nos trechos de fala (sem transcrição desta vez).`;
+  void real;
+  const reply = `Pronto! Gerei ${segs.length} legendas com a fala, no tempo de cada palavra. Quer mudar o estilo (ex.: "legendas estilo TikTok")?`;
   return { reply, ops, appliedIds, provider: status.provider, warnings };
 }
 
@@ -425,11 +492,14 @@ async function claudeChat(text: string, apply: NonNullable<PipelineOptions['appl
     const s = store();
     const frames = await sourceFrames(sourceAssets(s.assets), false, 6);
     const res = await requestEdit({ project: s.project, assets: s.assets, messages: s.messages, userText: text, mode: 'chat', frames, context: opts.context });
-    const san = sanitizeOps(res.ops, store().project, store().assets);
-    const ops = await withSfx(san.ops, [...(res.sfx ?? []), ...san.sfx], opts.onStatus);
+    const fin = await claudeOps(res, text, opts);
+    const ops = fin.ops;
+    const before = store().project;
     if (ops.length) opts.onStatus?.('Editando…');
     const appliedIds = ops.length ? await apply(ops) : [];
-    return { reply: res.reply, ops, appliedIds, provider: 'anthropic', warnings: [] };
+    const warnings: string[] = [];
+    const extra = await afterClaude(fin, before, text, apply, opts, warnings);
+    return { reply: fin.reply + extra, ops, appliedIds, provider: 'anthropic', warnings };
   } catch (e) {
     // IA indisponível: tenta o intérprete local antes de desistir
     const local = chatIntent(canonVerbs(text), { project: store().project, assets: store().assets, target: opts.context });
@@ -657,17 +727,19 @@ export async function applyComments(opts: PipelineOptions & { markerIds?: Id[] }
   return withSingleUndo(async () => {
     let ops: EditOp[] = [];
     const sfx: SfxRequest[] = [];
+    let fin: Finalized | null = null;
+    const before = store().project;
+    const warnings: string[] = [];
     const replies = new Map<string, string>();
     let reply = '';
     if (status.configured) {
       opts.onStatus?.(`Lendo ${pending.length} comentário${pending.length > 1 ? 's' : ''}…`);
       const s = store();
       const res = await requestEdit({ project: s.project, assets: s.assets, messages: s.messages, mode: 'comments', frames: await sourceFrames(sourceAssets(s.assets), false, 6), userText: `Aplique estes comentários de revisão:\n${list}` });
-      const san = sanitizeOps(res.ops, store().project, store().assets);
-      ops = san.ops;
-      sfx.push(...(res.sfx ?? []), ...san.sfx);
+      fin = await claudeOps(res, `Aplique estes comentários de revisão:\n${list}`, opts);
+      ops = fin.ops; // já validadas (scripts/gráficos/SFX incluídos)
       for (const c of res.comments ?? []) replies.set(c.markerId, c.reply);
-      reply = res.reply;
+      reply = fin.reply;
     } else {
       // demo: cada comentário vira um pedido de chat no trecho/ponto dele
       let p = store().project;
@@ -689,11 +761,17 @@ export async function applyComments(opts: PipelineOptions & { markerIds?: Id[] }
       if (!status.configured && replies.get(m.id)?.startsWith('Não entendi')) continue;
       ops.push({ op: 'update_marker', markerId: m.id, patch: { resolved: true }, explain: `Comentário em ${f(m.t)} s resolvido` });
     }
-    const clean = await withSfx(sanitizeOps(ops, store().project, store().assets).ops, sfx, opts.onStatus);
+    let clean: EditOp[];
+    if (fin) {
+      // ops do Claude já validadas; só as marcações de resolvido são novas
+      const extra = ops.slice(fin.ops.length);
+      clean = [...fin.ops, ...sanitizeOps(extra, applyOps(store().project, fin.ops).project, store().assets).ops];
+    } else clean = await withSfx(sanitizeOps(ops, store().project, store().assets).ops, sfx, opts.onStatus);
     opts.onStatus?.('Editando…');
     const appliedIds = clean.length ? await apply(clean) : [];
     const lines = pending.map((m) => `• ${f(m.t)} s — "${m.label ?? ''}": ${replies.get(m.id) ?? 'feito.'}`);
-    return { reply: `${reply}\n${lines.join('\n')}`, ops: clean, appliedIds, provider: status.provider, warnings: [] };
+    const after = fin ? await afterClaude(fin, before, `Comentários de revisão:\n${list}`, apply, opts, warnings) : '';
+    return { reply: `${reply}\n${lines.join('\n')}${after}`, ops: clean, appliedIds, provider: status.provider, warnings };
   });
 }
 

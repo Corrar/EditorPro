@@ -16,7 +16,7 @@ const asset: MediaAsset = { id: 'a1', kind: 'video', role: 'source', name: 'b.mp
 describe('schemas (zod -> saída estruturada)', () => {
   it('EditOpSchema cobre todas as EditOp e exige explain', () => {
     const js = z.toJSONSchema(EditOpSchema) as S;
-    expect([...js.properties.op.enum].sort()).toEqual([...OP_KINDS, 'apply_template', 'apply_caption_preset', 'apply_look', 'add_sfx', 'add_music'].sort());
+    expect([...js.properties.op.enum].sort()).toEqual([...OP_KINDS, 'apply_template', 'apply_caption_preset', 'apply_look', 'add_sfx', 'add_music', 'run_script', 'add_graphic', 'update_graphic', 'generate_captions'].sort());
     expect(js.required).toEqual(expect.arrayContaining(['op', 'explain']));
   });
 

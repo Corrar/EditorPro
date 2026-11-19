@@ -7,7 +7,7 @@
 import { useMemo, useRef } from 'react';
 import type { ColorGrade, ColorWheel } from '@/lib/types';
 import { WHEEL_KEYS, WHEEL_LABELS, isNeutralWheel, type WheelKey } from '@/lib/color/grade';
-import { puckColor, puckFromWheel, wheelFromPuck } from '@/lib/color/wheel';
+import { puckColor, puckFromWheel, wheelResetChroma, wheelWithMaster, wheelWithPuck } from '@/lib/color/wheel';
 import Icon from '@/components/ui/Icon';
 import { useDoubleTap, type Phase } from './controls';
 
@@ -27,13 +27,14 @@ function ringGradient(): string {
 export function WheelControl({ k, wheel, set }: { k: WheelKey; wheel?: ColorWheel; set: SetGrade }) {
   const { x, y, master } = puckFromWheel(wheel);
   const disc = useRef<HTMLDivElement>(null);
-  const drag = useRef<{ id: number; px: number; py: number; x0: number; y0: number; fine: number; last: ColorWheel } | null>(null);
+  const drag = useRef<{ id: number; px: number; py: number; x0: number; y0: number; fine: number; w0?: ColorWheel; last: ColorWheel } | null>(null);
   const jog = useRef<{ id: number; px: number; m0: number; last: number; active: boolean; py: number; touch: boolean } | null>(null);
   const ring = useMemo(ringGradient, []);
 
   const write = (w: ColorWheel, phase: Phase) => set((g) => ({ ...g, [k]: w }), phase);
-  const resetColor = useDoubleTap(() => write(wheelFromPuck(0, 0, master), 'once'));
-  const resetMaster = useDoubleTap(() => write(wheelFromPuck(x, y, 0), 'once'));
+  // disco/mestre nunca recalculam a roda inteira a partir do puck (perderia luminância/croma vindos da IA)
+  const resetColor = useDoubleTap(() => write(wheelResetChroma(wheel), 'once'));
+  const resetMaster = useDoubleTap(() => write(wheelWithMaster(wheel, 0), 'once'));
   const neutral = isNeutralWheel(wheel);
   const fmt = (v: number) => (v >= 0 ? '+' : '') + v.toFixed(2);
 
@@ -58,7 +59,7 @@ export function WheelControl({ k, wheel, set }: { k: WheelKey; wheel?: ColorWhee
           if (resetColor()) { e.preventDefault(); return; }
           e.currentTarget.setPointerCapture(e.pointerId);
           // relativo: o disco não "pula" para o dedo; mouse com Shift = ainda mais fino
-          drag.current = { id: e.pointerId, px: e.clientX, py: e.clientY, x0: x, y0: y, fine: 1, last: wheel ?? { r: 0, g: 0, b: 0, y: 0 } };
+          drag.current = { id: e.pointerId, px: e.clientX, py: e.clientY, x0: x, y0: y, fine: 1, w0: wheel, last: wheel ?? { r: 0, g: 0, b: 0, y: 0 } };
           set((g) => g, 'start');
         }}
         onPointerMove={(e) => {
@@ -70,7 +71,7 @@ export function WheelControl({ k, wheel, set }: { k: WheelKey; wheel?: ColorWhee
           const m = Math.hypot(nx, ny);
           if (m > 1) { nx /= m; ny /= m; }
           if (Math.hypot(nx, ny) < 0.025) { nx = 0; ny = 0; } // ímã no centro
-          d.last = wheelFromPuck(nx, ny, master);
+          d.last = wheelWithPuck(d.w0, nx, ny);
           write(d.last, 'move');
         }}
         onPointerUp={(e) => {
@@ -85,10 +86,10 @@ export function WheelControl({ k, wheel, set }: { k: WheelKey; wheel?: ColorWhee
           let nx = x, ny = y;
           if (e.key === 'ArrowLeft') nx -= s; else if (e.key === 'ArrowRight') nx += s;
           else if (e.key === 'ArrowUp') ny += s; else if (e.key === 'ArrowDown') ny -= s;
-          else if (e.key === '0' || e.key === 'Delete' || e.key === 'Backspace') { nx = 0; ny = 0; }
+          else if (e.key === '0' || e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); e.stopPropagation(); write(wheelResetChroma(wheel), 'once'); return; }
           else return;
           e.preventDefault(); e.stopPropagation();
-          write(wheelFromPuck(nx, ny, master), 'once');
+          write(wheelWithPuck(wheel, nx, ny), 'once');
         }}
       >
         <span className="ec-disc-face" />
@@ -125,22 +126,22 @@ export function WheelControl({ k, wheel, set }: { k: WheelKey; wheel?: ColorWhee
           m = Math.max(-1, Math.min(1, m));
           if (Math.abs(m) < 0.01) m = 0;
           j.last = Math.round(m * 1000) / 1000;
-          write(wheelFromPuck(x, y, j.last), 'move');
+          write(wheelWithMaster(wheel, j.last), 'move');
         }}
         onPointerUp={(e) => {
           const j = jog.current;
           if (!j || j.id !== e.pointerId) return;
           jog.current = null;
-          if (j.active) write(wheelFromPuck(x, y, j.last), 'end');
+          if (j.active) write(wheelWithMaster(wheel, j.last), 'end');
         }}
-        onPointerCancel={() => { const j = jog.current; jog.current = null; if (j?.active) write(wheelFromPuck(x, y, j.last), 'end'); }}
+        onPointerCancel={() => { const j = jog.current; jog.current = null; if (j?.active) write(wheelWithMaster(wheel, j.last), 'end'); }}
         onKeyDown={(e) => {
           const s = e.shiftKey ? 0.1 : 0.01;
           let m = master;
           if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') m -= s; else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') m += s;
           else if (e.key === '0' || e.key === 'Delete') m = 0; else return;
           e.preventDefault(); e.stopPropagation();
-          write(wheelFromPuck(x, y, Math.max(-1, Math.min(1, m))), 'once');
+          write(wheelWithMaster(wheel, m), 'once');
         }}
       >
         <span className="ec-jog-ticks" />

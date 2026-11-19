@@ -22,7 +22,10 @@ function clipLine(c: Clip): Record<string, unknown> {
     if (c.transform.scale !== 1 || c.transform.x || c.transform.y) base.transform = c.transform;
     if (c.keyframes?.length) base.keyframes = c.keyframes.length;
     if (c.filters.length) base.filters = c.filters;
-    if (c.transitionIn) base.transitionIn = c.transitionIn;
+    if (c.transitionIn) {
+      const tr = c.transitionIn as { kind: string; duration: number; name?: string };
+      base.transitionIn = tr.kind === 'custom' ? { kind: 'custom', name: tr.name, duration: tr.duration } : c.transitionIn;
+    }
   }
   if (c.type === 'video' && c.colorPreset) base.colorPreset = c.colorPreset;
   if (c.type === 'audio' && c.duckUnderVoice) base.duck = true;
@@ -33,7 +36,7 @@ function clipLine(c: Clip): Record<string, unknown> {
   // extras estilo CapCut (só o que estiver ligado, para economizar tokens)
   const x = c as unknown as Record<string, unknown>;
   for (const k of ['speedPreset', 'reverse', 'pitch', 'blendMode', 'fit', 'flipH', 'flipV', 'removeBackground'] as const) if (x[k] !== undefined && x[k] !== false) base[k] = x[k];
-  if (Array.isArray(x.effects) && c.type !== 'adjustment' && x.effects.length) base.effects = (x.effects as { kind: string }[]).map((e) => e.kind);
+  if (Array.isArray(x.effects) && c.type !== 'adjustment' && x.effects.length) base.effects = (x.effects as { kind: string; name?: string }[]).map((e) => (e.kind === 'custom' ? `custom:${e.name ?? 'sem nome'}` : e.kind));
   if (Array.isArray(x.audioEffects) && x.audioEffects.length) base.audioEffects = (x.audioEffects as { kind: string }[]).map((e) => e.kind);
   for (const k of ['mask', 'chromaKey', 'crop', 'animationIn', 'animationOut', 'animationLoop'] as const) if (x[k]) base[k] = x[k];
   return base;
@@ -67,6 +70,8 @@ export function summarizeProject(
       id: a.id, kind: a.kind, role: a.role, name: a.name, duration: t2(a.duration),
       ...(a.width && a.height ? { size: `${a.width}x${a.height}` } : {}),
       ...(a.beats?.length ? { beats: a.beats.slice(0, 200).map(t2) } : {}),
+      // gráfico por código: o SVG volta p/ o Claude poder editar (update_graphic)
+      ...(a.role === 'graphic' && a.svg ? { svg: a.svg.length <= 6000 ? a.svg : `${a.svg.slice(0, 6000)}…(cortado)` } : {}),
     })),
     tracks: p.tracks.map((t) => ({
       id: t.id, kind: t.kind, name: t.name,

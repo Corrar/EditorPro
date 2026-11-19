@@ -3,13 +3,14 @@
    Looks/LUTs: grade de miniaturas (o quadro do clipe com a correção atual
    + cada look), intensidade e "Importar .cube" (salvo no IndexedDB).
    ===================================================================== */
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { ColorGrade } from '@/lib/types';
 import { BUILTIN_LOOKS, deleteImportedLut, importCubeFile, importedLuts, loadImportedLuts, onLutsChanged } from '@/lib/color/luts';
 import { CubeParseError } from '@/lib/color/cube';
 import { getColorGrader } from '@/lib/color/gl';
 import { resolveGrade } from '@/lib/color/pipeline';
-import { getLut } from '@/lib/color/luts';
+import { getLut, lutVersion } from '@/lib/color/luts';
+import { normalizeGrade } from '@/lib/color/grade';
 import { emit } from '@/lib/events';
 import Icon from '@/components/ui/Icon';
 import { ColorSlider, type Phase } from './controls';
@@ -21,13 +22,17 @@ let lutsVersion = 0;
 const subscribe = (f: () => void) => onLutsChanged(() => { lutsVersion++; f(); });
 const snap = () => lutsVersion;
 
-function Thumb({ frame, grade, id, swatch, label, on, onPick, onDelete }: {
-  frame: ClipFrame | null; grade: ColorGrade; id: string | null; swatch?: [string, string]; label: string; on: boolean;
+const Thumb = memo(function Thumb({ frame, grade, gradeKey, id, swatch, label, on, onPick, onDelete }: {
+  frame: ClipFrame | null; grade: ColorGrade; gradeKey: string; id: string | null; swatch?: [string, string]; label: string; on: boolean;
   onPick: () => void; onDelete?: () => void;
 }) {
   const cv = useRef<HTMLCanvasElement>(null);
   const [drawn, setDrawn] = useState(false);
+  // lê frame/grade por ref: o efeito só roda com quadro novo, grade diferente (por valor) ou outro look
+  const live = useRef({ frame, grade });
+  live.current = { frame, grade };
   useEffect(() => {
+    const { frame, grade } = live.current;
     const c = cv.current;
     if (!c || !frame) { setDrawn(false); return; }
     const src = frame.canvas;
@@ -44,7 +49,7 @@ function Thumb({ frame, grade, id, swatch, label, on, onPick, onDelete }: {
       ctx.drawImage((out ?? src) as CanvasImageSource, 0, 0, tw, th);
       setDrawn(true);
     } catch { setDrawn(false); }
-  }, [frame?.version, frame, grade, id]);
+  }, [frame?.version, frame?.canvas, gradeKey, id, lutsV(id)]);
   return (
     <div className={`ec-look${on ? ' on' : ''}`}>
       <button type="button" className="ec-look-btn" onClick={onPick} aria-pressed={on} aria-label={`Look ${label}`}>
@@ -59,7 +64,10 @@ function Thumb({ frame, grade, id, swatch, label, on, onPick, onDelete }: {
       )}
     </div>
   );
-}
+});
+
+/** a miniatura de LUT importada precisa redesenhar quando ela carrega/sai do registro */
+const lutsV = (id: string | null) => (id && id.startsWith('cube:') ? lutVersion() : 0);
 
 export function LooksTab({ grade, set, frame }: { grade: ColorGrade; set: SetGrade; frame: ClipFrame | null }) {
   useSyncExternalStore(subscribe, snap, snap);
@@ -68,7 +76,9 @@ export function LooksTab({ grade, set, frame }: { grade: ColorGrade; set: SetGra
   useEffect(() => { void loadImportedLuts(); }, []);
   const cur = grade.lut?.id ?? null;
   // a miniatura mostra a correção atual SEM a LUT atual + a LUT candidata
-  const base: ColorGrade = { ...grade, lut: undefined };
+  const gradeKey = JSON.stringify(normalizeGrade({ ...grade, lut: undefined }) ?? null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const base: ColorGrade = useMemo(() => ({ ...grade, lut: undefined }), [gradeKey]);
   const pick = (id: string | null) => set((g) => ({ ...g, lut: id ? { id, intensity: g.lut?.id === id ? g.lut.intensity : 1 } : undefined }), 'once');
   const imported = importedLuts();
 
@@ -100,12 +110,12 @@ export function LooksTab({ grade, set, frame }: { grade: ColorGrade; set: SetGra
         </div>
       )}
       <div className="ec-look-grid">
-        <Thumb frame={frame} grade={base} id={null} label="Nenhum" on={!cur} onPick={() => pick(null)} swatch={['#3a3b40', '#9a9ca1']} />
+        <Thumb frame={frame} grade={base} gradeKey={gradeKey} id={null} label="Nenhum" on={!cur} onPick={() => pick(null)} swatch={['#3a3b40', '#9a9ca1']} />
         {BUILTIN_LOOKS.map((l) => (
-          <Thumb key={l.id} frame={frame} grade={base} id={l.id} label={l.name} swatch={l.swatch} on={cur === l.id} onPick={() => pick(l.id)} />
+          <Thumb key={l.id} frame={frame} grade={base} gradeKey={gradeKey} id={l.id} label={l.name} swatch={l.swatch} on={cur === l.id} onPick={() => pick(l.id)} />
         ))}
         {imported.map((l) => (
-          <Thumb key={l.id} frame={frame} grade={base} id={l.id} label={l.name} swatch={['#2a2b2f', '#F2681F']} on={cur === l.id}
+          <Thumb key={l.id} frame={frame} grade={base} gradeKey={gradeKey} id={l.id} label={l.name} swatch={['#2a2b2f', '#F2681F']} on={cur === l.id}
             onPick={() => pick(l.id)}
             onDelete={() => { void deleteImportedLut(l.id); if (cur === l.id) pick(null); }} />
         ))}

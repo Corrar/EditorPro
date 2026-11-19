@@ -36,12 +36,20 @@ let filterSupport: boolean | undefined;
 export function canvasFilterSupported(): boolean {
   if (filterSupport !== undefined) return filterSupport;
   try {
-    const c = makeCanvas(1, 1);
-    const ctx = c.getContext('2d') as Ctx;
+    const c = makeCanvas(8, 8);
+    const ctx = c.getContext('2d') as Ctx | null;
+    // sem o atributo no protótipo, escrever ctx.filter só cria uma propriedade solta (falso positivo)
+    if (!ctx || !('filter' in Object.getPrototypeOf(ctx)) || typeof ctx.filter !== 'string') { filterSupport = false; return false; }
+    // atributo existe mas pode ser ignorado: confirma desenhando
     ctx.filter = 'blur(2px)';
-    filterSupport = ctx.filter === 'blur(2px)';
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(4, 0, 4, 8);
+    filterSupport = ctx.getImageData(2, 4, 1, 1).data[3] > 0;
   } catch { filterSupport = false; }
   return filterSupport;
 }
+
+/** só p/ testes: esquece a detecção (refaz na próxima chamada) */
+export function resetCanvasFilterSupport() { filterSupport = undefined; }
 
 export const hsl = (h: number, s: number, l: number, a = 1) => `hsla(${Math.round(((h % 360) + 360) % 360)},${s}%,${l}%,${a})`;

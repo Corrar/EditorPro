@@ -20,6 +20,7 @@ import {
 import { assignWordIds } from './features';
 import { COLOR_GRADE_LIVE, gradeToFilters } from './colormatch';
 import { expandLibraryOp, isLibraryMacro, type SfxRequest } from './library';
+import { isDeferredMacro, toDeferred, type Deferred } from './deferred';
 
 export const OP_KINDS: EditOpKind[] = [
   'set_project', 'set_aspect', 'add_track', 'update_track', 'remove_track', 'move_track', 'add_clip', 'update_clip',
@@ -34,7 +35,7 @@ export const MAX_OPS = 80;
 const EPS = 1e-3;
 
 export interface Dropped { op: unknown; reason: string }
-export interface SanitizeResult { ops: EditOp[]; dropped: Dropped[]; project: Project; sfx: SfxRequest[] }
+export interface SanitizeResult { ops: EditOp[]; dropped: Dropped[]; project: Project; sfx: SfxRequest[]; deferred: Deferred[] }
 
 const DEFAULT_EXPLAIN: Record<EditOpKind, string> = {
   set_project: 'Ajustando o projeto',
@@ -270,7 +271,12 @@ function buildClipPatch(raw: Record<string, unknown>, clip: Clip, assets: Record
     const d = duration ?? clip.duration;
     const fadeIn = clampNum(raw.fadeIn, 0, d / 2); if (fadeIn !== undefined) out.fadeIn = fadeIn;
     const fadeOut = clampNum(raw.fadeOut, 0, d / 2); if (fadeOut !== undefined) out.fadeOut = fadeOut;
-    if (clip.type === 'audio') { const duck = bool(raw.duckUnderVoice); if (duck !== undefined) out.duckUnderVoice = duck; }
+    if (clip.type === 'audio') {
+      const duck = bool(raw.duckUnderVoice); if (duck !== undefined) out.duckUnderVoice = duck;
+      // automação (ex.: props.volume subindo aos poucos) — em áudio só `props` vale
+      const akf = sanitizeKeyframes(raw.keyframes, d)?.filter((k) => k.props).map((k) => ({ ...k, transform: {} }));
+      if (akf?.length) out.keyframes = akf; else if (Array.isArray(raw.keyframes) && !raw.keyframes.length) out.keyframes = [];
+    }
     if (clip.type === 'video') { const muted = bool(raw.muted); if (muted !== undefined) out.muted = muted; }
     Object.assign(out, sanitizeAudioExtras(raw));
   }
@@ -562,14 +568,20 @@ export function sanitizeOp(raw: unknown, p: Project, assets: Record<Id, MediaAss
 }
 
 /** sanitiza a lista inteira simulando a aplicação em sequência */
-export function sanitizeOps(raw: unknown, project: Project, assets: Record<Id, MediaAsset>): SanitizeResult {
+export function sanitizeOps(raw: unknown, project: Project, assets: Record<Id, MediaAsset>, maxOps = MAX_OPS): SanitizeResult {
   const list = Array.isArray(raw) ? raw : isObj(raw) && Array.isArray(raw.ops) ? raw.ops : [];
   const ops: EditOp[] = [];
   const dropped: Dropped[] = [];
   const sfx: SfxRequest[] = [];
+  const deferred: Deferred[] = [];
   let p = project;
-  for (const item of list.slice(0, MAX_OPS)) {
+  for (const item of list.slice(0, maxOps)) {
     try {
+      if (isDeferredMacro(item)) {
+        // script/gráfico/transcrição: executados no navegador depois (deferred.ts)
+        deferred.push(toDeferred(item as Record<string, unknown>, p, assets));
+        continue;
+      }
       if (isLibraryMacro(item)) {
         // macro da biblioteca (modelo, preset de legenda, look, efeito sonoro) -> ops reais
         for (const raw of expandLibraryOp(item as Record<string, unknown>, p, sfx)) {
@@ -587,8 +599,8 @@ export function sanitizeOps(raw: unknown, project: Project, assets: Record<Id, M
       dropped.push({ op: item, reason: e instanceof Error ? e.message : String(e) });
     }
   }
-  if (list.length > MAX_OPS) dropped.push({ op: null, reason: `limite de ${MAX_OPS} operações` });
-  return { ops, dropped, project: p, sfx };
+  if (list.length > maxOps) dropped.push({ op: null, reason: `limite de ${maxOps} operações` });
+  return { ops, dropped, project: p, sfx, deferred };
 }
 
 export { EPS as VALIDATE_EPS };

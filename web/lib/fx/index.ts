@@ -11,3 +11,5 @@ export { fxGLAvailable, runFx, glStats } from './glcore';
 export { effectNativeMode, effectsNativeMode, easeTransitionProgress } from './native';
 export { checkShader, wrapShader, staticCheck, shaderHash, parseShaderLog, SHADER_PRELUDE_DOC, SHADER_EXAMPLES, SHADER_MAX_CHARS, type ShaderStage, type ShaderCheck, type ShaderExample } from './customShader';
 export { applyCustomEffect, runCustomTransition, warmCustomShader } from './customRender';
+export { warmupEffect, warmupTransition, warmupCustom, type WarmState } from './warm';
+export { prewarmFx, fxParallelCompile } from './glcore';

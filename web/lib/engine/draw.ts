@@ -185,7 +185,7 @@ export function drawLayer(ctx: Ctx, layer: LayerItem, t: Seconds, el: MediaEleme
       pc.drawImage(src, 0, 0, c.width, c.height);
       src = c as CanvasImageSource; sw = c.width; sh = c.height;
     }
-    const g = gradeLayer(src, clip.colorGrade, sw, sh);
+    const g = gradeLayer(src, clip.colorGrade, sw, sh, { offline: opts.offline });
     if (g) { src = g; sw = (g as HTMLCanvasElement).width; sh = (g as HTMLCanvasElement).height; }
   }
 
@@ -292,7 +292,7 @@ function overlayColor(ctx: Ctx, color: string, alpha: number, W: number, H: numb
 
 /* ---------- camada de ajuste: aplica filtros/efeitos a tudo que já está desenhado ---------- */
 
-export function applyAdjustment(ctx: Ctx, clip0: AdjustmentClip, t: Seconds, W: number, H: number) {
+export function applyAdjustment(ctx: Ctx, clip0: AdjustmentClip, t: Seconds, W: number, H: number, offline = false) {
   const clip = animateClip(clip0, t - clip0.start);
   const f = resolveFilters(clip.filters, clip.colorPreset, H / 1080);
   const anyFx = f.css !== 'none' || needsPixelGrade(f) || f.temperature || f.tint || f.fade || f.vignette || f.grain || clip.effects?.length || !!clip.colorGrade;
@@ -308,7 +308,7 @@ export function applyAdjustment(ctx: Ctx, clip0: AdjustmentClip, t: Seconds, W: 
     if (out) { const { c, ctx: g } = scratch(ctx.canvas, W, H, 10); g.drawImage(out as CanvasImageSource, 0, 0); base = c as CanvasImageSource; }
   }
   if (clip.colorGrade) {
-    const g = gradeLayer(base, clip.colorGrade, W, H);
+    const g = gradeLayer(base, clip.colorGrade, W, H, { offline });
     if (g) { const { c, ctx: gc } = scratch(ctx.canvas, W, H, 12); gc.drawImage(g, 0, 0); base = c as CanvasImageSource; }
   }
   const { c: work, ctx: wc } = scratch(ctx.canvas, W, H, 11);

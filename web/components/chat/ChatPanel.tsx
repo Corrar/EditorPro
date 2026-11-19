@@ -8,6 +8,7 @@
    ===================================================================== */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Icon from '@/components/ui/Icon';
+import { reviewEnabled, setReviewEnabled } from '@/lib/ai/review';
 import { useEditor } from '@/lib/store';
 import { emit } from '@/lib/events';
 import { useAIBridge } from '@/lib/ai/bridge';
@@ -109,6 +110,9 @@ export default function ChatPanel() {
   const pendingComments = useEditor((s) => (s.project.markers ?? []).filter((m) => m.kind === 'comment' && !m.resolved).length);
   const ctxComment = useEditor((s) => (s.chatContext?.markerId ? (s.project.markers ?? []).find((m) => m.id === s.chatContext!.markerId && m.kind === 'comment' && !m.resolved) : undefined));
   const [text, setText] = useState('');
+  // "IA confere o resultado" (renderiza quadros e ajusta): preferência por aparelho
+  const [review, setReview] = useState(true);
+  useEffect(() => setReview(reviewEnabled()), []);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [pending, setPending] = useState<File[]>([]);
@@ -199,6 +203,17 @@ export default function ChatPanel() {
           >
             CC
           </button>
+          {claude ? (
+            <button
+              className={`ep-ch-cc ep-ch-rv${review ? ' on' : ''}`}
+              onClick={() => { setReviewEnabled(!review); setReview(!review); }}
+              aria-pressed={review}
+              aria-label="IA confere o resultado"
+              title={review ? 'A IA confere o resultado (olha quadros do vídeo pronto e ajusta). Toque para desligar e ficar mais rápido.' : 'Conferência do resultado desligada. Toque para ligar.'}
+            >
+              <Icon name="check" size={14} />
+            </button>
+          ) : null}
           <span className={`ep-ch-badge${claude ? ' on' : ''}`} title={claude ? `Claude (${status?.model})` : status?.offline ? 'Não consegui falar com o servidor da IA — tento de novo no próximo pedido' : 'Sem chave de IA: planejador local, grátis'}>
             {status ? (claude ? 'Claude' : status.offline ? 'Sem conexão' : 'Demo') : '…'}
           </span>

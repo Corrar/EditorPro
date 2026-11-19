@@ -20,11 +20,14 @@ import { freezeFrameOps as placeFreezeFrameOps } from '../media/place';
 import { keyframeToggleOps } from './keyframes';
 import { expandLinks, linkOps, splitAllOps, unlinkOps } from './trim';
 import { nudgeOps } from './nav';
+import { relinkSplitOps, syncLinkedAfterPack } from './links';
 
 const toast = (text: string, kind: 'info' | 'ok' | 'error' = 'info') => emit('ep:toast', { text, kind });
 
 /** acrescenta o "fecha buracos" da trilha principal se ela mudou (modo magnético) */
-export function withMagnet(p: Project, ops: EditOp[], force = false): EditOp[] {
+export function withMagnet(p: Project, ops0: EditOp[], force = false): EditOp[] {
+  // cortes em clipes vinculados: cada pedaço fica vinculado só ao seu par
+  const ops = ops0.length ? [...ops0, ...relinkSplitOps(p, ops0)] : ops0;
   if (!ops.length || (!force && !useTimelineUi.getState().magnetic)) return ops;
   const mainId = mainTrackId(p);
   if (!mainId) return ops;
@@ -32,7 +35,9 @@ export function withMagnet(p: Project, ops: EditOp[], force = false): EditOp[] {
   const before = p.tracks.find((t) => t.id === mainId);
   const after = next.tracks.find((t) => t.id === mainId);
   if (!after || before === after) return ops;
-  return [...ops, ...packOps(after)];
+  const pack = packOps(after);
+  // o reempacotamento leva junto o áudio vinculado (A/V em sincronia)
+  return [...ops, ...pack, ...syncLinkedAfterPack(p, ops, pack, mainId)];
 }
 
 /** despacha com magnetismo */
@@ -47,7 +52,7 @@ export function splitAtPlayhead(ids?: Id[]) {
   const st = useEditor.getState();
   const ops = splitOps(st.project, ids ?? st.selection, st.playhead);
   if (!ops.length) return toast('Posicione o cursor sobre um clipe para dividir');
-  st.dispatch(ops);
+  commit(ops);
 }
 
 export function removeClips(ids?: Id[], ripple = false) {

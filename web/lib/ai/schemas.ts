@@ -4,6 +4,7 @@
    modelo; a validação real é validate.ts/sanitize.ts.
    ===================================================================== */
 import { LIBRARY_MACROS } from './library';
+import { DEFERRED_MACROS } from './deferred';
 import { z } from 'zod';
 import {
   ASPECTS, AUDIO_EFFECTS, BLEND_MODES, CAPTION_PRESETS, CLIP_ANIMATIONS, COLOR_PRESETS, EASINGS, EFFECT_KINDS, FILTER_KINDS, FIT_MODES,
@@ -20,9 +21,10 @@ const transform = z.object({
   rotation: z.number().optional(),
   opacity: z.number().optional(),
 });
-const keyframe = z.object({ t: z.number().describe('segundos desde o início do clipe'), transform, easing: z.enum(EASINGS).optional() });
+const propKf = z.array(z.object({ path: z.string().describe("caminho da propriedade: 'volume', 'style.color', 'effects.0.intensity', 'colorGrade.saturation'…"), value: z.union([z.number(), z.string()]).describe("número ou cor '#RRGGBB'") }));
+const keyframe = z.object({ t: z.number().describe('segundos desde o início do clipe'), transform: transform.optional(), props: propKf.optional().describe('keyframe de QUALQUER propriedade numérica/cor'), easing: z.enum(EASINGS).optional() });
 const filter = z.object({ kind: z.enum(FILTER_KINDS), value: z.number() });
-const transition = z.object({ kind: z.enum(TRANSITIONS), duration: z.number(), easing: z.enum(EASINGS).optional() });
+const transition = z.object({ kind: z.enum([...TRANSITIONS, 'custom'] as string[] as [string, ...string[]]), duration: z.number(), easing: z.enum(EASINGS).optional(), code: z.string().optional().describe("kind 'custom': GLSL com vec4 transition(vec2 uv)"), name: z.string().optional(), params: z.array(z.number()).optional() });
 const textStyleShape = {
   fontFamily: z.string().optional(),
   fontSize: z.number().optional(),
@@ -63,7 +65,7 @@ const captionStyle = z.object({
   jitter: z.number().optional(),
 });
 
-const effect = z.object({ kind: z.enum(EFFECT_KINDS), intensity: z.number().describe('0..1'), speed: z.number().optional(), color: z.string().optional().describe('#RRGGBB'), angle: z.number().optional().describe('graus') });
+const effect = z.object({ kind: z.enum([...EFFECT_KINDS, 'custom'] as string[] as [string, ...string[]]), code: z.string().optional().describe("kind 'custom': GLSL com vec4 effect(vec2 uv)"), name: z.string().optional(), params: z.array(z.number()).optional(), intensity: z.number().describe('0..1'), speed: z.number().optional(), color: z.string().optional().describe('#RRGGBB'), angle: z.number().optional().describe('graus') });
 const audioEffect = z.object({ kind: z.enum(AUDIO_EFFECTS), amount: z.number().describe('0..1') });
 const clipAnim = z.object({ kind: z.enum(CLIP_ANIMATIONS), duration: z.number() });
 const mask = z.object({ shape: z.enum(MASK_SHAPES), x: z.number(), y: z.number(), w: z.number(), h: z.number(), rotation: z.number(), feather: z.number(), invert: z.boolean().optional(), radius: z.number().optional(), text: z.string().optional(), keyframes: z.array(z.object({ t: z.number(), x: z.number().optional(), y: z.number().optional(), w: z.number().optional(), h: z.number().optional(), rotation: z.number().optional(), feather: z.number().optional() })).optional() });
@@ -135,7 +137,7 @@ const word = z.object({ start: z.number(), end: z.number(), text: z.string() });
 const segment = z.object({ start: z.number(), end: z.number(), text: z.string(), words: z.array(word).optional() });
 
 export const EditOpSchema = z.object({
-  op: z.enum([...OP_KINDS, ...LIBRARY_MACROS] as string[] as [string, ...string[]]),
+  op: z.enum([...OP_KINDS, ...LIBRARY_MACROS, ...DEFERRED_MACROS] as string[] as [string, ...string[]]),
   explain: z.string().describe('frase curta em PT-BR mostrada ao usuário enquanto aplica'),
   clipId: z.string().optional(),
   trackId: z.string().optional(),
@@ -174,6 +176,15 @@ export const EditOpSchema = z.object({
   clipIds: z.array(z.string()).optional(),
   sfxId: z.string().optional().describe('add_sfx: id do efeito sonoro'),
   musicId: z.string().optional().describe('add_music: id da música livre do catálogo'),
+  // ---- sem limites (executados no navegador) ----
+  code: z.string().optional().describe('run_script: corpo JS que usa `ep` e devolve/empurra ops'),
+  svg: z.string().optional().describe('add_graphic/update_graphic: código SVG completo (<svg viewBox=…>)'),
+  name: z.string().optional().describe('add_graphic: nome do gráfico'),
+  assetId: z.string().optional().describe('update_graphic: id do gráfico'),
+  transform: transform.optional().describe('add_graphic: posição/escala'),
+  animationIn: clipAnim.optional(),
+  animationOut: clipAnim.optional(),
+  animationLoop: clipAnim.optional(),
   atCuts: z.boolean().optional().describe('add_sfx: um em cada corte/transição da trilha principal'),
   volume: z.number().optional(),
 });
@@ -183,6 +194,8 @@ export const EditResponseSchema = z.object({
   ops: z.array(EditOpSchema),
   /** só ao aplicar comentários de revisão: uma resposta curta por comentário */
   comments: z.array(z.object({ markerId: z.string(), reply: z.string() })).optional(),
+  /** só na conferência do resultado: true = está bom */
+  ok: z.boolean().optional(),
 });
 
 export const TranslateSchema = z.object({
