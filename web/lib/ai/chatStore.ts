@@ -56,6 +56,10 @@ interface AIChatState {
   captions: (language?: string) => Promise<void>;
   /** desfaz a edição feita por uma mensagem (só se ela ainda for a última mudança) */
   undoRun: (msgId: Id) => void;
+  /** volta o projeto para ANTES desta edição, desfazendo também o que veio depois (refazer continua possível) */
+  undoTo: (msgId: Id) => void;
+  /** dá para voltar ao estado de antes desta edição? (ainda está no histórico) */
+  canUndoTo: (msgId: Id) => boolean;
   /** responde a uma pergunta feita pela IA no chat */
   answer: (msgId: Id, optionId: string) => void;
   /** pula a etapa em andamento (ex.: transcrição) */
@@ -299,6 +303,26 @@ export const useAIChat = create<AIChatState>((set, get) => {
     captions: async (language) => {
       if (get().busy) return;
       await run('Gerando legendas…', (o) => generateCaptions({ ...o, language }));
+    },
+
+    canUndoTo: (msgId) => {
+      const r = get().runs[msgId];
+      if (!r?.done || !r.before || !r.final || r.final === r.before) return false;
+      if (editor().project === r.before) return false;
+      return editor().past.includes(r.before);
+    },
+
+    undoTo: (msgId) => {
+      const r = get().runs[msgId];
+      if (!r?.before || get().busy || !editor().past.includes(r.before)) {
+        emit('ep:toast', { text: 'Não dá mais para voltar a esse ponto (histórico curto) — use o Desfazer do editor.', kind: 'info' });
+        return;
+      }
+      let n = 0;
+      while (editor().project !== r.before && editor().past.length && n < 200) { editor().undo(); n++; }
+      // edições desfeitas pelo caminho não podem mais ser "desfeitas" de novo pelo chat
+      set((s) => ({ runs: Object.fromEntries(Object.entries(s.runs).map(([id, x]) => [id, editor().past.includes(x.final as Project) || editor().project === x.final ? x : { ...x, after: undefined }])) }));
+      editor().pushMessage({ role: 'system', text: `Voltei para antes dessa edição (${n} passo${n > 1 ? 's' : ''} desfeito${n > 1 ? 's' : ''}). Use "Refazer" do editor se mudar de ideia.`, status: 'done' });
     },
 
     undoRun: (msgId) => {

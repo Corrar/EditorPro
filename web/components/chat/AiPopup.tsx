@@ -112,6 +112,7 @@ export default function AiPopup({ onMinimize, onExpand, autoFocus = false, initi
     return undefined;
   }, [messages]);
   const run = lastAssistant ? runs[lastAssistant.id] : undefined;
+  const editCount = useMemo(() => messages.filter((m) => m.role === 'assistant' && runs[m.id]?.steps.length).length, [messages, runs]);
   const canUndo = !!run?.after && !busy && project === run.after;
 
   useEffect(() => {
@@ -184,7 +185,12 @@ export default function AiPopup({ onMinimize, onExpand, autoFocus = false, initi
                   <button className="ep-ch-undo" onClick={() => undoRun(lastAssistant.id)}>
                     <Icon name="undo" size={13} /> Desfazer
                   </button>
+                ) : run && !busy && useAIChat.getState().canUndoTo(lastAssistant.id) ? (
+                  <button className="ep-ch-undo" onClick={() => useAIChat.getState().undoTo(lastAssistant.id)}>
+                    <Icon name="undo" size={13} /> Voltar para antes desta edição
+                  </button>
                 ) : null}
+                {onExpand && editCount > 1 ? <button className="ep-aip-older" onClick={onExpand}>Ver as {editCount} edições desta conversa (desfazer qualquer uma)</button> : null}
               </div>
             ) : null}
           </>

@@ -178,3 +178,43 @@ describe('catálogo da FX', () => {
     expect((c.animationIn as { kind: string }).kind).toBe('jelly');
   });
 });
+
+describe('bugs da QA', () => {
+  it('B5: "corte/tire/remova/apague os primeiros/últimos N s" no demo', async () => {
+    const { chatIntent } = await import('./demo');
+    for (const txt of ['corte os primeiros 2 s', 'tire os primeiros 2 segundos', 'remova os primeiros 2 s', 'apague os primeiros 2s', 'corta os primeiros 2 s']) {
+      const r = chatIntent(txt, { project: base(), assets: { a1: src } });
+      const s = sanitizeOps(r.ops, base(), { a1: src });
+      expect(s.project.tracks[0].clips[0].duration, txt).toBeCloseTo(18, 1);
+    }
+    const r2 = chatIntent('remova os últimos 3 segundos', { project: base(), assets: { a1: src } });
+    expect(sanitizeOps(r2.ops, base(), { a1: src }).project.tracks[0].clips[0].duration).toBeCloseTo(17, 1);
+  });
+
+  it('brief com "uma transição" e "música": transição genérica e aviso quando não há trilha', async () => {
+    const { parseBrief, planFirstEdit } = await import('./demo');
+    expect(parseBrief('vídeo calmo com uma transição e música').transition).toEqual({ kind: 'crossfade', name: 'suaves' });
+    expect(parseBrief('reels dinâmico com transições').transition?.kind).toBe('zoom-in');
+    expect(parseBrief('vídeo com música').wantsMusic).toBe(true);
+    const plan = planFirstEdit({ project: base(), assets: { a1: src }, brief: 'vídeo com uma transição e música', silencesByAsset: { a1: [{ start: 8, end: 10 }] } } as never);
+    expect(plan.reply).toMatch(/não recebi nenhuma trilha/);
+    const s = sanitizeOps(plan.ops, base(), { a1: src });
+    const vids = s.project.tracks.flatMap((t) => t.clips).filter((c) => c.type === 'video') as VideoClip[];
+    if (vids.length > 1) expect(vids.slice(1).some((c) => c.transitionIn?.kind === 'crossfade')).toBe(true);
+  });
+
+  it('"Voltar para antes desta edição" desfaz até aquele ponto, mesmo com edições depois', async () => {
+    const { useEditor } = await import('../store');
+    const { useAIChat } = await import('./chatStore');
+    useEditor.setState({ project: base(), past: [], future: [], assets: { a1: src }, messages: [] });
+    useAIChat.setState({ status: { configured: false, provider: 'demo' } as never, fast: true, runs: {}, busy: false });
+    const p0 = useEditor.getState().project;
+    await useAIChat.getState().send('corte os primeiros 2 s');
+    const first = [...useEditor.getState().messages].reverse().find((m) => m.role === 'assistant')!;
+    await useAIChat.getState().send('remova os últimos 3 segundos');
+    expect(useAIChat.getState().canUndoTo(first.id)).toBe(true);
+    useAIChat.getState().undoTo(first.id);
+    expect(useEditor.getState().project).toBe(p0);
+    expect(useEditor.getState().future.length).toBeGreaterThan(0); // dá para refazer
+  }, 30000);
+});

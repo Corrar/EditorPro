@@ -48,7 +48,7 @@ function Steps({ run }: { run: RunState }) {
   );
 }
 
-function AssistantBubble({ m, run, canUndo, onUndo, onAnswer, onSkip }: { m: ChatMessage; run?: RunState; canUndo: boolean; onUndo: () => void; onAnswer: (id: string) => void; onSkip: () => void }) {
+function AssistantBubble({ m, run, canUndo, onUndo, canUndoTo, onUndoTo, onAnswer, onSkip }: { m: ChatMessage; run?: RunState; canUndo: boolean; onUndo: () => void; canUndoTo: boolean; onUndoTo: () => void; onAnswer: (id: string) => void; onSkip: () => void }) {
   const working = run && !run.done;
   return (
     <div className={`ep-ch-msg ai${m.status === 'error' ? ' err' : ''}`}>
@@ -88,6 +88,10 @@ function AssistantBubble({ m, run, canUndo, onUndo, onAnswer, onSkip }: { m: Cha
         {canUndo ? (
           <button className="ep-ch-undo" onClick={onUndo}>
             <Icon name="undo" size={13} /> Desfazer esta edição
+          </button>
+        ) : run && canUndoTo ? (
+          <button className="ep-ch-undo" onClick={onUndoTo} title="Desfaz esta edição e tudo o que veio depois (dá para refazer)">
+            <Icon name="undo" size={13} /> Voltar para antes desta edição
           </button>
         ) : null}
       </div>
@@ -224,7 +228,8 @@ export default function ChatPanel() {
             }
             const run = runs[m.id];
             const canUndo = m.id === lastEditId && !busy && !!run?.after && project === run.after;
-            return <AssistantBubble key={m.id} m={m} run={run} canUndo={canUndo} onUndo={() => undoRun(m.id)} onAnswer={(id) => answer(m.id, id)} onSkip={() => skip(m.id)} />;
+            const canTo = !canUndo && !busy && useAIChat.getState().canUndoTo(m.id);
+            return <AssistantBubble key={m.id} m={m} run={run} canUndo={canUndo} onUndo={() => undoRun(m.id)} canUndoTo={canTo} onUndoTo={() => useAIChat.getState().undoTo(m.id)} onAnswer={(id) => answer(m.id, id)} onSkip={() => skip(m.id)} />;
           })
         )}
       </div>

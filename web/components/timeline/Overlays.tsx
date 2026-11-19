@@ -279,7 +279,7 @@ export function TrimMonitor() {
 
 /* tela de ajuda de atalhos (?) — estilo DaVinci */
 const SHORTCUTS: { group: string; items: [string, string][] }[] = [
-  { group: 'Ferramentas', items: [['A', 'Seleção'], ['B', 'Lâmina (clique corta)'], ['T', 'Trim: ripple → roll → slip → slide'], ['N', 'Liga/desliga o ímã'], ['Alt + arrastar', 'Só este clipe (J/L-cut)']] },
+  { group: 'Ferramentas', items: [['A', 'Seleção'], ['B', 'Lâmina (clique corta)'], ['T', 'Trim: ripple → roll → slip → slide'], ['N', 'Liga/desliga o ímã'], ['V', 'Selecionar o clipe sob o cursor (de novo: o de baixo)'], ['Alt + arrastar', 'Só este clipe (J/L-cut)']] },
   { group: 'Reprodução', items: [['Espaço', 'Reproduzir / pausar'], ['L', 'Para frente (L de novo: 2×, 4×, 8×)'], ['J', 'Para trás (J de novo acelera)'], ['K', 'Parar'], ['← / →', 'Quadro a quadro (Shift = 1 s)'], ['↑ / ↓', 'Corte anterior / próximo'], ['Home / End', 'Início / fim']] },
   { group: 'Edição', items: [['S · Ctrl+B', 'Dividir no cursor'], ['Ctrl+Shift+B', 'Cortar todas as trilhas'], ['Delete', 'Excluir'], ['Shift+Delete', 'Excluir com ripple'], ['Ctrl+D', 'Duplicar'], ['Ctrl+C / X / V', 'Copiar / recortar / colar'], [', / .', 'Empurrar 1 quadro (Shift = 5)'], ['Ctrl+Alt+L', 'Vincular / desvincular áudio e vídeo'], ['Ctrl+Z / Ctrl+Shift+Z', 'Desfazer / refazer']] },
   { group: 'Marcação', items: [['I / O', 'Início / fim do trecho'], ['X', 'Trecho = clipe sob o cursor'], ['Alt+X', 'Limpar trecho'], ['M', 'Marcador'], ['C', 'Comentário de revisão'], ['Shift+K', 'Keyframe no cursor']] },

@@ -304,6 +304,8 @@ export interface BriefIntent {
   hook?: string;
   cta?: string;
   aspect?: AspectRatio;
+  /** o brief pediu música */
+  wantsMusic?: boolean;
 }
 
 /** extrai o título/gancho do brief: texto entre aspas, "título: ..." ou o assunto ("sobre X") */
@@ -347,7 +349,11 @@ export function parseBrief(brief: string): BriefIntent {
     cutSilences: !/(nao|sem) cort/.test(t),
     captions: !/sem legenda/.test(t),
     color: colorPresetFrom(brief),
-    transition: /transi/.test(t) ? transitionFrom(t.slice(t.indexOf('transi'))) ?? transitionFrom(t) : undefined,
+    // "uma transição" sem tipo: dissolver (calmo) ou zoom (dinâmico)
+    transition: /transi/.test(t) && !/sem transi|corte seco/.test(t)
+      ? transitionFrom(t.slice(t.indexOf('transi'))) ?? transitionFrom(t) ?? (dynamic ? { kind: 'zoom-in' as TransitionKind, name: 'de zoom' } : { kind: 'crossfade' as TransitionKind, name: 'suaves' })
+      : undefined,
+    wantsMusic: /musica|trilha|som de fundo|musiquinha/.test(t) && !/sem musica/.test(t),
     captionLook: captionLookFrom(brief),
     hook: hookFromBrief(brief),
     cta,
@@ -621,6 +627,7 @@ export function planFirstEdit(input: FirstEditInput): DemoResult {
     const t = transitionOps(p, tr.kind, tr.name);
     push(t);
     if (t.length) said.push(`transições ${tr.name}`);
+    else if (intent.transition) said.push('a transição aparece entre cortes — o vídeo ficou com uma tomada só (peça "cortar silêncios" ou envie mais clipes)');
   }
 
   // 8) música de fundo (se o usuário enviou)
@@ -638,6 +645,8 @@ export function planFirstEdit(input: FirstEditInput): DemoResult {
       }]);
       said.push('música de fundo');
     }
+  } else if (!music && intent.wantsMusic) {
+    said.push('você pediu música, mas não recebi nenhuma trilha — envie uma pelo 📎 (Mídia para o projeto) e eu coloco baixinha, abaixando na fala');
   }
 
   // 9) CTA no final
@@ -810,14 +819,15 @@ export function chatIntent(text: string, ctx: ChatContext): DemoResult {
   }
 
   // --- cortar começo/fim
-  const firstN = t.match(/(?:corta|cortar|tira|tirar|remove|remover|apaga|apagar)\s+(?:os|as)?\s*primeir[oa]s?\s*(\d+(?:[.,]\d+)?)?\s*(s|seg|segundos?)?/);
-  const lastN = t.match(/(?:corta|cortar|tira|tirar|remove|remover|apaga|apagar)\s+(?:os|as)?\s*ultim[oa]s?\s*(\d+(?:[.,]\d+)?)?\s*(s|seg|segundos?)?/);
+  // "corta/corte/tire/remova/apague os primeiros 2 s" (imperativo e infinitivo)
+  const firstN = t.match(/(?:cort[ae]r?|tir[ae]r?|remov[ae]r?|apag(?:ue|ar|a|e)|elimin[ae]r?|exclu[ia]r?)\s+(?:fora\s+)?(?:os|as)?\s*primeir[oa]s?\s*(\d+(?:[.,]\d+)?)?\s*(s|seg|segundos?)?/);
+  const lastN = t.match(/(?:cort[ae]r?|tir[ae]r?|remov[ae]r?|apag(?:ue|ar|a|e)|elimin[ae]r?|exclu[ia]r?)\s+(?:fora\s+)?(?:os|as)?\s*ultim[oa]s?\s*(\d+(?:[.,]\d+)?)?\s*(s|seg|segundos?)?/);
   let total = projectDuration(p);
-  if (firstN || /(corta|cortar|tira|tirar) (o )?(comeco|inicio)/.test(t)) {
+  if (firstN || /(?:cort[ae]r?|tir[ae]r?|remov[ae]r?|apag(?:ue|ar|a|e)|elimin[ae]r?|exclu[ia]r?) (o )?(comeco|inicio)/.test(t)) {
     const n = Math.min(firstN?.[1] ? parseNumber(firstN[1]) ?? 1 : 1, Math.max(0, total - 0.5));
     if (n > 0.04) push([{ op: 'ripple_delete', start: 0, end: r3(n), explain: `Cortando os primeiros ${n} s` }], `cortei os primeiros ${n} s`);
   }
-  if (lastN || /(corta|cortar|tira|tirar) (o )?(final|fim)/.test(t)) {
+  if (lastN || /(?:cort[ae]r?|tir[ae]r?|remov[ae]r?|apag(?:ue|ar|a|e)|elimin[ae]r?|exclu[ia]r?) (o )?(final|fim)/.test(t)) {
     const tt = projectDuration(p);
     const n = Math.min(lastN?.[1] ? parseNumber(lastN[1]) ?? 1 : 1, Math.max(0, tt - 0.5));
     if (n > 0.04) push([{ op: 'ripple_delete', start: r3(tt - n), end: r3(tt), explain: `Cortando os últimos ${n} s` }], `cortei os últimos ${n} s`);
