@@ -6,6 +6,7 @@ import { ingestFiles } from '@/lib/media/ingest';
 import { placeAssetOp } from '@/lib/media/place';
 import { startRecording, type Recorder } from '@/lib/media/tools';
 import { useEditor } from '@/lib/store';
+import { useShallow } from 'zustand/react/shallow';
 import { formatTime, uid } from '@/lib/util';
 import { IconMic, IconMusic, IconPlus, IconUpload } from '@/components/shell/icons';
 import { VolumeSection } from './ClipSections';
@@ -14,7 +15,7 @@ import { isSound } from './clipkit';
 import { useSelectedClip } from './hooks';
 
 function MusicLibrary() {
-  const music = useEditor((s) => Object.values(s.assets).filter((a) => a.kind === 'audio'));
+  const music = useEditor(useShallow((s) => Object.values(s.assets).filter((a) => a.kind === 'audio')));
   const dispatch = useEditor((s) => s.dispatch);
   const select = useEditor((s) => s.select);
   if (!music.length) return <p className="ep-pnote">Nenhum áudio ainda. Importe uma música ou grave uma narração.</p>;

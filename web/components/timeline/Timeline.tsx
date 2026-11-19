@@ -164,11 +164,60 @@ export default function Timeline() {
 
   /* ---------------- zoom ancorado ---------------- */
 
+  /** zoom pedido mas ainda não aplicado (vários eventos de roda/pinça viram 1 render por quadro) */
+  const pendingZoom = useRef<{ z: number; clientX?: number } | null>(null);
+  const zoomRaf = useRef(0);
+  /** gesto de zoom contínuo (roda/pinça): prévia por transform sem render; aplica no fim */
+  const zoomGesture = useRef<{ base: number; k: number; origin: number; clientX: number; timer: number; els: HTMLElement[] } | null>(null);
+  const targetZoom = () =>
+    zoomGesture.current ? zoomGesture.current.base * zoomGesture.current.k : pendingZoom.current?.z ?? useEditor.getState().zoom;
+
+  const commitZoomPreview = () => {
+    const g = zoomGesture.current;
+    const root = rootRef.current;
+    zoomGesture.current = null;
+    if (!g) return;
+    root?.classList.remove('zooming');
+    for (const e of g.els) { e.style.transform = ''; e.style.transformOrigin = ''; }
+    applyZoom(Math.max(ZMIN, Math.min(ZMAX, g.base * g.k)), g.clientX);
+  };
+
+  const previewZoom = (z: number, clientX: number) => {
+    const el = scrollRef.current;
+    const root = rootRef.current;
+    if (!el || !root) return zoomTo(z, clientX);
+    let g = zoomGesture.current;
+    if (!g) {
+      const rect = el.getBoundingClientRect();
+      const origin = Math.max(0, clientX - rect.left + el.scrollLeft - hw());
+      // transform direto nos ~10 elementos (variável CSS no raiz recalcularia o estilo da árvore toda)
+      const els = [...root.querySelectorAll<HTMLElement>('.ep-tl-lane, .ep-tl-scale')];
+      for (const e of els) e.style.transformOrigin = `${origin}px 0`;
+      g = zoomGesture.current = { base: useEditor.getState().zoom, k: 1, origin, clientX, timer: 0, els };
+      root.classList.add('zooming');
+    }
+    g.k = Math.max(ZMIN, Math.min(ZMAX, z)) / g.base;
+    const tf = `scaleX(${g.k})`;
+    for (const e of g.els) e.style.transform = tf;
+    clearTimeout(g.timer);
+    g.timer = window.setTimeout(commitZoomPreview, 140);
+  };
+
   const zoomTo = useCallback((z: number, clientX?: number) => {
+    pendingZoom.current = { z: Math.max(ZMIN, Math.min(ZMAX, z)), clientX };
+    if (zoomRaf.current) return;
+    zoomRaf.current = requestAnimationFrame(() => {
+      zoomRaf.current = 0;
+      const pz = pendingZoom.current;
+      pendingZoom.current = null;
+      if (pz) applyZoom(pz.z, pz.clientX);
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const applyZoom = (next: number, clientX?: number) => {
     const el = scrollRef.current;
     const st = useEditor.getState();
     const cur = st.zoom;
-    const next = Math.max(ZMIN, Math.min(ZMAX, z));
     if (!el || Math.abs(next - cur) < 1e-3) return;
     const rect = el.getBoundingClientRect();
     let px: number;
@@ -188,7 +237,7 @@ export default function Timeline() {
     }
     anchor.current = { t: Math.max(0, t), px };
     st.setZoom(next);
-  }, []);
+  };
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -197,6 +246,9 @@ export default function Timeline() {
     anchor.current = null;
     el.scrollLeft = Math.max(0, hw() + a.t * zoom - a.px);
   }, [zoom]);
+
+  const previewZoomRef = useRef(previewZoom);
+  previewZoomRef.current = previewZoom;
 
   const fit = useCallback(() => {
     const el = scrollRef.current;
@@ -214,7 +266,7 @@ export default function Timeline() {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
         const factor = Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0025) * 2);
-        zoomTo(useEditor.getState().zoom * factor, e.clientX);
+        previewZoomRef.current(targetZoom() * factor, e.clientX);
       } else if (!e.shiftKey && Math.abs(e.deltaY) > Math.abs(e.deltaX) && el.scrollHeight <= el.clientHeight + 1) {
         e.preventDefault();
         el.scrollLeft += e.deltaY;
@@ -226,7 +278,7 @@ export default function Timeline() {
     const onGChange = (e: Event) => {
       e.preventDefault();
       const ge = e as Event & { scale: number; clientX: number };
-      zoomTo(gz * ge.scale, ge.clientX);
+      previewZoomRef.current(gz * ge.scale, ge.clientX);
     };
     // pinça por toque (2 dedos) — Touch Events seguem chegando mesmo quando o navegador rola
     let pinch0 = 0;
@@ -244,7 +296,7 @@ export default function Timeline() {
       if (e.touches.length !== 2 || pinch0 < 10) return;
       e.preventDefault();
       const mid = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-      zoomTo(pinchZ * (dist(e.touches) / pinch0), mid);
+      previewZoomRef.current(pinchZ * (dist(e.touches) / pinch0), mid);
     };
     const onTEnd = (e: TouchEvent) => {
       if (e.touches.length < 2) pinch0 = 0;
@@ -293,7 +345,7 @@ export default function Timeline() {
   useShortcuts({
     split: () => split(),
     remove: (ripple) => remove(undefined, ripple),
-    zoomBy: (f) => zoomTo(useEditor.getState().zoom * f),
+    zoomBy: (f) => zoomTo(targetZoom() * f),
     duplicate: () => duplicate(),
     copy: () => copyClips(),
     cut: () => cutClips(),

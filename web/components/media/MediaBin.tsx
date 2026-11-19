@@ -15,6 +15,7 @@ import type { MediaAsset, MediaKind, MediaRole } from '@/lib/types';
 import { formatTime } from '@/lib/util';
 import { IconImage, IconMusic, IconPlus, IconTrash, IconUpload, IconVideo } from '@/components/shell/icons';
 import Waveform from './Waveform';
+import GenerateSection from './GenerateSection';
 
 export const ASSET_MIME = 'application/x-ep-asset';
 const ACCEPT = 'video/*,audio/*,image/*';
@@ -182,6 +183,7 @@ export default function MediaBin() {
         </div>
       )}
 
+      <GenerateSection />
       {counts.all > 0 && <p className="ep-mtip">Dica: arraste para a timeline ou dê duplo clique para colocar no fim.</p>}
       {over && <div className="ep-mover"><IconUpload size={26} /><b>Solte para importar</b></div>}
     </div>

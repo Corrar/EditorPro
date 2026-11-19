@@ -42,6 +42,7 @@ export default function CaptionsTab() {
     const start = Math.round(playhead * 10) / 10;
     const seg: CaptionSegment = { id: uid('cap'), start, end: start + 2, text: 'Nova legenda' };
     dispatch({ op: 'set_captions', segments: [...captions.segments, seg] });
+    setPlayhead(start + 0.5); // depois da entrada: a legenda já aparece no preview
   };
 
   const activeId = captions.segments.find((s) => playhead >= s.start && playhead < s.end)?.id;

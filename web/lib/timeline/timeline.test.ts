@@ -179,7 +179,7 @@ describe('responsivo', () => {
     const { dimsFor, rowLayout } = await import('./ui');
     const desk = dimsFor(1200, 400, false);
     expect(desk.compact).toBe(false);
-    expect(desk.headerW).toBe(184);
+    expect(desk.headerW).toBe(204);
     const phone = dimsFor(390, 300, true);
     expect(phone.compact).toBe(true);
     expect(phone.headerW).toBeLessThan(64);
@@ -325,5 +325,15 @@ describe('batidas e marcadores', () => {
     expect(pts).toContain(3);
     expect(pts).toContain(4);
     expect(markerSnapPoints(p, {}, ['mk1'])).toEqual([]);
+  });
+});
+
+describe('virtualização', () => {
+  it('visibleWindow cobre a tela + 1 tela de cada lado, em segundos', async () => {
+    const { visibleWindow } = await import('./ui');
+    expect(visibleWindow(0, 1000, 184, 100)).toEqual([0, 20]);
+    const [a, b] = visibleWindow(3, 1000, 184, 100);
+    expect(a).toBeCloseTo((2000 - 184) / 100);
+    expect(b).toBe(50);
   });
 });

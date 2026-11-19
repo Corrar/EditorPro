@@ -156,6 +156,8 @@ export default function TextTab() {
     const c = tpl.make(Math.round(st.playhead * 100) / 100);
     dispatch({ op: 'add_clip', trackId: targetTrackId(st.project, 'text'), clip: c, explain: `Adicionando ${tpl.label.toLowerCase()}` });
     select([c.id]);
+    // avança o playhead para depois da animação de entrada: o texto aparece já no preview
+    st.setPlayhead(c.start + Math.min(0.6, c.duration / 2));
   };
 
   return (

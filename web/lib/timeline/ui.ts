@@ -107,7 +107,7 @@ export function dimsFor(width: number, height: number, coarse: boolean): Dims {
     barCompact: compact || (width > 0 && width < BAR_COMPACT_W),
     short,
     coarse,
-    headerW: compact ? 52 : 184,
+    headerW: compact ? 52 : 204,
     rulerH: short ? 16 : coarse ? 34 : 30,
     rowH: { video: h(66), text: h(38), audio: h(50), overlay: h(42), effect: h(32), captions: h(34), new: h(34) },
   };
@@ -116,7 +116,7 @@ export function dimsFor(width: number, height: number, coarse: boolean): Dims {
 /* ---------- layout vertical (alturas fixas => sem medir DOM) ---------- */
 
 /** valores padrão (desktop, contêiner largo) — mantidos por compatibilidade */
-export const HEADER_W = 184;
+export const HEADER_W = 204;
 export const RULER_H = 30;
 export const ROW_H: Record<RowKind, number> = dimsFor(1200, 400, false).rowH;
 export const ROW_GAP = 4;
@@ -189,3 +189,21 @@ export const useTimelineUi = create<TimelineUi>((set) => ({
 }));
 
 export const useDims = () => useTimelineUi((s) => s.dims);
+
+/**
+ * janela de tempo a renderizar (virtualização horizontal): a tela visível + 1 tela de cada lado,
+ * quantizada por "página" — só muda (e re-renderiza as trilhas) quando a rolagem cruza uma página.
+ */
+export function visibleWindow(page: number, viewW: number, headerW: number, zoom: number): [Seconds, Seconds] {
+  const w = Math.max(200, viewW);
+  const x0 = (page - 1) * w - headerW;
+  const x1 = (page + 2) * w;
+  return [Math.max(0, x0 / zoom), x1 / zoom];
+}
+
+export function useVisibleWindow(zoom: number): [Seconds, Seconds] {
+  const page = useTimelineUi((s) => Math.floor(s.scrollLeft / Math.max(200, s.viewW)));
+  const viewW = useTimelineUi((s) => s.viewW);
+  const headerW = useTimelineUi((s) => s.dims.headerW);
+  return visibleWindow(page, viewW, headerW, zoom);
+}

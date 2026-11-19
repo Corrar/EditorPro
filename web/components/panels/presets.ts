@@ -7,6 +7,19 @@ import type {
   VideoClip, ImageClip, AudioClip,
 } from '@/lib/types';
 import { DEFAULT_TRANSFORM } from '@/lib/types';
+import { FILTER_LABELS, PRESET_LABELS } from '@/lib/engine/filters';
+import { TEXT_ANIMATION_LABELS } from '@/lib/engine/text';
+import { ALL_TRANSITIONS, TRANSITION_LABELS } from '@/lib/engine/transitions';
+import { SPEED_PRESETS as ENGINE_SPEED_PRESETS, SPEED_PRESET_LABELS, curveIntegral } from '@/lib/engine/speed';
+import { CLIP_ANIMATION_LABELS } from '@/lib/engine/animations';
+import { EFFECT_LABELS } from '@/lib/engine/effects';
+import { MASK_LABELS } from '@/lib/engine/masks';
+import { SHAPE_LABELS } from '@/lib/engine/shapes';
+import { AUDIO_EFFECT_LABELS } from '@/lib/engine/audioFx';
+import { CAPTION_PRESET_LABELS } from '@/lib/engine/captions';
+
+/** lista {id,label} a partir de um mapa de rótulos do engine */
+const fromLabels = <K extends string>(m: Record<K, string>) => (Object.keys(m) as K[]).map((id) => ({ id, label: m[id] }));
 
 /* ---------- fontes ---------- */
 export const FONTS: { family: string; label: string }[] = [
@@ -20,15 +33,7 @@ export const FONTS: { family: string; label: string }[] = [
 export const WEIGHTS = [400, 500, 600, 700, 800, 900];
 
 /* ---------- animações de texto ---------- */
-export const TEXT_ANIMATIONS: { id: TextAnimation; label: string }[] = [
-  { id: 'none', label: 'Nenhuma' },
-  { id: 'fade', label: 'Fade' },
-  { id: 'pop', label: 'Pop' },
-  { id: 'slide-up', label: 'Subir' },
-  { id: 'typewriter', label: 'Máquina' },
-  { id: 'bounce', label: 'Quicar' },
-  { id: 'karaoke', label: 'Karaokê' },
-];
+export const TEXT_ANIMATIONS: { id: TextAnimation; label: string }[] = (['none', 'fade', 'pop', 'slide-up', 'typewriter', 'bounce', 'karaoke'] as TextAnimation[]).map((id) => ({ id, label: TEXT_ANIMATION_LABELS[id] }));
 
 /* ---------- modelos de texto ---------- */
 export interface TextTemplate { id: string; label: string; desc: string; make: (start: number) => TextClip }
@@ -100,12 +105,12 @@ export const TEXT_TEMPLATES: TextTemplate[] = [
 export interface CaptionPresetDef { id: CaptionPreset; label: string; style: Partial<CaptionStyle> }
 
 export const CAPTION_PRESETS: CaptionPresetDef[] = [
-  { id: 'classic', label: 'Clássica', style: { preset: 'classic', fontFamily: 'Poppins', fontWeight: 600, fontSize: 56, color: '#FFFFFF', highlightColor: '#FFFFFF', strokeColor: '#000000', strokeWidth: 3, background: '', shadow: true, uppercase: false, animation: 'none', maxWords: 8 } },
-  { id: 'bold-pop', label: 'Bold Pop', style: { preset: 'bold-pop', fontFamily: 'Poppins', fontWeight: 900, fontSize: 80, color: '#FFFFFF', highlightColor: '#FFD23F', strokeColor: '#000000', strokeWidth: 8, background: '', shadow: true, uppercase: true, animation: 'pop', maxWords: 3 } },
-  { id: 'karaoke', label: 'Karaokê', style: { preset: 'karaoke', fontFamily: 'Montserrat', fontWeight: 900, fontSize: 70, color: '#FFFFFF', highlightColor: '#3BE37A', strokeColor: '#000000', strokeWidth: 6, background: '', shadow: true, uppercase: true, animation: 'karaoke', maxWords: 4 } },
-  { id: 'minimal', label: 'Minimalista', style: { preset: 'minimal', fontFamily: 'Poppins', fontWeight: 500, fontSize: 48, color: '#FFFFFF', highlightColor: '#FFFFFF', strokeColor: '#000000', strokeWidth: 0, background: '', shadow: true, uppercase: false, animation: 'fade', maxWords: 6 } },
-  { id: 'boxed', label: 'Caixa', style: { preset: 'boxed', fontFamily: 'Poppins', fontWeight: 800, fontSize: 62, color: '#1C1F22', highlightColor: '#D9641E', strokeColor: '#000000', strokeWidth: 0, background: '#FFFFFF', shadow: false, uppercase: false, animation: 'pop', maxWords: 4 } },
-  { id: 'neon', label: 'Neon', style: { preset: 'neon', fontFamily: 'Montserrat', fontWeight: 900, fontSize: 72, color: '#FFFFFF', highlightColor: '#FF3DCB', strokeColor: '#00E5FF', strokeWidth: 4, background: '', shadow: true, uppercase: true, animation: 'bounce', maxWords: 3 } },
+  { id: 'classic', label: CAPTION_PRESET_LABELS['classic'], style: { preset: 'classic', fontFamily: 'Poppins', fontWeight: 600, fontSize: 56, color: '#FFFFFF', highlightColor: '#FFFFFF', strokeColor: '#000000', strokeWidth: 3, background: '', shadow: true, uppercase: false, animation: 'none', maxWords: 8 } },
+  { id: 'bold-pop', label: CAPTION_PRESET_LABELS['bold-pop'], style: { preset: 'bold-pop', fontFamily: 'Poppins', fontWeight: 900, fontSize: 80, color: '#FFFFFF', highlightColor: '#FFD23F', strokeColor: '#000000', strokeWidth: 8, background: '', shadow: true, uppercase: true, animation: 'pop', maxWords: 3 } },
+  { id: 'karaoke', label: CAPTION_PRESET_LABELS['karaoke'], style: { preset: 'karaoke', fontFamily: 'Montserrat', fontWeight: 900, fontSize: 70, color: '#FFFFFF', highlightColor: '#3BE37A', strokeColor: '#000000', strokeWidth: 6, background: '', shadow: true, uppercase: true, animation: 'karaoke', maxWords: 4 } },
+  { id: 'minimal', label: CAPTION_PRESET_LABELS['minimal'], style: { preset: 'minimal', fontFamily: 'Poppins', fontWeight: 500, fontSize: 48, color: '#FFFFFF', highlightColor: '#FFFFFF', strokeColor: '#000000', strokeWidth: 0, background: '', shadow: true, uppercase: false, animation: 'fade', maxWords: 6 } },
+  { id: 'boxed', label: CAPTION_PRESET_LABELS['boxed'], style: { preset: 'boxed', fontFamily: 'Poppins', fontWeight: 800, fontSize: 62, color: '#1C1F22', highlightColor: '#D9641E', strokeColor: '#000000', strokeWidth: 0, background: '#FFFFFF', shadow: false, uppercase: false, animation: 'pop', maxWords: 4 } },
+  { id: 'neon', label: CAPTION_PRESET_LABELS['neon'], style: { preset: 'neon', fontFamily: 'Montserrat', fontWeight: 900, fontSize: 72, color: '#FFFFFF', highlightColor: '#FF3DCB', strokeColor: '#00E5FF', strokeWidth: 4, background: '', shadow: true, uppercase: true, animation: 'bounce', maxWords: 3 } },
 ];
 
 export function captionPreset(id: CaptionPreset): CaptionPresetDef {
@@ -114,26 +119,26 @@ export function captionPreset(id: CaptionPreset): CaptionPresetDef {
 
 /* ---------- cor ---------- */
 export const COLOR_PRESETS: { id: ColorPreset; label: string; css: string }[] = [
-  { id: 'none', label: 'Original', css: 'none' },
-  { id: 'cinematic', label: 'Cinema', css: 'contrast(1.15) saturate(.85) sepia(.12) hue-rotate(-8deg)' },
-  { id: 'warm', label: 'Quente', css: 'sepia(.28) saturate(1.25) brightness(1.03)' },
-  { id: 'cool', label: 'Frio', css: 'saturate(1.05) hue-rotate(12deg) brightness(1.02) contrast(1.05)' },
-  { id: 'vibrant', label: 'Vibrante', css: 'saturate(1.6) contrast(1.08)' },
-  { id: 'vintage', label: 'Vintage', css: 'sepia(.45) contrast(.9) brightness(1.05) saturate(.8)' },
-  { id: 'bw', label: 'P&B', css: 'grayscale(1) contrast(1.1)' },
-  { id: 'moody', label: 'Sombrio', css: 'brightness(.85) contrast(1.2) saturate(.7)' },
+  { id: 'none', label: PRESET_LABELS['none'], css: 'none' },
+  { id: 'cinematic', label: PRESET_LABELS['cinematic'], css: 'contrast(1.15) saturate(.85) sepia(.12) hue-rotate(-8deg)' },
+  { id: 'warm', label: PRESET_LABELS['warm'], css: 'sepia(.28) saturate(1.25) brightness(1.03)' },
+  { id: 'cool', label: PRESET_LABELS['cool'], css: 'saturate(1.05) hue-rotate(12deg) brightness(1.02) contrast(1.05)' },
+  { id: 'vibrant', label: PRESET_LABELS['vibrant'], css: 'saturate(1.6) contrast(1.08)' },
+  { id: 'vintage', label: PRESET_LABELS['vintage'], css: 'sepia(.45) contrast(.9) brightness(1.05) saturate(.8)' },
+  { id: 'bw', label: PRESET_LABELS['bw'], css: 'grayscale(1) contrast(1.1)' },
+  { id: 'moody', label: PRESET_LABELS['moody'], css: 'brightness(.85) contrast(1.2) saturate(.7)' },
 ];
 
 export const FILTER_DEFS: { kind: FilterKind; label: string; min: number; max: number }[] = [
-  { kind: 'brightness', label: 'Brilho', min: -1, max: 1 },
-  { kind: 'contrast', label: 'Contraste', min: -1, max: 1 },
-  { kind: 'saturation', label: 'Saturação', min: -1, max: 1 },
-  { kind: 'temperature', label: 'Temperatura', min: -1, max: 1 },
-  { kind: 'blur', label: 'Desfoque', min: 0, max: 1 },
-  { kind: 'vignette', label: 'Vinheta', min: 0, max: 1 },
-  { kind: 'grain', label: 'Granulado', min: 0, max: 1 },
-  { kind: 'bw', label: 'Preto e branco', min: 0, max: 1 },
-  { kind: 'sepia', label: 'Sépia', min: 0, max: 1 },
+  { kind: 'brightness', label: FILTER_LABELS['brightness'], min: -1, max: 1 },
+  { kind: 'contrast', label: FILTER_LABELS['contrast'], min: -1, max: 1 },
+  { kind: 'saturation', label: FILTER_LABELS['saturation'], min: -1, max: 1 },
+  { kind: 'temperature', label: FILTER_LABELS['temperature'], min: -1, max: 1 },
+  { kind: 'blur', label: FILTER_LABELS['blur'], min: 0, max: 1 },
+  { kind: 'vignette', label: FILTER_LABELS['vignette'], min: 0, max: 1 },
+  { kind: 'grain', label: FILTER_LABELS['grain'], min: 0, max: 1 },
+  { kind: 'bw', label: FILTER_LABELS['bw'], min: 0, max: 1 },
+  { kind: 'sepia', label: FILTER_LABELS['sepia'], min: 0, max: 1 },
 ];
 
 export function filterValue(filters: Filter[] | undefined, kind: FilterKind): number {
@@ -165,32 +170,7 @@ export function filtersToCss(filters: Filter[] | undefined, preset?: ColorPreset
 }
 
 /* ---------- transições ---------- */
-export const TRANSITIONS: { kind: TransitionKind; label: string }[] = [
-  { kind: 'cut', label: 'Corte seco' },
-  { kind: 'fade', label: 'Fade' },
-  { kind: 'crossfade', label: 'Dissolver' },
-  { kind: 'slide-left', label: 'Deslizar ←' },
-  { kind: 'slide-right', label: 'Deslizar →' },
-  { kind: 'slide-up', label: 'Deslizar ↑' },
-  { kind: 'zoom-in', label: 'Zoom in' },
-  { kind: 'zoom-out', label: 'Zoom out' },
-  { kind: 'whip', label: 'Chicote' },
-  { kind: 'flash', label: 'Flash' },
-  { kind: 'glitch', label: 'Glitch' },
-  { kind: 'slide-down', label: 'Deslizar ↓' },
-  { kind: 'dip-black', label: 'Mergulho preto' },
-  { kind: 'dip-white', label: 'Mergulho branco' },
-  { kind: 'blur', label: 'Desfoque' },
-  { kind: 'spin', label: 'Giro' },
-  { kind: 'wipe-left', label: 'Cortina ←' },
-  { kind: 'wipe-right', label: 'Cortina →' },
-  { kind: 'wipe-up', label: 'Cortina ↑' },
-  { kind: 'circle-open', label: 'Círculo' },
-  { kind: 'pixelate', label: 'Pixelar' },
-  { kind: 'shake', label: 'Tremor' },
-  { kind: 'rgb-split', label: 'RGB split' },
-  { kind: 'film-burn', label: 'Filme queimado' },
-];
+export const TRANSITIONS: { kind: TransitionKind; label: string }[] = ALL_TRANSITIONS.map((kind) => ({ kind, label: TRANSITION_LABELS[kind] }));
 
 /* ---------- velocidade / keyframes ---------- */
 
@@ -239,70 +219,49 @@ export function parseTimeInput(s: string): number | null {
 /* ---------- curvas de velocidade (CapCut) ---------- */
 import type { SpeedPoint, SpeedPreset, ClipAnimation, VisualEffectKind, BlendMode, MaskShape, ShapeKind, AudioEffectKind } from '@/lib/types';
 
-export const SPEED_PRESETS: { id: SpeedPreset; label: string; points: SpeedPoint[] }[] = [
-  { id: 'montage', label: 'Montagem', points: [{ t: 0, speed: 1 }, { t: 0.25, speed: 3 }, { t: 0.5, speed: 0.5 }, { t: 0.75, speed: 3 }, { t: 1, speed: 1 }] },
-  { id: 'hero', label: 'Herói', points: [{ t: 0, speed: 2.5 }, { t: 0.4, speed: 0.3 }, { t: 0.6, speed: 0.3 }, { t: 1, speed: 2.5 }] },
-  { id: 'bullet', label: 'Bala', points: [{ t: 0, speed: 3 }, { t: 0.45, speed: 0.2 }, { t: 0.55, speed: 0.2 }, { t: 1, speed: 3 }] },
-  { id: 'jump-cut', label: 'Jump cut', points: [{ t: 0, speed: 1 }, { t: 0.3, speed: 4 }, { t: 0.35, speed: 1 }, { t: 0.65, speed: 4 }, { t: 0.7, speed: 1 }, { t: 1, speed: 1 }] },
-  { id: 'flash-in', label: 'Flash in', points: [{ t: 0, speed: 4 }, { t: 0.4, speed: 1 }, { t: 1, speed: 1 }] },
-  { id: 'flash-out', label: 'Flash out', points: [{ t: 0, speed: 1 }, { t: 0.6, speed: 1 }, { t: 1, speed: 4 }] },
-];
+export const SPEED_PRESETS: { id: SpeedPreset; label: string; points: SpeedPoint[] }[] = (Object.keys(ENGINE_SPEED_PRESETS) as SpeedPreset[]).map((id) => ({ id, label: SPEED_PRESET_LABELS[id], points: ENGINE_SPEED_PRESETS[id] }));
 
 /** velocidade média de uma curva (trapézios) — duração na timeline = trecho da mídia / média */
 export function meanSpeed(points: SpeedPoint[]): number {
   const pts = [...points].sort((a, b) => a.t - b.t);
   if (!pts.length) return 1;
   if (pts.length === 1) return pts[0].speed;
-  let area = 0;
-  for (let i = 1; i < pts.length; i++) area += ((pts[i].speed + pts[i - 1].speed) / 2) * (pts[i].t - pts[i - 1].t);
-  const span = pts[pts.length - 1].t - pts[0].t;
-  return span > 0 ? area / span : pts[0].speed;
+  return curveIntegral(pts, 1);
 }
 
-/** aplica (ou remove) curva mantendo o mesmo trecho da mídia */
+/** aplica (ou remove) curva mantendo o mesmo trecho da mídia (com curva o engine ignora `speed`) */
 export function retimeForCurve(c: { duration: number; speed: number; speedCurve?: SpeedPoint[] }, curve: SpeedPoint[] | undefined): { duration: number; speedCurve: SpeedPoint[] | undefined } {
-  const oldMean = c.speedCurve?.length ? meanSpeed(c.speedCurve) * (c.speed || 1) : (c.speed || 1);
-  const src = c.duration * oldMean;
-  const newMean = curve?.length ? meanSpeed(curve) * (c.speed || 1) : (c.speed || 1);
-  return { duration: Math.max(0.05, src / newMean), speedCurve: curve };
+  const constSpeed = c.speed > 0 ? c.speed : 1;
+  const src = c.duration * (c.speedCurve && c.speedCurve.length >= 2 ? meanSpeed(c.speedCurve) : constSpeed);
+  const rate = curve && curve.length >= 2 ? meanSpeed(curve) : constSpeed;
+  return { duration: Math.max(0.05, src / rate), speedCurve: curve };
 }
 
 /* ---------- animações de clipe ---------- */
-export const CLIP_ANIMATIONS: { id: ClipAnimation; label: string }[] = [
-  { id: 'fade', label: 'Fade' }, { id: 'zoom-in', label: 'Zoom in' }, { id: 'zoom-out', label: 'Zoom out' },
-  { id: 'slide-left', label: 'Esquerda' }, { id: 'slide-right', label: 'Direita' }, { id: 'slide-up', label: 'Subir' },
-  { id: 'slide-down', label: 'Descer' }, { id: 'spin', label: 'Girar' }, { id: 'bounce', label: 'Quicar' },
-  { id: 'pop', label: 'Pop' }, { id: 'shake', label: 'Tremer' }, { id: 'swing', label: 'Balançar' },
-  { id: 'blur', label: 'Desfocar' }, { id: 'flip', label: 'Virar' },
-];
+export const CLIP_ANIMATIONS: { id: ClipAnimation; label: string }[] = fromLabels(CLIP_ANIMATION_LABELS);
 
-export const TEXT_ANIMATIONS_ALL: { id: TextAnimation; label: string }[] = [
-  ...TEXT_ANIMATIONS,
-  { id: 'slide-down', label: 'Descer' }, { id: 'slide-left', label: 'Esquerda' }, { id: 'slide-right', label: 'Direita' },
-  { id: 'zoom', label: 'Zoom' }, { id: 'blur', label: 'Desfocar' }, { id: 'wave', label: 'Onda' },
-  { id: 'glitch', label: 'Glitch' }, { id: 'flicker', label: 'Piscar' }, { id: 'spin', label: 'Girar' },
-];
+export const TEXT_ANIMATIONS_ALL: { id: TextAnimation; label: string }[] = fromLabels(TEXT_ANIMATION_LABELS);
 
 /* ---------- efeitos visuais ---------- */
 export const VISUAL_EFFECTS: { id: VisualEffectKind; label: string; css: string }[] = [
-  { id: 'shake', label: 'Tremor', css: 'none' },
-  { id: 'glitch', label: 'Glitch', css: 'hue-rotate(40deg) saturate(1.6)' },
-  { id: 'rgb-split', label: 'RGB split', css: 'saturate(1.8) contrast(1.1)' },
-  { id: 'zoom-pulse', label: 'Pulso', css: 'none' },
-  { id: 'vhs', label: 'VHS', css: 'sepia(.25) saturate(1.4) contrast(.9) blur(.4px)' },
-  { id: 'film-grain', label: 'Granulado', css: 'contrast(1.1) saturate(.85)' },
-  { id: 'light-leak', label: 'Light leak', css: 'sepia(.3) brightness(1.15) saturate(1.3)' },
-  { id: 'pixelate', label: 'Pixelado', css: 'contrast(1.2)' },
-  { id: 'mirror', label: 'Espelho', css: 'none' },
-  { id: 'kaleidoscope', label: 'Caleidoscópio', css: 'hue-rotate(90deg)' },
-  { id: 'blur-motion', label: 'Desfoque mov.', css: 'blur(1.5px)' },
-  { id: 'flash-strobe', label: 'Estroboscópio', css: 'brightness(1.4)' },
-  { id: 'old-film', label: 'Filme antigo', css: 'sepia(.7) contrast(1.1)' },
-  { id: 'vignette-pulse', label: 'Vinheta pulso', css: 'brightness(.85)' },
-  { id: 'sparkle', label: 'Brilhos', css: 'brightness(1.1) saturate(1.2)' },
-  { id: 'soft-glow', label: 'Brilho suave', css: 'brightness(1.12) contrast(.92) saturate(1.1)' },
-  { id: 'neon-edge', label: 'Neon', css: 'invert(.15) saturate(2.2) hue-rotate(200deg)' },
-  { id: 'black-bars', label: 'Barras de cinema', css: 'contrast(1.05)' },
+  { id: 'shake', label: EFFECT_LABELS['shake'], css: 'none' },
+  { id: 'glitch', label: EFFECT_LABELS['glitch'], css: 'hue-rotate(40deg) saturate(1.6)' },
+  { id: 'rgb-split', label: EFFECT_LABELS['rgb-split'], css: 'saturate(1.8) contrast(1.1)' },
+  { id: 'zoom-pulse', label: EFFECT_LABELS['zoom-pulse'], css: 'none' },
+  { id: 'vhs', label: EFFECT_LABELS['vhs'], css: 'sepia(.25) saturate(1.4) contrast(.9) blur(.4px)' },
+  { id: 'film-grain', label: EFFECT_LABELS['film-grain'], css: 'contrast(1.1) saturate(.85)' },
+  { id: 'light-leak', label: EFFECT_LABELS['light-leak'], css: 'sepia(.3) brightness(1.15) saturate(1.3)' },
+  { id: 'pixelate', label: EFFECT_LABELS['pixelate'], css: 'contrast(1.2)' },
+  { id: 'mirror', label: EFFECT_LABELS['mirror'], css: 'none' },
+  { id: 'kaleidoscope', label: EFFECT_LABELS['kaleidoscope'], css: 'hue-rotate(90deg)' },
+  { id: 'blur-motion', label: EFFECT_LABELS['blur-motion'], css: 'blur(1.5px)' },
+  { id: 'flash-strobe', label: EFFECT_LABELS['flash-strobe'], css: 'brightness(1.4)' },
+  { id: 'old-film', label: EFFECT_LABELS['old-film'], css: 'sepia(.7) contrast(1.1)' },
+  { id: 'vignette-pulse', label: EFFECT_LABELS['vignette-pulse'], css: 'brightness(.85)' },
+  { id: 'sparkle', label: EFFECT_LABELS['sparkle'], css: 'brightness(1.1) saturate(1.2)' },
+  { id: 'soft-glow', label: EFFECT_LABELS['soft-glow'], css: 'brightness(1.12) contrast(.92) saturate(1.1)' },
+  { id: 'neon-edge', label: EFFECT_LABELS['neon-edge'], css: 'invert(.15) saturate(2.2) hue-rotate(200deg)' },
+  { id: 'black-bars', label: EFFECT_LABELS['black-bars'], css: 'contrast(1.05)' },
 ];
 
 export const BLEND_MODES: { id: BlendMode; label: string }[] = [
@@ -311,40 +270,28 @@ export const BLEND_MODES: { id: BlendMode; label: string }[] = [
   { id: 'add', label: 'Adicionar' }, { id: 'difference', label: 'Diferença' },
 ];
 
-export const MASK_SHAPES: { id: MaskShape; label: string }[] = [
-  { id: 'rect', label: 'Retângulo' }, { id: 'circle', label: 'Círculo' }, { id: 'heart', label: 'Coração' },
-  { id: 'star', label: 'Estrela' }, { id: 'line', label: 'Linear' }, { id: 'mirror', label: 'Espelho' },
-];
+export const MASK_SHAPES: { id: MaskShape; label: string }[] = fromLabels(MASK_LABELS);
 
-export const SHAPES: { id: ShapeKind; label: string }[] = [
-  { id: 'rect', label: 'Retângulo' }, { id: 'rounded-rect', label: 'Arredondado' }, { id: 'circle', label: 'Círculo' },
-  { id: 'triangle', label: 'Triângulo' }, { id: 'star', label: 'Estrela' }, { id: 'arrow', label: 'Seta' },
-  { id: 'line', label: 'Linha' }, { id: 'heart', label: 'Coração' }, { id: 'speech-bubble', label: 'Balão' },
-];
+export const SHAPES: { id: ShapeKind; label: string }[] = fromLabels(SHAPE_LABELS);
 
-export const AUDIO_EFFECTS: { id: AudioEffectKind; label: string }[] = [
-  { id: 'noise-reduction', label: 'Reduzir ruído' }, { id: 'normalize', label: 'Normalizar' }, { id: 'voice-enhance', label: 'Realçar voz' },
-  { id: 'chipmunk', label: 'Esquilo' }, { id: 'deep', label: 'Grave' }, { id: 'robot', label: 'Robô' },
-  { id: 'echo', label: 'Eco' }, { id: 'reverb', label: 'Reverb' }, { id: 'telephone', label: 'Telefone' },
-  { id: 'megaphone', label: 'Megafone' }, { id: 'bass-boost', label: 'Grave reforçado' },
-];
+export const AUDIO_EFFECTS: { id: AudioEffectKind; label: string }[] = fromLabels(AUDIO_EFFECT_LABELS);
 
 /** ajustes finos (aba Ajustes) — todos -1..1 exceto os de intensidade */
 export const ADJUST_DEFS: { kind: FilterKind; label: string; min: number; max: number }[] = [
-  { kind: 'exposure', label: 'Exposição', min: -1, max: 1 },
-  { kind: 'brightness', label: 'Brilho', min: -1, max: 1 },
-  { kind: 'contrast', label: 'Contraste', min: -1, max: 1 },
-  { kind: 'highlights', label: 'Realces', min: -1, max: 1 },
-  { kind: 'shadows', label: 'Sombras', min: -1, max: 1 },
-  { kind: 'saturation', label: 'Saturação', min: -1, max: 1 },
-  { kind: 'temperature', label: 'Temperatura', min: -1, max: 1 },
-  { kind: 'tint', label: 'Matiz (tint)', min: -1, max: 1 },
-  { kind: 'hue', label: 'Tom (hue)', min: -1, max: 1 },
-  { kind: 'sharpen', label: 'Nitidez', min: 0, max: 1 },
-  { kind: 'vignette', label: 'Vinheta', min: 0, max: 1 },
-  { kind: 'fade', label: 'Fade', min: 0, max: 1 },
-  { kind: 'grain', label: 'Granulado', min: 0, max: 1 },
-  { kind: 'blur', label: 'Desfoque', min: 0, max: 1 },
+  { kind: 'exposure', label: FILTER_LABELS['exposure'], min: -1, max: 1 },
+  { kind: 'brightness', label: FILTER_LABELS['brightness'], min: -1, max: 1 },
+  { kind: 'contrast', label: FILTER_LABELS['contrast'], min: -1, max: 1 },
+  { kind: 'highlights', label: FILTER_LABELS['highlights'], min: -1, max: 1 },
+  { kind: 'shadows', label: FILTER_LABELS['shadows'], min: -1, max: 1 },
+  { kind: 'saturation', label: FILTER_LABELS['saturation'], min: -1, max: 1 },
+  { kind: 'temperature', label: FILTER_LABELS['temperature'], min: -1, max: 1 },
+  { kind: 'tint', label: FILTER_LABELS['tint'], min: -1, max: 1 },
+  { kind: 'hue', label: FILTER_LABELS['hue'], min: -1, max: 1 },
+  { kind: 'sharpen', label: FILTER_LABELS['sharpen'], min: 0, max: 1 },
+  { kind: 'vignette', label: FILTER_LABELS['vignette'], min: 0, max: 1 },
+  { kind: 'fade', label: FILTER_LABELS['fade'], min: 0, max: 1 },
+  { kind: 'grain', label: FILTER_LABELS['grain'], min: 0, max: 1 },
+  { kind: 'blur', label: FILTER_LABELS['blur'], min: 0, max: 1 },
 ];
 
 /** proporções de recorte (w/h relativos ao quadro da mídia) */
