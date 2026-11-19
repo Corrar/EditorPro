@@ -191,3 +191,27 @@
 @media (pointer: coarse) {
   .ep-ex-seg button { min-height:44px; }
 }
+
+/* ---------- v2.3: celular — vídeo grande sem caixa + faixa simples de controles ---------- */
+.ep-pv-mbar { display:none; }
+@media (max-width: 899px) {
+  .ep-pv-controls { display:none; }
+  .ep-pv { padding:0 0 4px; gap:2px; background:var(--pv-stage); }
+  .ep-pv-box { padding:6px 10px 0; }
+  .ep-pv-frame { box-shadow:none; border-radius:14px; }
+  .ep-pv-mbar { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; padding:2px 8px; min-height:52px; color:var(--pv-ink); }
+  .ep-pv-mbar .side { display:flex; align-items:center; gap:2px; }
+  .ep-pv-mbar .side.right { justify-content:flex-end; }
+  .ep-pv-mbtn { width:44px; height:44px; border-radius:50%; border:0; background:none; color:var(--pv-ink); display:grid; place-items:center; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+  .ep-pv-mbtn:active { background:rgba(255,255,255,.1); }
+  .ep-pv-mbtn:disabled { opacity:.35; cursor:default; }
+  .ep-pv-mbtn.on { color:var(--green); }
+  .ep-pv-mplay { width:52px; height:52px; border-radius:50%; border:0; background:none; color:#fff; display:grid; place-items:center; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+  .ep-pv-mplay:active { background:rgba(255,255,255,.12); transform:scale(.95); }
+  .ep-pv-more { position:relative; }
+  .ep-pv-menu { position:absolute; left:0; bottom:calc(100% + 6px); z-index:30; min-width:260px; max-width:calc(100vw - 24px); display:flex; flex-direction:column; gap:4px; padding:8px;
+    background:var(--card); color:var(--ink); border-radius:18px; box-shadow:var(--shadow-float); animation:rise .16s ease both; }
+  .ep-pv-menu button { display:flex; align-items:center; gap:10px; white-space:nowrap; min-height:44px; padding:0 12px; border:0; border-radius:12px; background:none; color:inherit; font:inherit; font-size:14px; font-weight:600; text-align:left; cursor:pointer; }
+  .ep-pv-menu button.on { background:var(--tintG); color:var(--tintGInk); }
+  .ep-pv-menu small { margin-left:auto; font-size:11px; font-weight:500; color:var(--muted); }
+}

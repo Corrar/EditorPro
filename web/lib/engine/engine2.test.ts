@@ -143,3 +143,21 @@ describe('legenda a partir de words', () => {
     expect(ch[0].words.map((w) => w.text)).toEqual(['texto', 'novo']);
   });
 });
+
+import { guessBasePreset, basePresetFor } from './fonts';
+import { clipShapeAspect } from './shapes';
+describe('biblioteca: presets de legenda e proporção de forma', () => {
+  it('presets nativos passam direto; ids da biblioteca caem no nativo mais próximo', () => {
+    expect(basePresetFor('karaoke')).toBe('karaoke');
+    expect(guessBasePreset('caixa-por-palavra')).toBe('boxed');
+    expect(guessBasePreset('karaoke-acendendo')).toBe('karaoke');
+    expect(guessBasePreset('impacto-amarelo')).toBe('bold-pop');
+    expect(guessBasePreset('neon')).toBe('neon');
+  });
+  it('aspect do clipe de forma sobrepõe o natural', () => {
+    const base = { id: 's', type: 'shape' as const, start: 0, duration: 1, fill: '#000', transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 } };
+    expect(clipShapeAspect({ ...base, shape: 'rounded-rect' })).toBeCloseTo(1.6);
+    expect(clipShapeAspect({ ...base, shape: 'rounded-rect', aspect: 6 } as never)).toBe(6);
+    expect(clipShapeAspect({ ...base, shape: 'line', aspect: 40 } as never)).toBe(40);
+  });
+});

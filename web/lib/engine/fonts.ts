@@ -9,7 +9,7 @@ import type { Project } from '../types';
 /** chamado quando uma fonte/emoji fica disponível (o preview redesenha) */
 export const assetEvents = { onReady: () => {} };
 
-type Lib = { ensureFont?: (family: string, weights?: number[]) => Promise<unknown>; emojiFor?: (word: string) => string | undefined | null };
+type Lib = { ensureFont?: (family: string, weights?: number[]) => Promise<unknown>; emojiFor?: (word: string) => string | undefined | null; captionBasePreset?: (id: string) => string };
 let libPromise: Promise<Lib> | null = null;
 let lib: Lib | null = null;
 
@@ -89,4 +89,28 @@ export async function ensureProjectFonts(p: Project): Promise<void> {
 export function emojiForWord(word: string): string | undefined {
   if (!lib) { void loadLib().then(() => assetEvents.onReady()); return undefined; }
   try { return lib.emojiFor?.(word) ?? undefined; } catch { return undefined; }
+}
+
+const NATIVE = new Set(['classic', 'bold-pop', 'karaoke', 'minimal', 'boxed', 'neon']);
+
+/** heurística quando a biblioteca não informa: pelo nome do preset */
+export function guessBasePreset(id: string): string {
+  const s = id.toLowerCase();
+  if (/karaok|acend/.test(s)) return 'karaoke';
+  if (/caixa|box|faixa|not[ií]cia/.test(s)) return 'boxed';
+  if (/neon|glow|brilho/.test(s)) return 'neon';
+  if (/minimal|simples|podcast|serif|elegante|manuscrit|cinema/.test(s)) return 'minimal';
+  if (/cl[aá]ssic|tv/.test(s)) return 'classic';
+  return 'bold-pop'; // estilos de creator: destaque na palavra ativa
+}
+
+/** preset nativo para um id de legenda (os da biblioteca mapeiam para o nativo mais próximo) */
+export function basePresetFor(id: string | undefined): string {
+  if (!id || NATIVE.has(id)) return id ?? 'classic';
+  if (!lib) void loadLib().then(() => assetEvents.onReady());
+  try {
+    const b = lib?.captionBasePreset?.(id);
+    if (b && NATIVE.has(b)) return b;
+  } catch { /* usa a heurística */ }
+  return guessBasePreset(id);
 }
