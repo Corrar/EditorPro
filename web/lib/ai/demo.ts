@@ -565,6 +565,8 @@ export interface FirstEditInput {
   /** silêncios por asset, em tempo da MÍDIA (vazio se não deu p/ analisar) */
   silencesByAsset: Record<Id, Range[]>;
   style?: StyleProfile;
+  /** só testes/harness: legendas de exemplo (texto do brief). No app, legenda vem só da transcrição. */
+  allowExampleCaptions?: boolean;
 }
 
 export function planFirstEdit(input: FirstEditInput): DemoResult {
@@ -594,7 +596,8 @@ export function planFirstEdit(input: FirstEditInput): DemoResult {
   // 1) legendas de exemplo nos trechos de fala (antes dos cortes: o ripple leva junto)
   const durations: Record<Id, number> = {};
   for (const id of Object.keys(silencesByAsset)) durations[id] = assets[id]?.duration ?? 0;
-  if (intent.captions && !p.captions.segments.length) {
+  // legenda é SEMPRE a fala transcrita: sem transcrição, nada de texto inventado (pedido do Bruno)
+  if (intent.captions && !p.captions.segments.length && input.allowExampleCaptions) {
     const speech: Record<Id, Range[]> = {};
     for (const [id, sil] of Object.entries(silencesByAsset)) speech[id] = speechRanges(sil, durations[id]);
     const segs = demoCaptions(p, speech, brief);
@@ -817,12 +820,7 @@ export function chatIntent(text: string, ctx: ChatContext): DemoResult {
     push([{ op: 'toggle_captions', enabled: false, explain: 'Escondendo as legendas' }], 'escondi as legendas');
   } else if (mentionsCaption && CAPTION_ADD.test(t) && !/(maior|menor|estilo|cor\b)/.test(t)) {
     if (hasCaps && !p.captions.enabled) push([{ op: 'toggle_captions', enabled: true, explain: 'Mostrando as legendas' }], 'liguei as legendas');
-    else if (!hasCaps && ctx.silencesByAsset) {
-      const speech: Record<Id, Range[]> = {};
-      for (const [id, sil] of Object.entries(ctx.silencesByAsset)) speech[id] = speechRanges(sil, assets[id]?.duration ?? 0);
-      const segs = demoCaptions(p, speech, p.brief);
-      if (segs.length) push([{ op: 'set_captions', segments: segs, language: 'pt-BR', explain: `Gerando ${segs.length} legendas de exemplo` }], 'gerei legendas de exemplo (modo demo)');
-    }
+    else if (!hasCaps) said.push('para legendar preciso transcrever a fala — toque em "Gerar legendas"');
   }
 
   // --- legendas: tamanho / estilo / cor / posição

@@ -287,6 +287,7 @@ describe('demo: exemplo e brief', () => {
       assets,
       brief: 'Vídeo dinâmico para TikTok sobre minha padaria, cinematográfico, siga para mais',
       silencesByAsset: { a1: [{ start: 0, end: 0.8 }, { start: 6, end: 7.5 }, { start: 12, end: 13 }] },
+      allowExampleCaptions: true,
     });
     const kinds = res.ops.map((o) => o.op);
     expect(kinds).toContain('set_captions');
@@ -579,5 +580,14 @@ describe('vídeo modelo', () => {
     expect(colorPresetFromStats({ r: 0.7, g: 0.5, b: 0.4, sat: 0.3, lum: 0.55 })).toBe('warm');
     expect(colorPresetFromStats({ r: 0.4, g: 0.5, b: 0.6, sat: 0.3, lum: 0.5 })).toBe('cool');
     expect(colorPresetFromStats(undefined)).toBeUndefined();
+  });
+});
+
+describe('legenda nunca inventada', () => {
+  it('sem transcrição, a 1ª edição do modo local não coloca legenda de exemplo', () => {
+    const p0 = createProject();
+    const p = applyOps(p0, [{ op: 'add_clip', trackId: 'track_video_1', clip: { ...makeVideoClip(src, 0), id: 'c1' } }]).project;
+    const res = planFirstEdit({ project: p, assets, brief: 'Vídeo com legenda para TikTok', silencesByAsset: { a1: [{ start: 6, end: 7.5 }] } });
+    expect(res.ops.some((o) => o.op === 'set_captions')).toBe(false);
   });
 });
