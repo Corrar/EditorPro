@@ -17,7 +17,7 @@ import {
 import { ensureFont, nearestWeight } from '@/lib/library/fonts';
 import { MiniCanvas, drawMiniRegion, miniProject, type Region } from './mini';
 import { shapeAspect } from '@/lib/engine/shapes';
-import { PillRow, Empty } from './shared';
+import { PillRow, Empty, FavButton, usePrefs, withPrefPills, prefFilter } from './shared';
 import { matchesQuery } from '@/lib/library/search';
 
 const PREVIEW_ASPECT: AspectRatio = '4:5';
@@ -87,8 +87,9 @@ function useTemplatePreview(def: TemplateDef, values: Record<string, string>, br
   }, [def, values, brand]);
 }
 
-function TemplateTile({ def, selected, brand, values, onPick }: {
+function TemplateTile({ def, selected, brand, values, onPick, fav, onFav, onQuick }: {
   def: TemplateDef; selected: boolean; brand: BrandColors; values: Record<string, string>; onPick: (d: TemplateDef) => void;
+  fav: boolean; onFav: () => void; onQuick: () => void;
 }) {
   const project = useTemplatePreview(def, values, brand);
   const [fontsTick, setFontsTick] = useState(0);
@@ -101,7 +102,8 @@ function TemplateTile({ def, selected, brand, values, onPick }: {
   const loop = (def.fullLength ? 4 : def.duration) + 0.6;
   const region = useMemo(() => contentRegion(project), [project, fontsTick]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <button type="button" className={`ep-lib-card${selected ? ' on' : ''}`} onClick={() => onPick(def)} aria-pressed={selected} title={def.description}>
+    <div className={`ep-lib-card${selected ? ' on' : ''}`}>
+      <button type="button" className="ep-lib-cardmain" onClick={() => onPick(def)} aria-pressed={selected} title={def.description}>
       <span className="ep-lib-thumb tall">
         <MiniCanvas label={`Prévia: ${def.name}`} deps={[project, fontsTick, region]}
           draw={(ctx, clock) => drawMiniRegion(ctx, project, Math.min(clock % loop, loop - 0.65), region)} />
@@ -109,6 +111,11 @@ function TemplateTile({ def, selected, brand, values, onPick }: {
       </span>
       <span className="ep-lib-cardlb">{def.name}</span>
     </button>
+      <FavButton on={fav} onToggle={onFav} label={def.name} />
+      <button type="button" className="ep-lib-quickadd" aria-label={`Inserir ${def.name} agora`} onClick={onQuick}>
+        <span aria-hidden><Icon name="add" size={18} /></span>
+      </button>
+      </div>
   );
 }
 
@@ -121,7 +128,8 @@ export default function TemplateGallery({ kind, onInserted, query }: { kind: Tem
     return [{ id: 'todos' as const, label: 'Todos' }, ...ids.map((id) => ({ id, label: TEMPLATE_CATEGORY_LABELS[id] }))];
   }, [all]);
   const defaults = useMemo(() => Object.fromEntries(all.map((t) => [t.id, defaultValues(t)])), [all]);
-  const [cat, setCat] = useState<TemplateCategory | 'todos'>('todos');
+  const [cat, setCat] = useState<string>('todos');
+  const prefs = usePrefs('template');
   const [sel, setSel] = useState<TemplateDef | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
   const [brand, setBrand] = useState<BrandColors>(DEFAULT_BRAND);
@@ -143,29 +151,33 @@ export default function TemplateGallery({ kind, onInserted, query }: { kind: Tem
     try { localStorage.setItem(BRAND_KEY, JSON.stringify(next)); } catch { /* sem armazenamento */ }
   };
 
-  const insert = async () => {
-    if (!sel) return;
-    await Promise.all(templateFonts(sel.id, useEditor.getState().project).map((f) => ensureFont(f, [400, 600, 700, 800, 900])));
+  const insertDef = async (def: TemplateDef, vals: Record<string, string>) => {
+    prefs.recent(def.id);
+    await Promise.all(templateFonts(def.id, useEditor.getState().project).map((f) => ensureFont(f, [400, 600, 700, 800, 900])));
     const st = useEditor.getState();
-    const ops = buildTemplate(sel.id, values, { project: st.project, at: st.playhead, brand, measure: measureText });
+    const ops = buildTemplate(def.id, vals, { project: st.project, at: st.playhead, brand, measure: measureText });
     if (!ops.length) { emit('ep:toast', { text: 'Preencha pelo menos um texto do modelo', kind: 'error' }); return; }
     st.dispatch(ops);
     const ids = ops.flatMap((o) => (o.op === 'add_clip' ? [o.clip.id] : []));
     st.select(ids);
-    emit('ep:toast', { text: `Modelo “${sel.name}” inserido`, kind: 'ok' });
+    emit('ep:toast', { text: `Modelo “${def.name}” inserido`, kind: 'ok' });
     onInserted?.(ids);
   };
+  const insert = () => { if (sel) void insertDef(sel, values); };
 
-  const list = all.filter((t) => (cat === 'todos' || t.category === cat) && matchesQuery(query, [t.name, t.description, TEMPLATE_CATEGORY_LABELS[t.category]]));
+  const special = prefFilter(all, cat, prefs.favs, prefs.recents);
+  const list = (special ?? all.filter((t) => cat === 'todos' || t.category === cat))
+    .filter((t) => matchesQuery(query, [t.name, t.description, TEMPLATE_CATEGORY_LABELS[t.category]]));
 
   return (
     <div className="ep-lib ep-lib-templates">
-      {cats.length > 2 && <PillRow value={cat} options={cats} onChange={setCat} label="Categorias de modelo" />}
+      {(cats.length > 2 || prefs.favs.length > 0 || prefs.recents.length > 0) && <PillRow value={cat} options={withPrefPills(cats, prefs.favs.filter((id) => all.some((t) => t.id === id)), prefs.recents.filter((id) => all.some((t) => t.id === id)))} onChange={setCat} label="Categorias de modelo" />}
       {!list.length && <Empty>Nenhum modelo encontrado{query ? ` para “${query}”` : ''}.</Empty>}
       <div className="ep-lib-grid">
         {list.map((d) => (
           <TemplateTile key={d.id} def={d} selected={sel?.id === d.id} brand={brand}
-            values={sel?.id === d.id ? values : defaults[d.id]} onPick={pick} />
+            values={sel?.id === d.id ? values : defaults[d.id]} onPick={pick}
+            fav={prefs.isFav(d.id)} onFav={() => prefs.toggle(d.id)} onQuick={() => void insertDef(d, sel?.id === d.id ? values : defaults[d.id])} />
         ))}
       </div>
       {sel && (

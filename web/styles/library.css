@@ -123,3 +123,29 @@
 .ep-lib-count { min-width:22px; height:22px; padding:0 7px; border-radius:999px; background:var(--card); color:var(--ink); font-size:12px; font-weight:800; display:inline-grid; place-items:center; }
 .ep-lib-tabs .ep-pill2.on .ep-lib-count { background:rgba(255,255,255,.25); color:#fff; }
 .ep-lib-tabs .ep-pill2.dim { opacity:.5; }
+
+/* favoritos */
+.ep-lib-fav { position:absolute; top:2px; left:2px; width:44px; height:44px; display:grid; place-items:center; cursor:pointer; z-index:2; -webkit-tap-highlight-color:transparent; }
+.ep-lib-fav > span { width:30px; height:30px; border-radius:50%; display:grid; place-items:center; background:rgba(0,0,0,.45); color:#fff; font-size:16px; line-height:1; transition:transform .12s, background .15s; }
+.ep-lib-fav.on > span { background:#FFC83D; color:#141414; }
+.ep-lib-fav:active > span { transform:scale(.9); }
+.ep-lib-fontrow .ep-lib-fav, .ep-lib-sfxrow .ep-lib-fav { position:static; flex:none; }
+.ep-lib-fontrow .ep-lib-fav > span, .ep-lib-sfxrow .ep-lib-fav > span { background:var(--card); color:var(--muted); }
+.ep-lib-fontrow .ep-lib-fav.on > span, .ep-lib-sfxrow .ep-lib-fav.on > span { background:#FFC83D; color:#141414; }
+
+/* ajustes rápidos das legendas */
+.ep-lib-quick { display:flex; flex-direction:column; gap:10px; padding:14px; border-radius:var(--r-lg); background:var(--tile); }
+.ep-lib-quickrow { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.ep-lib-quickrow > b { font-size:13px; font-weight:700; color:var(--sub); min-width:96px; }
+.ep-lib-chips { display:flex; gap:6px; flex-wrap:wrap; }
+.ep-lib-chip { min-height:40px; min-width:44px; padding:0 14px; border:0; border-radius:999px; background:var(--card); color:var(--sub); font:inherit; font-size:13.5px; font-weight:700; cursor:pointer; }
+.ep-lib-chip.on { background:var(--inverse); color:var(--inverseInk); }
+.ep-lib-card { position:relative; }
+.ep-lib-quickadd { position:absolute; right:2px; bottom:34px; width:44px; height:44px; display:grid; place-items:center; cursor:pointer; z-index:2; -webkit-tap-highlight-color:transparent; }
+.ep-lib-quickadd > span { width:32px; height:32px; border-radius:50%; display:grid; place-items:center; background:var(--green); color:#fff; box-shadow:0 3px 10px rgba(0,0,0,.3); }
+.ep-lib-quickadd:active > span { transform:scale(.9); }
+.ep-lib-cardmain { display:flex; flex-direction:column; gap:inherit; width:100%; padding:0; margin:0; border:0; background:none; color:inherit; font:inherit; text-align:left; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+.ep-lib-card.sm .ep-lib-cardmain { align-items:stretch; }
+.ep-lib-fav, .ep-lib-quickadd { border:0; background:none; padding:0; font:inherit; }
+.ep-lib-fontrow { padding:0 8px 0 0; cursor:default; }
+.ep-lib-fontbtn { flex:1; min-width:0; display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:64px; padding:10px 8px 10px 20px; border:0; background:none; color:inherit; font:inherit; text-align:left; cursor:pointer; }

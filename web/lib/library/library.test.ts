@@ -65,7 +65,7 @@ describe('emojiFor', () => {
 
 describe('estilos de legenda', () => {
   it('20 presets com ids únicos e base nativa', () => {
-    expect(CAPTION_PRESETS.length).toBeGreaterThanOrEqual(30);
+    expect(CAPTION_PRESETS.length).toBeGreaterThanOrEqual(80);
     expect(new Set(CAPTION_PRESETS.map((c) => c.id)).size).toBe(CAPTION_PRESETS.length);
     for (const c of CAPTION_PRESETS) {
       expect(fontDef(c.style.fontFamily)).toBeTruthy();
@@ -376,5 +376,18 @@ describe('looks em camada (revisão)', () => {
     expect(adj.length).toBe(1);
     expect(adj[0].label).toBe('Look · Verão');
     expect(adj[0].type === 'adjustment' && detectLook(adj[0].filters)?.id).toBe('verao');
+  });
+});
+
+import { pushRecentList, toggleFavList, RECENT_MAX } from './prefs';
+describe('favoritos e recentes', () => {
+  it('recentes sem duplicar e limitados; favorito liga/desliga', () => {
+    let r: string[] = [];
+    for (let i = 0; i < 20; i++) r = pushRecentList(r, `x${i % 15}`);
+    expect(r.length).toBe(RECENT_MAX);
+    expect(new Set(r).size).toBe(r.length);
+    expect(pushRecentList(['a', 'b', 'c'], 'c')).toEqual(['c', 'a', 'b']);
+    expect(toggleFavList(['a'], 'b')).toEqual(['b', 'a']);
+    expect(toggleFavList(['a', 'b'], 'a')).toEqual(['b']);
   });
 });

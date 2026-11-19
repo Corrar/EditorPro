@@ -7,14 +7,15 @@ import { useEffect, useRef, useState } from 'react';
 import Icon from '@/components/ui/Icon';
 import { emit } from '@/lib/events';
 import { SFX_CATALOG, SFX_CATEGORY_LABELS, insertSfx, previewSfx, type SfxCategory } from '@/lib/library/sfx';
-import { PillRow, Empty } from './shared';
+import { PillRow, Empty, FavButton, usePrefs, withPrefPills, prefFilter } from './shared';
 import { matchesQuery } from '@/lib/library/search';
 
 type Cat = SfxCategory | 'todos';
 const CATS: { id: Cat; label: string }[] = [{ id: 'todos', label: 'Todos' }, ...(Object.keys(SFX_CATEGORY_LABELS) as SfxCategory[]).map((id) => ({ id, label: SFX_CATEGORY_LABELS[id] }))];
 
 export default function SfxList({ onInserted, query }: { onInserted?: (assetId: string) => void; query?: string }) {
-  const [cat, setCat] = useState<Cat>('todos');
+  const [cat, setCat] = useState<string>('todos');
+  const prefs = usePrefs('sfx');
   const [playing, setPlaying] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const stopRef = useRef<(() => void) | null>(null);
@@ -37,6 +38,7 @@ export default function SfxList({ onInserted, query }: { onInserted?: (assetId: 
 
   const insert = async (id: string) => {
     setBusy(id);
+    prefs.recent(id);
     try {
       const asset = await insertSfx(id);
       if (asset) {
@@ -50,10 +52,10 @@ export default function SfxList({ onInserted, query }: { onInserted?: (assetId: 
     }
   };
 
-  const list = SFX_CATALOG.filter((s) => (cat === 'todos' || s.category === cat) && matchesQuery(query, [s.name, s.description, SFX_CATEGORY_LABELS[s.category], 'som efeito']));
+  const list = (prefFilter(SFX_CATALOG, cat, prefs.favs, prefs.recents) ?? SFX_CATALOG.filter((s) => cat === 'todos' || s.category === cat)).filter((s) => matchesQuery(query, [s.name, s.description, SFX_CATEGORY_LABELS[s.category], 'som efeito']));
   return (
     <div className="ep-lib ep-lib-sfx">
-      <PillRow value={cat} options={CATS} onChange={setCat} label="Categorias de efeito sonoro" />
+      <PillRow value={cat} options={withPrefPills(CATS, prefs.favs, prefs.recents)} onChange={setCat} label="Categorias de efeito sonoro" />
       {!list.length && <Empty>Nenhum som encontrado{query ? ` para “${query}”` : ''}.</Empty>}
       <div className="ep-rows ep-lib-sfxrows">
         {list.map((s) => (
@@ -66,6 +68,7 @@ export default function SfxList({ onInserted, query }: { onInserted?: (assetId: 
               <span className="ep-lib-sfxname">{s.name}</span>
               <span className="meta">{s.description}</span>
             </span>
+            <FavButton on={prefs.isFav(s.id)} onToggle={() => prefs.toggle(s.id)} label={s.name} />
             <span className="meta ep-lib-dur">{s.duration.toFixed(1).replace('.', ',')}s</span>
             <button type="button" className="ep-circle sm ep-lib-add" onClick={() => insert(s.id)} disabled={busy === s.id} aria-label={`Inserir ${s.name} no playhead`}>
               {busy === s.id ? <span className="ep-lib-spin" /> : <Icon name="add" size={18} />}

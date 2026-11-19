@@ -12,7 +12,7 @@ import { emit } from '@/lib/events';
 import type { Clip, MediaAsset, Project } from '@/lib/types';
 import { LOOKS, LOOK_CATEGORY_LABELS, detectLook, lookAdjustmentOps, lookClipOps, lookFilters, type LookCategory, type LookDef } from '@/lib/library/looks';
 import { MiniCanvas, SCENE_ASSET, drawMini, miniMedia, miniProject } from './mini';
-import { PillRow, Empty } from './shared';
+import { PillRow, Empty, FavButton, usePrefs, withPrefPills, prefFilter } from './shared';
 import { matchesQuery } from '@/lib/library/search';
 
 type Cat = LookCategory | 'todos';
@@ -44,25 +44,29 @@ function useReferenceFrame(clip: Clip | undefined, assets: Record<string, MediaA
   return img;
 }
 
-function LookTile({ def, selected, frame, onPick }: { def: LookDef | null; selected: boolean; frame: HTMLImageElement | null; onPick: () => void }) {
+function LookTile({ def, selected, frame, onPick, fav, onFav }: { def: LookDef | null; selected: boolean; frame: HTMLImageElement | null; onPick: () => void; fav?: boolean; onFav?: () => void }) {
   const project: Project = useMemo(() => miniProject('4:5', [], {
     sceneAsset: frame ? FRAME_ASSET : SCENE_ASSET,
     sceneFilters: def ? lookFilters(def.id, 1) : [],
   }), [def, frame]);
   const media = useMemo(() => miniMedia(frame ? { [FRAME_ASSET]: frame } : undefined), [frame]);
   return (
-    <button type="button" className={`ep-lib-card sm${selected ? ' on' : ''}`} onClick={onPick} aria-pressed={selected} title={def?.description}>
+    <div className={`ep-lib-card sm${selected ? ' on' : ''}`}>
+      <button type="button" className="ep-lib-cardmain" onClick={onPick} aria-pressed={selected} title={def?.description}>
       <span className="ep-lib-thumb portrait">
         <MiniCanvas animate={false} label={def ? `Look ${def.name}` : 'Sem look'} deps={[project, media]} draw={(ctx) => drawMini(ctx, project, 0, media)} />
         {selected && <span className="ep-lib-badge"><Icon name="check" size={14} /></span>}
       </span>
       <span className="ep-lib-cardlb">{def ? def.name : 'Original'}</span>
     </button>
+      {def && onFav && <FavButton on={!!fav} onToggle={onFav} label={def.name} />}
+      </div>
   );
 }
 
 export default function LookGallery({ onApply, query }: { onApply?: (lookId: string | null, intensity: number) => void; query?: string }) {
-  const [cat, setCat] = useState<Cat>('todos');
+  const [cat, setCat] = useState<string>('todos');
+  const prefs = usePrefs('look');
   const project = useEditor((s) => s.project);
   const assets = useEditor((s) => s.assets);
   const playhead = useEditor((s) => s.playhead);
@@ -87,6 +91,7 @@ export default function LookGallery({ onApply, query }: { onApply?: (lookId: str
 
   const apply = (id: string | null, k = intensity) => {
     setLast(id);
+    if (id) prefs.recent(id);
     if (onApply) return onApply(id, k);
     if (mode === 'clip' && target) {
       dispatch(id ? lookClipOps(project, [target.id], id, k) : [{ op: 'update_clip', clipId: target.id, patch: { filters: [] }, explain: 'Sem look' }]);
@@ -96,7 +101,7 @@ export default function LookGallery({ onApply, query }: { onApply?: (lookId: str
     }
   };
 
-  const list = LOOKS.filter((l) => (cat === 'todos' || l.category === cat) && matchesQuery(query, [l.name, l.description, LOOK_CATEGORY_LABELS[l.category], 'cor filtro']));
+  const list = (prefFilter(LOOKS, cat, prefs.favs, prefs.recents) ?? LOOKS.filter((l) => cat === 'todos' || l.category === cat)).filter((l) => matchesQuery(query, [l.name, l.description, LOOK_CATEGORY_LABELS[l.category], 'cor filtro']));
   const selectedId = mode === 'clip' ? applied?.id ?? (target && 'filters' in target && !target.filters.length ? null : undefined) : undefined;
 
   return (
@@ -115,11 +120,11 @@ export default function LookGallery({ onApply, query }: { onApply?: (lookId: str
           onKeyUp={() => { if (mode === 'clip' && last) apply(last); }}
           aria-label="Intensidade do look" />
       </label>
-      <PillRow value={cat} options={CATS} onChange={setCat} label="Categorias de look" />
+      <PillRow value={cat} options={withPrefPills(CATS, prefs.favs, prefs.recents)} onChange={setCat} label="Categorias de look" />
       {!list.length && <Empty>Nenhum look encontrado{query ? ` para “${query}”` : ''}.</Empty>}
       <div className="ep-lib-grid sm">
         {mode === 'clip' && <LookTile def={null} selected={selectedId === null} frame={frame} onPick={() => apply(null)} />}
-        {list.map((l) => <LookTile key={l.id} def={l} selected={selectedId === l.id} frame={frame} onPick={() => apply(l.id)} />)}
+        {list.map((l) => <LookTile key={l.id} def={l} selected={selectedId === l.id} frame={frame} onPick={() => apply(l.id)} fav={prefs.isFav(l.id)} onFav={() => prefs.toggle(l.id)} />)}
       </div>
     </div>
   );

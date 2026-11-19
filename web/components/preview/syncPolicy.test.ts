@@ -3,6 +3,7 @@ import {
   driftDecision, staleIdle, warmPosition, WARM_START, PlaybackClock, QualityGovernor, prerollPlan, frameReady, frameInterval,
   SEEK_DRIFT, KICK_GRACE_MS, MAX_HOLD_MS, PREROLL,
 } from './syncPolicy';
+import { stillTime } from './syncPolicy';
 import type { Project, VideoClip } from '@/lib/types';
 import { createProject } from '@/lib/defaults';
 
@@ -202,5 +203,16 @@ describe('PlaybackClock com velocidade de reprodução', () => {
     c.reset(0, 0); c.rate = 0.5;
     for (let w = 100; w <= 1000; w += 100) t = c.tick(w, null);
     expect(t).toBeCloseTo(0.5);
+  });
+});
+
+describe('stillTime', () => {
+  it('no fim da timeline mostra o último quadro (não um instante sem clipe = tela preta)', () => {
+    expect(stillTime(6, 6, 30)).toBeCloseTo(6 - 1 / 30, 9);
+    expect(stillTime(6.0000001, 6, 25)).toBeCloseTo(6 - 1 / 25, 9);
+  });
+  it('fora do fim não mexe', () => {
+    expect(stillTime(2.5, 6, 30)).toBe(2.5);
+    expect(stillTime(0, 0, 30)).toBe(0);
   });
 });

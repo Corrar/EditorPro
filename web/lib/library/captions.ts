@@ -7,11 +7,13 @@
    ===================================================================== */
 import type { CaptionStyle, TextAnimation } from '../types';
 import type { EditOp } from '../ops';
+import { CAPTION_PRESETS_MORE } from './captionsMore';
 
-export type CaptionCategory = 'creator' | 'destaque' | 'classico' | 'estilizado';
+export type CaptionCategory = 'creator' | 'karaoke' | 'destaque' | 'caixa' | 'contorno' | 'brilho' | '3d' | 'classico' | 'elegante' | 'estilizado' | 'noticia' | 'gamer' | 'divertido';
 
 export const CAPTION_CATEGORY_LABELS: Record<CaptionCategory, string> = {
-  creator: 'Creator', destaque: 'Destaque', classico: 'Clássico', estilizado: 'Estilizado',
+  creator: 'Creator', karaoke: 'Karaokê', destaque: 'Destaque', caixa: 'Caixa e faixa', contorno: 'Contorno', brilho: 'Neon e brilho',
+  '3d': '3D e sombra', classico: 'Clássico', elegante: 'Elegante', estilizado: 'Estilizado', noticia: 'Notícia', gamer: 'Gamer', divertido: 'Divertido',
 };
 
 /** presets nativos do engine (usados como "aparência base" enquanto o engine não lê todos os campos novos) */
@@ -218,6 +220,8 @@ export const CAPTION_PRESETS: CaptionPresetDef[] = [
   },
 ];
 
+CAPTION_PRESETS.push(...CAPTION_PRESETS_MORE);
+
 const BY_ID = new Map(CAPTION_PRESETS.map((p) => [p.id, p]));
 
 export function captionPresetDef(id: string | undefined): CaptionPresetDef | undefined {
@@ -236,6 +240,7 @@ const RESETTABLE: (keyof CaptionStyle)[] = [
   'wordBox', 'activeScale', 'inactiveOpacity', 'autoEmoji', 'lines', 'jitter', 'glow', 'shadowColor', 'shadowBlur',
   'shadowOffset', 'backgroundPadding', 'gradient', 'background', 'backgroundRadius', 'italic', 'underline', 'letterSpacing',
   'lineHeight', 'strokeColor', 'strokeWidth', 'highlightColor', 'opacity',
+  'strokes', 'longShadow', 'extrude', 'curve', 'backgroundBlur', 'emphasis', 'gradient',
 ];
 
 /**
