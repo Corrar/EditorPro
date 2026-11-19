@@ -1,10 +1,12 @@
-## Bugs encontrados (rodada 2 — integração `71e9ee2`; rodada 1 em `70b8304`)
+## Bugs encontrados (rodada 3 — `48c7e7e`, inclui `0df4eca`; rodada 2 em `71e9ee2`; rodada 1 em `70b8304`)
+
+> Rodada 3: **B1 corrigido** (0 quadros pretos no fim/seek no fim) e 4K passou. **B3 piorou**: o menu ⋯ do preview cresceu e agora sai pelo TOPO no Pixel 7 (top −43 px) e no iPhone SE (top −134 px, direita +7 px); a pílula "IA: N edições feitas" fica por cima do menu. B2, B4 seguem. B5–B8 não foram reverificados (usabilidade fica para a próxima rodada).
 
 > Rodada 2: preview híbrido (`<video>` nativo + canvas transparente). A medição de tela preta compõe os `<video>` visíveis + canvas e confere com captura real da área `.ep-pv-frame`. B1–B4 continuam. Export ficou ~4× mais rápido (31 s → 8 s a 1080p).
 
 > QA só documenta: nenhum destes foi corrigido aqui. Arquivo:linha é o ponto provável.
 
-### B1 — Preview fica PRETO ao terminar a reprodução (e ao arrastar a agulha até o fim) · alta
+### ✅ B1 (corrigido na rodada 3) — Preview fica PRETO ao terminar a reprodução (e ao arrastar a agulha até o fim) · alta
 - **Passos:** abrir qualquer projeto → ▶ e deixar tocar até o fim (ou arrastar o playhead até o final da timeline).
 - **Esperado:** o último quadro fica na tela. **Obtido:** canvas preto (luminância 0) e fica preto até o usuário mexer no playhead.
 - **Evidência:** caso 2, fases `endOfPlayback` e `seekEnd` (harness: 72/72 amostras pretas com `playhead = 5.00 s`, sem fade-out no projeto);
