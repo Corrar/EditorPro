@@ -21,6 +21,8 @@ import Home, { type WizardInput } from './Home';
 import MobileNav from './MobileNav';
 import MobileToolbar from './MobileToolbar';
 import AiCursor from './AiCursor';
+import MediaPicker from '@/components/media/MediaPicker';
+import { openMediaPicker } from '@/components/media/pickerStore';
 import AiPopupHost, { type AiPopupMode } from './AiPopupHost';
 import SettingsModal from './SettingsModal';
 import Sidebar from './Sidebar';
@@ -171,6 +173,8 @@ export default function EditorShell() {
 
   // eventos do contrato: a timeline (e outros) pedem ferramenta / pop-up da IA
   useEffect(() => on('ep:open-tool', ({ tool: t }) => {
+    // celular: "+" da timeline / Mídia abrem o seletor em tela cheia (estilo CapCut)
+    if (t === 'media' && mq('(max-width: 899px)')) { setAiModeRaw((m) => (m === 'open' ? 'min' : m)); openMediaPicker(); return; }
     const id = (t === 'sfx' || t === 'music' ? 'audio' : t) as ToolId;
     if (!TOOLS.some((x) => x.id === id)) return;
     if (t === 'sfx' || t === 'music') useAudioView.setState({ view: t });
@@ -272,6 +276,7 @@ export default function EditorShell() {
             {view === 'editor' && <Workspace tool={tool} sideOpen={sideOpen} onCloseSide={() => setSideOpen(false)} chatOpen={chatOpen} onChat={openChat} onHome={goHome} onSearch={() => { setMenuSearch(true); setMenuOpen(true); }} />}
           </div>
           {view === 'editor' && <AiCursor />}
+          {view === 'editor' && <MediaPicker />}
           <MobileNav {...nav} chatOpen={chatOpen} onChat={openChat} menuOpen={menuOpen} onMenuOpen={(o) => { setMenuOpen(o); if (!o) setMenuSearch(false); }} focusSearch={menuSearch} />
           {view === 'editor' && !chatOpen && (
             <>

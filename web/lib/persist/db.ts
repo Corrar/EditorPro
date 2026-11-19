@@ -6,8 +6,8 @@
      - kv       (out-of-line) → valores soltos (ex.: lastProjectId)
    Todas as funções falham "suave" (rejeitam) se o IndexedDB não existir.
    ===================================================================== */
-import type { ProjectRecord, ProjectSummary } from './pure';
-import { orphanBlobIds, summarize } from './pure';
+import type { ProjectRecord, ProjectSummary, RecentMedia } from './pure';
+import { RECENTS_KEY, orphanBlobIds, summarize } from './pure';
 
 const DB_NAME = 'editorpro';
 const DB_VERSION = 1;
@@ -109,7 +109,9 @@ export async function gcBlobs(keep: string[] = []): Promise<number> {
     tx('projects', 'readonly', (s) => s.getAll() as IDBRequest<ProjectRecord[]>),
   ]);
   const protect = new Set(keep);
-  const orphans = orphanBlobIds(ids.map(String), records).filter((id) => !protect.has(id));
+  // a galeria "Recentes" (entre projetos) também segura os blobs
+  const recents = ((await getKV<RecentMedia[]>(RECENTS_KEY).catch(() => undefined)) ?? []).map((r) => r.asset.id);
+  const orphans = orphanBlobIds(ids.map(String), records, recents).filter((id) => !protect.has(id));
   for (const id of orphans) await deleteBlob(id);
   return orphans.length;
 }

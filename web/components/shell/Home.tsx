@@ -15,6 +15,7 @@ import {
   IconSearch, IconSpark, IconSun, IconTrash, IconUpload, IconVideo, IconLayout,
 } from './icons';
 import { PROJECT_TEMPLATES } from './templates';
+import { AUDIO_ACCEPT, GALLERY_ACCEPT } from '@/components/media/pickers';
 import { TOOLS, type ToolId } from './tools';
 import { applySystemChrome } from './theme';
 
@@ -51,16 +52,19 @@ function FileChip({ f, onRemove }: { f: File; onRemove: () => void }) {
   );
 }
 
-function Dropzone({ title, sub, multiple, accept, files, onFiles, onRemove, optional, icon }: {
+function Dropzone({ title, sub, multiple, accept, files, onFiles, onRemove, optional, icon, extra }: {
   title: string; sub: string; multiple: boolean; accept: string; files: File[]; optional?: boolean;
   onFiles: (f: File[]) => void; onRemove: (i: number) => void; icon: React.ReactNode;
+  /** botão extra com input próprio (ex.: Música → audio/*, para a galeria abrir direto sem o "Escolha uma ação") */
+  extra?: { label: string; accept: string; icon: React.ReactNode };
 }) {
   const [over, setOver] = useState(false);
   const input = useRef<HTMLInputElement>(null);
-  const take = (list: FileList | null | undefined) => {
+  const extraInput = useRef<HTMLInputElement>(null);
+  const take = (list: FileList | null | undefined, acc = extra ? `${accept},${extra.accept}` : accept) => {
     const arr = Array.from(list ?? []).filter((f) => {
       const k = mediaKindOf(f.type, f.name);
-      return k && (accept.includes('audio') || k !== 'audio') && (accept.includes('image') || k !== 'image');
+      return k && (acc.includes('audio') || k !== 'audio') && (acc.includes('image') || k !== 'image');
     });
     if (arr.length) onFiles(multiple ? arr : arr.slice(0, 1));
     else if (list?.length) emit('ep:toast', { text: 'Formato não suportado aqui', kind: 'error' });
@@ -78,6 +82,12 @@ function Dropzone({ title, sub, multiple, accept, files, onFiles, onRemove, opti
         <IconChevRight size={18} />
       </button>
       <input ref={input} type="file" hidden multiple={multiple} accept={accept} onChange={(e) => { take(e.target.files); e.target.value = ''; }} />
+      {extra && (
+        <>
+          <button type="button" className="ep-dz-extra" onClick={() => extraInput.current?.click()}>{extra.icon}{extra.label}</button>
+          <input ref={extraInput} type="file" hidden multiple accept={extra.accept} onChange={(e) => { take(e.target.files, extra.accept); e.target.value = ''; }} />
+        </>
+      )}
       {files.length > 0 && <div className="ep-fchips">{files.map((f, i) => <FileChip key={`${f.name}-${i}`} f={f} onRemove={() => onRemove(i)} />)}</div>}
     </div>
   );
@@ -123,7 +133,8 @@ function Wizard({ onStart, onEmpty, onBack, busy, focus }: { onStart: (w: Wizard
           <span className="ep-wstep">2</span>
           <h2>Envie o material</h2>
           <div className="ep-dzrow">
-            <Dropzone title="Seu material" sub="Vídeos, fotos e músicas" multiple accept="video/*,image/*,audio/*" icon={<IconUpload size={22} />} files={material}
+            <Dropzone title="Seu material" sub="Vídeos e fotos da galeria" multiple accept={GALLERY_ACCEPT} icon={<IconUpload size={22} />} files={material}
+              extra={{ label: 'Adicionar música', accept: AUDIO_ACCEPT, icon: <IconMusic size={16} /> }}
               onFiles={(f) => setMaterial((s) => [...s, ...f])} onRemove={(i) => setMaterial((s) => s.filter((_, j) => j !== i))} />
             <Dropzone title="Vídeo de exemplo" sub="A IA copia o ritmo e o estilo" multiple={false} accept="video/*" optional icon={<IconSpark size={22} />}
               files={reference ? [reference] : []} onFiles={(f) => setReference(f[0] ?? null)} onRemove={() => setReference(null)} />
@@ -362,7 +373,7 @@ export default function Home({ onStart, onEmpty, onOpen, onTemplate, onTool, onI
           <button type="button" className="ep-qa" onClick={() => tplRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}><span className="ic"><IconLayout size={26} /></span><span className="lb">Modelos</span></button>
           <button type="button" className="ep-qa" onClick={() => onEmpty('9:16')}><span className="ic"><IconVideo size={26} /></span><span className="lb">Editor vazio</span></button>
         </div>
-        <input ref={importRef} type="file" hidden multiple accept="video/*,image/*,audio/*" onChange={(e) => { const f = Array.from(e.target.files ?? []); e.target.value = ''; if (f.length) onImport(f); }} />
+        <input ref={importRef} type="file" hidden multiple accept={GALLERY_ACCEPT} onChange={(e) => { const f = Array.from(e.target.files ?? []); e.target.value = ''; if (f.length) onImport(f); }} />
 
         {tip && (
           <div className="ep-banner" style={{ marginTop: 24 }}>
