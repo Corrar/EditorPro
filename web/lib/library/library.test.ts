@@ -365,3 +365,16 @@ describe('modelos com campos vazios', () => {
     expect(buildTemplate('lt-minimal', { nome: '', funcao: '' }, { project: createProject() })).toEqual([]);
   });
 });
+
+describe('looks em camada (revisão)', () => {
+  it('trocar o look no vídeo todo reaproveita a camada em vez de empilhar', () => {
+    let p = createProject();
+    p = applyOps(p, [{ op: 'add_clip', trackId: 'track_video_1', clip: { id: 'v', type: 'video', assetId: 'x', start: 0, duration: 6, in: 0, speed: 1, volume: 1, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, filters: [] } }]).project;
+    p = applyOps(p, lookAdjustmentOps(p, 'noir', 1)).project;
+    p = applyOps(p, lookAdjustmentOps(p, 'verao', 0.5)).project;
+    const adj = p.tracks.flatMap((t) => t.clips).filter((c) => c.type === 'adjustment');
+    expect(adj.length).toBe(1);
+    expect(adj[0].label).toBe('Look · Verão');
+    expect(adj[0].type === 'adjustment' && detectLook(adj[0].filters)?.id).toBe('verao');
+  });
+});
