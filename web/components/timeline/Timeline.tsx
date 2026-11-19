@@ -29,7 +29,7 @@ import {
 import { type RowInfo, dimsFor, fillRowHeights, rowAtY, rowLayout, rowsHeight, useDims, useTimelineUi } from '@/lib/timeline/ui';
 import { CenterOverlay, Toolbar, ZMAX, ZMIN } from './Toolbar';
 import { Ruler } from './Ruler';
-import { DragLayer, GroupOutlines, Guides, KeyframeLayer, PlayheadLine, Rows, TouchHandles } from './Rows';
+import { COVER_MARKER_ID, DragLayer, GroupOutlines, Guides, KeyframeLayer, PlayheadLine, Rows, TouchHandles } from './Rows';
 import { ClipMenu, LiveBanner, TrackPop } from './Overlays';
 import { useShortcuts } from './useShortcuts';
 import { MarkerLines, MarkerPop, RangePop } from './Markers';
@@ -129,6 +129,16 @@ export default function Timeline() {
     ? duration * zoom + Math.max(viewW / 2, 120) + 72 // até o fim chegar ao centro (+ botão "+")
     : Math.max((duration + Math.max(10, duration * 0.25)) * zoom, viewW - hw());
   const rowsH = rowsHeight(rows);
+
+  // migração: capa guardada como marcador 'cover' (antes de Project.coverTime) -> coverTime
+  useEffect(() => {
+    const legacy = project.markers?.find((m) => m.id === COVER_MARKER_ID);
+    if (!legacy) return;
+    const ops: EditOp[] = [];
+    if (project.coverTime == null) ops.push({ op: 'set_project', patch: { coverTime: legacy.t } });
+    ops.push({ op: 'remove_marker', markerId: COVER_MARKER_ID });
+    useEditor.getState().dispatch(ops, { history: false });
+  }, [project.markers, project.coverTime]);
 
   // desfazer/refazer/IA podem remover clipes selecionados: poda a seleção
   useEffect(() => {

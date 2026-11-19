@@ -376,3 +376,12 @@ describe('grupos', () => {
     expect(copies[0].groupId).not.toBe('g1');
   });
 });
+
+describe('capa', () => {
+  it('coverTime via set_project substitui o marcador legado', () => {
+    const p = applyOps(mock(), [{ op: 'add_marker', marker: { id: 'cover', t: 3, kind: 'chapter', label: 'Capa' } }]).project;
+    const q = applyOps(p, [{ op: 'set_project', patch: { coverTime: 3 } }, { op: 'remove_marker', markerId: 'cover' }]).project;
+    expect(q.coverTime).toBe(3);
+    expect(q.markers?.some((m) => m.id === 'cover')).toBe(false);
+  });
+});

@@ -500,12 +500,13 @@ export const GroupOutlines = memo(function GroupOutlines({ project, rows, zoom }
 
 /* ---------------- modo celular: "Capa" e "Editar com IA" antes do início da trilha principal ---------------- */
 
+/** id do marcador usado ANTES de existir Project.coverTime (migrado automaticamente pela Timeline) */
 export const COVER_MARKER_ID = 'cover';
 
 function MainLead({ height }: { height: number }) {
-  const cover = useEditor((s) => s.project.markers?.find((m) => m.id === COVER_MARKER_ID));
+  const coverTime = useEditor((s) => s.project.coverTime);
   const thumb = useEditor((s) => {
-    const t = cover?.t ?? 0;
+    const t = coverTime ?? 0;
     const main = s.project.tracks.find((tr) => tr.kind === 'video');
     const c = main?.clips.find((cl) => t >= cl.start && t < cl.start + cl.duration) ?? main?.clips[0];
     if (!c || !('assetId' in c) || !c.assetId) return undefined;
@@ -520,7 +521,7 @@ function MainLead({ height }: { height: number }) {
   const h = Math.max(36, height - 6);
   const setCover = () => {
     const st = useEditor.getState();
-    st.dispatch({ op: 'add_marker', marker: { id: COVER_MARKER_ID, t: st.playhead, kind: 'chapter', label: 'Capa', color: '#F2681F' }, explain: 'Definindo a capa' });
+    st.dispatch({ op: 'set_project', patch: { coverTime: st.playhead }, explain: 'Definindo a capa' });
     emit('ep:toast', { text: `Capa definida em ${formatTime(st.playhead)} — role e toque de novo para trocar`, kind: 'ok' });
   };
   return (
