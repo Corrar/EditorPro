@@ -11,6 +11,7 @@ import { assetEvents, renderFrame, segEvents } from '@/lib/engine';
 import { emit, on } from '@/lib/events';
 import { formatTime } from '@/lib/util';
 import { LiveMediaPool } from './livePool';
+import { PlaybackClock, QualityGovernor, frameInterval } from './syncPolicy';
 import ExportDialog from './ExportDialog';
 import Icon from '@/components/ui/Icon';
 
@@ -19,12 +20,15 @@ const PREVIEW_MAX_SHORT = 720;
 const PREVIEW_MAX_SHORT_WEAK = 540;
 const PREVIEW_MIN_SHORT = 360;
 
-/** aparelho modesto (celular / poucos núcleos / pouca memória): resolução interna menor */
+/** métricas do preview (lidas pelos testes de desempenho em window.__epPreviewStats) */
+const STATS = { draws: 0, held: 0, costEma: 0, quality: 1, width: 0 };
+
+/** aparelho modesto (poucos núcleos / pouca memória): resolução interna menor */
 function isWeakDevice(): boolean {
   if (typeof navigator === 'undefined') return false;
   const nav = navigator as Navigator & { deviceMemory?: number };
-  const coarse = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
-  return coarse || (nav.hardwareConcurrency ?? 8) <= 4 || (nav.deviceMemory ?? 8) <= 4;
+  // (toque sozinho não é "fraco": celular bom como Pixel 7/iPhone recente aguenta 720p no GPU)
+  return (nav.hardwareConcurrency ?? 8) <= 4 || (nav.deviceMemory ?? 8) <= 4;
 }
 
 type FsEl = HTMLElement & { webkitRequestFullscreen?: () => Promise<void> | void };
@@ -56,12 +60,17 @@ export default function Preview() {
   const barRef = useRef<HTMLDivElement>(null);
   const poolRef = useRef<LiveMediaPool | null>(null);
   const lastSetRef = useRef(0);
-  const clockRef = useRef({ t0: 0, wall0: 0 });
+  const clockRef = useRef(new PlaybackClock());
   const pendingRef = useRef(0);
 
   const [fit, setFit] = useState({ w: 0, h: 0 });
   const [safe, setSafe] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  /** valores iniciais vindos do shell (pílula "1080p ▾" do celular) */
+  const [exportInit, setExportInit] = useState<{ quality?: 'draft' | 'hd' | 'fhd' | '4k' | 'full'; fps?: number }>({});
+  /* brilho sutil no quadro quando a IA aplica uma op ao vivo */
+  const liveApplied = useEditor((s) => (s.live.running ? s.live.done : 0));
+  const [glow, setGlow] = useState(0);
   const [fullscreen, setFullscreen] = useState(false);
   /** "tela cheia" por CSS (iPhone não tem Fullscreen API para elementos que não são <video>) */
   const [cssFull, setCssFull] = useState(false);
@@ -77,10 +86,17 @@ export default function Preview() {
   if (!poolRef.current && typeof window !== 'undefined') poolRef.current = new LiveMediaPool();
   /** tamanho-base do canvas interno e fator de qualidade dinâmico (cai se a reprodução não aguentar) */
   const baseRef = useRef({ w: 0, h: 0 });
+  const govRef = useRef(new QualityGovernor());
+  /** fator de qualidade a aplicar no próximo quadro desenhado (troca + desenho no mesmo quadro: sem piscar) */
+  const wantQRef = useRef(1);
   const qualityRef = useRef(1);
-  const emaRef = useRef(0);
-  const framesRef = useRef(0);
+  /** desde quando falta quadro de vídeo (ms) — o preview mantém o último quadro bom */
+  const waitSinceRef = useRef(0);
 
+  /**
+   * Ajusta o tamanho interno do canvas. Redimensionar ZERA o conteúdo; por isso o
+   * quadro atual é copiado e redesenhado escalado na hora (nunca fica preto).
+   */
   const applySize = useCallback(() => {
     const cv = canvasRef.current;
     const { w: bw, h: bh } = baseRef.current;
@@ -89,9 +105,23 @@ export default function Preview() {
     const w = Math.max(2, Math.round((bw * q) / 2) * 2);
     const h = Math.max(2, Math.round((bh * q) / 2) * 2);
     if (cv.width === w && cv.height === h) return false;
+    let keep: HTMLCanvasElement | null = null;
+    if (cv.width > 2 && cv.height > 2) {
+      keep = document.createElement('canvas');
+      keep.width = cv.width;
+      keep.height = cv.height;
+      keep.getContext('2d')?.drawImage(cv, 0, 0);
+    }
     cv.width = w;
     cv.height = h;
+    if (keep) cv.getContext('2d', { alpha: false })?.drawImage(keep, 0, 0, w, h);
     return true;
+  }, []);
+
+  const showTime = useCallback((t: number) => {
+    const d = projectDuration(useEditor.getState().project);
+    if (timeRef.current) timeRef.current.textContent = fmt(t);
+    if (barRef.current) barRef.current.style.transform = `scaleX(${d > 0 ? Math.min(1, t / d) : 0})`;
   }, []);
 
   /* ---------- desenho ---------- */
@@ -99,6 +129,8 @@ export default function Preview() {
     const cv = canvasRef.current;
     const pool = poolRef.current;
     if (!cv || !pool) return;
+    // troca de qualidade pendente: redimensiona e desenha no MESMO quadro
+    if (wantQRef.current !== qualityRef.current) { qualityRef.current = wantQRef.current; applySize(); }
     const ctx = cv.getContext('2d', { alpha: false });
     if (!ctx) return;
     const st = useEditor.getState();
@@ -108,25 +140,18 @@ export default function Preview() {
     } catch (e) {
       console.error('[preview] falha ao desenhar', e);
     }
-    // qualidade adaptativa só durante a reprodução: quadro caro → reduz a resolução interna
-    // (ignora os primeiros quadros: o decodificador ainda está aquecendo)
-    if (st.playing && ++framesRef.current > 10) {
-      const dt = performance.now() - t0;
-      emaRef.current = emaRef.current ? emaRef.current * 0.85 + dt * 0.15 : dt;
-      if (emaRef.current > 32 && qualityRef.current > 0.4) {
-        qualityRef.current = Math.max(0.4, qualityRef.current * 0.82);
-        emaRef.current = 22;
-        applySize();
-      } else if (emaRef.current < 16 && qualityRef.current < 1) {
-        qualityRef.current = Math.min(1, qualityRef.current * 1.08);
-        emaRef.current = 20;
-        applySize();
-      }
+    // qualidade adaptativa (só na reprodução), em degraus com histerese — não fica alternando
+    const cost = performance.now() - t0;
+    STATS.draws++;
+    STATS.costEma = STATS.costEma ? STATS.costEma * 0.9 + cost * 0.1 : cost;
+    STATS.quality = qualityRef.current;
+    STATS.width = cv.width;
+    if (st.playing) {
+      const q = govRef.current.push(cost, performance.now());
+      if (q !== null) wantQRef.current = q;
     }
-    const d = projectDuration(st.project);
-    if (timeRef.current) timeRef.current.textContent = fmt(t);
-    if (barRef.current) barRef.current.style.transform = `scaleX(${d > 0 ? Math.min(1, t / d) : 0})`;
-  }, [applySize]);
+    showTime(t);
+  }, [applySize, showTime]);
 
   /** re-render quando pausado (agrupa pedidos num único rAF) */
   const requestStill = useCallback(() => {
@@ -135,13 +160,22 @@ export default function Preview() {
       pendingRef.current = 0;
       const st = useEditor.getState();
       if (st.playing) return;
-      poolRef.current?.sync(st.project, st.assets, st.playhead, false, st.project.fps);
+      const s = poolRef.current?.sync(st.project, st.assets, st.playhead, false, st.project.fps);
+      // vídeo ainda buscando o quadro: mantém o último quadro (o 'seeked' pede outro desenho);
+      // se demorar demais (mídia quebrada), desenha assim mesmo p/ não travar a edição
+      const now = performance.now();
+      if (s?.pending) {
+        if (!waitSinceRef.current) waitSinceRef.current = now;
+        if (now - waitSinceRef.current < 900) { showTime(st.playhead); window.setTimeout(requestStill, 120); return; }
+      }
+      waitSinceRef.current = 0;
       draw(st.playhead);
     });
-  }, [draw]);
+  }, [draw, showTime]);
 
   /* pool: host oculto p/ os elementos + callback de quadro novo */
   useEffect(() => {
+    (window as unknown as { __epPreviewStats?: typeof STATS }).__epPreviewStats = STATS;
     // (StrictMode monta/desmonta 2x: recria o pool se a limpeza anterior o descartou)
     const pool = poolRef.current ?? (poolRef.current = new LiveMediaPool());
     if (hostRef.current) pool.attach(hostRef.current);
@@ -189,7 +223,7 @@ export default function Preview() {
       if (s.playing) {
         // seek externo durante a reprodução (ex.: clique na régua): reposiciona o relógio
         if (s.playhead !== prev.playhead && Math.abs(s.playhead - lastSetRef.current) > 0.05) {
-          clockRef.current = { t0: s.playhead, wall0: performance.now() };
+          clockRef.current.reset(s.playhead, performance.now());
           lastSetRef.current = s.playhead;
         }
         return;
@@ -202,15 +236,14 @@ export default function Preview() {
     return unsub;
   }, [requestStill]);
 
-  /* ---------- reprodução: relógio próprio ---------- */
+  /* ---------- reprodução: relógio que segue o vídeo principal ---------- */
   useEffect(() => {
     const pool = poolRef.current;
     if (!playing || !pool) {
       pool?.pauseAll();
       // parado: volta à qualidade cheia para o quadro estático
-      framesRef.current = 0;
-      emaRef.current = 0;
-      if (qualityRef.current < 1) { qualityRef.current = 1; if (applySize()) requestStill(); }
+      govRef.current.reset();
+      if (wantQRef.current < 1 || qualityRef.current < 1) { wantQRef.current = 1; qualityRef.current = 1; if (applySize()) requestStill(); }
       return;
     }
     const st0 = useEditor.getState();
@@ -218,17 +251,21 @@ export default function Preview() {
     if (d0 <= 0) { setPlaying(false); return; }
     let start = st0.playhead;
     if (start >= d0 - 1 / 30) start = 0;
-    clockRef.current = { t0: start, wall0: performance.now() };
+    const clock = clockRef.current;
+    clock.reset(start, performance.now());
     lastSetRef.current = start;
     if (start !== st0.playhead) setPlayhead(start);
+    govRef.current.reset();
     let raf = 0;
+    let lastDraw = -Infinity;
+    let lead: ReturnType<LiveMediaPool['sync']>['lead'] = null;
     const tick = () => {
       const st = useEditor.getState();
       if (!st.playing) return;
       const d = projectDuration(st.project);
-      let t = clockRef.current.t0 + (performance.now() - clockRef.current.wall0) / 1000;
+      const now = performance.now();
+      const t = clock.tick(now, lead);
       if (t >= d) {
-        t = d;
         pool.pauseAll();
         lastSetRef.current = d;
         st.setPlayhead(d);
@@ -236,18 +273,33 @@ export default function Preview() {
         draw(Math.max(0, d - 1 / (st.project.fps || 30)));
         return;
       }
-      pool.sync(st.project, st.assets, t, true, st.project.fps);
-      draw(t);
+      raf = requestAnimationFrame(tick);
+      // ritmo: desenha no fps do projeto (tela de 90/120 Hz não precisa redesenhar o mesmo quadro 3–4x)
+      if (now - lastDraw < frameInterval(st.project.fps)) return;
+      lastDraw = now;
+      const s = pool.sync(st.project, st.assets, t, true, st.project.fps);
+      lead = s.lead;
+      // falta o quadro do vídeo (corte/seek ainda decodificando): mantém o último quadro bom
+      if (!s.pending) draw(t);
+      else { STATS.held++; showTime(t); }
       lastSetRef.current = t;
       st.setPlayhead(t);
-      raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [playing, draw, setPlaying, setPlayhead, applySize, requestStill]);
+  }, [playing, draw, setPlaying, setPlayhead, applySize, requestStill, showTime]);
 
   /* ---------- eventos / tela cheia ---------- */
-  useEffect(() => on('ep:open-export', () => { setPlaying(false); setExportOpen(true); }), [setPlaying]);
+  useEffect(() => on('ep:open-export', (d) => { setPlaying(false); setExportInit(d ?? {}); setExportOpen(true); }), [setPlaying]);
+  const glowTimer = useRef(0);
+  useEffect(() => {
+    if (!liveApplied) return;
+    // op aplicada: brilho de 700 ms (reinicia a animação a cada op)
+    setGlow((g) => g + 1);
+    clearTimeout(glowTimer.current);
+    glowTimer.current = window.setTimeout(() => setGlow(0), 700);
+  }, [liveApplied]);
+  useEffect(() => () => clearTimeout(glowTimer.current), []);
   useEffect(() => {
     const h = () => {
       const d = document as FsDoc;
@@ -329,7 +381,7 @@ export default function Preview() {
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, [pointMode]);
-  const toStart = () => { setPlayhead(0); if (playing) clockRef.current = { t0: 0, wall0: performance.now() }; };
+  const toStart = () => { setPlayhead(0); if (playing) clockRef.current.reset(0, performance.now()); };
   const toggleFull = async () => {
     const el = frameRef.current?.parentElement as FsEl | null | undefined;
     if (!el) return;
@@ -359,11 +411,12 @@ export default function Preview() {
       <div className="ep-pv-box" ref={boxRef}>
         <div className="ep-pv-frame" ref={frameRef} style={{ width: fit.w, height: fit.h }} data-aspect={aspect}>
           <canvas
-            ref={canvasRef} className={`ep-pv-canvas${pointMode ? ' pointing' : ''}`} aria-label="Pré-visualização do vídeo"
+            ref={canvasRef} data-ep-preview="" className={`ep-pv-canvas${pointMode ? ' pointing' : ''}`} aria-label="Pré-visualização do vídeo"
             onClick={empty ? undefined : onCanvasClick} onPointerDown={empty ? undefined : onCanvasDown} onPointerMove={onCanvasMove}
             onPointerCancel={() => { if (pressRef.current) clearTimeout(pressRef.current.timer); pressRef.current = null; }}
             onContextMenu={(e) => { if (pressRef.current?.fired) e.preventDefault(); }}
           />
+          {glow > 0 && <i className="ep-pv-glow" key={glow} aria-hidden="true" />}
           {chatPoint && markerAt > 0 && (
             <div className="ep-pv-pin" style={{ left: `${chatPoint.x * 100}%`, top: `${chatPoint.y * 100}%` }} aria-hidden="true">
               <i /><span>{formatTime(chatPoint.t)}</span>
@@ -470,7 +523,7 @@ export default function Preview() {
         </div>
       </div>
       )}
-      {exportOpen && <ExportDialog onClose={() => setExportOpen(false)} />}
+      {exportOpen && <ExportDialog initial={exportInit} onClose={() => setExportOpen(false)} />}
     </div>
   );
 }

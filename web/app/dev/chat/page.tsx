@@ -54,7 +54,8 @@ export default function DevChat() {
   useEffect(() => { if (new URLSearchParams(location.search).get('theme') === 'light') setDark(false); }, []);
   // ?popup=1 monta o pop-up compacto "Editar com IA" no lugar do chat completo
   const [popup, setPopup] = useState<'off' | 'open' | 'min'>('off');
-  useEffect(() => { if (new URLSearchParams(location.search).get('popup')) setPopup('open'); }, []);
+  const [prompt, setPrompt] = useState<string | undefined>();
+  useEffect(() => { const q = new URLSearchParams(location.search); if (q.get('popup')) setPopup('open'); if (q.get('prompt')) setPrompt(q.get('prompt')!); }, []);
   const project = useEditor((s) => s.project);
   const assets = useEditor((s) => s.assets);
   const playhead = useEditor((s) => s.playhead);
@@ -140,7 +141,7 @@ export default function DevChat() {
         {toasts.length ? <div className="ep-meta" data-testid="toasts">{toasts.join(' | ')}</div> : null}
       </main>
       <section className="ep-chat" style={{ borderLeft: '1px solid var(--line)', background: 'var(--cardBg)', minHeight: 0 }}>
-        {popup === 'off' ? <ChatPanel /> : popup === 'open' ? <AiPopup onMinimize={() => setPopup('min')} onExpand={() => setPopup('off')} /> : null}
+        {popup === 'off' ? <ChatPanel /> : popup === 'open' ? <AiPopup initialText={prompt} onMinimize={() => setPopup('min')} onExpand={() => setPopup('off')} /> : null}
       </section>
       {popup === 'min' ? (
         <div style={{ position: 'fixed', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 50 }} data-testid="livebadge">

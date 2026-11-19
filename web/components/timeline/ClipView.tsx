@@ -63,6 +63,7 @@ function ClipViewInner({ clip, kind, zoom, height, locked }: Props) {
       className={cls}
       style={{ transform: `translate(${left}px, 3px)`, width, height: h }}
       data-clip-id={clip.id}
+      data-ep-clip={clip.id}
       title={`${clip.type === 'text' ? clip.text : asset?.name ?? clip.label ?? ''} · ${formatTime(clip.start, { decimals: true })} – ${formatTime(clip.start + clip.duration, { decimals: true })}`}
     >
       <ClipBody clip={shown} asset={asset} width={width} height={h} zoom={zoom} />
