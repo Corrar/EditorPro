@@ -3,6 +3,7 @@
 import { useRef } from 'react';
 import { ingestFile } from '@/lib/media/ingest';
 import { useEditor } from '@/lib/store';
+import { useShallow } from 'zustand/react/shallow';
 import type { AspectRatio, Project } from '@/lib/types';
 import { ColorField, Section, Seg, Slider } from './controls';
 import { pct } from './hooks';
@@ -15,7 +16,7 @@ export default function CanvasTab() {
   const aspect = useEditor((s) => s.project.aspect);
   const canvas = useEditor((s) => s.project.canvas) ?? { type: 'color' as const, color: '#000000' };
   const bgColor = useEditor((s) => s.project.background);
-  const images = useEditor((s) => Object.values(s.assets).filter((a) => a.kind === 'image'));
+  const images = useEditor(useShallow((s) => Object.values(s.assets).filter((a) => a.kind === 'image')));
   const dispatch = useEditor((s) => s.dispatch);
   const input = useRef<HTMLInputElement>(null);
   const set = (c: Partial<NonNullable<Project['canvas']>>, history = true) => dispatch({ op: 'set_project', patch: { canvas: { ...canvas, ...c } } }, { history });

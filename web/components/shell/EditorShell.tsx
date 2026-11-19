@@ -53,6 +53,11 @@ export default function EditorShell() {
       if (localStorage.getItem(SB_KEY) === '1' || mq('(max-width: 1100px)')) setSbMin(true);
     } catch {}
     if (mq('(max-width: 1099px)')) setSideOpen(false);
+    // ao encolher a janela para ≤1099 (gavetas), fecha painel e chat sobrepostos
+    const m = window.matchMedia('(max-width: 1099px)');
+    const onChange = () => { if (m.matches) { setSideOpen(false); setChatOpen(false); } };
+    m.addEventListener('change', onChange);
+    return () => m.removeEventListener('change', onChange);
   }, []);
 
   // altura real da área visível (teclado virtual do celular não cobre o chat)
@@ -69,6 +74,13 @@ export default function EditorShell() {
     vv.addEventListener('scroll', upd);
     return () => { vv.removeEventListener('resize', upd); vv.removeEventListener('scroll', upd); };
   }, []);
+
+  // 900–1099: ao inserir algo na timeline, a gaveta fecha para mostrar o resultado
+  useEffect(() => useEditor.subscribe((st, prev) => {
+    if (st.project === prev.project || !mq('(min-width: 900px) and (max-width: 1099px)')) return;
+    const count = (p: typeof st.project) => p.tracks.reduce((n, t) => n + t.clips.length, 0) + p.captions.segments.length;
+    if (count(st.project) > count(prev.project) && !st.live.running) setSideOpen(false);
+  }), []);
 
   // painéis pediram para abrir o chat ("apontar para qualquer coisa")
   const chatRequest = useShellUi((s) => s.chatRequest);
@@ -181,14 +193,14 @@ export default function EditorShell() {
   const openEmpty = (aspect: AspectRatio) => {
     resetWorkspace({ aspect });
     setTool('media');
-    setSideOpen(true);
+    setSideOpen(!mq('(max-width: 1099px)')); // telas menores: gaveta começa fechada
     setView('editor');
   };
 
   const fromTemplate = (id: string) => {
     startFromProject(projectFromTemplate(id));
     setTool('media');
-    setSideOpen(true);
+    setSideOpen(!mq('(max-width: 1099px)')); // telas menores: gaveta começa fechada
     setView('editor');
   };
 
