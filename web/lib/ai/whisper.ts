@@ -66,18 +66,28 @@ export function stopWhisper() {
   workerKey = '';
 }
 
-function request<T>(w: Worker, msg: Record<string, unknown>, onProgress: ((loaded: number, total: number) => void) | undefined, signal?: AbortSignal, transfer: Transferable[] = []): Promise<T> {
+/**
+ * pedido ao worker com "cão de guarda": se ficar `stallMs` sem resposta (nem progresso),
+ * encerra o worker e rejeita — a transcrição nunca trava o chat.
+ */
+function request<T>(w: Worker, msg: Record<string, unknown>, onProgress: ((loaded: number, total: number) => void) | undefined, signal?: AbortSignal, transfer: Transferable[] = [], stallMs = 90_000): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const id = ++seq;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const arm = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => { cleanup(); stopWhisper(); reject(new Error('a transcrição travou e foi interrompida')); }, stallMs);
+    };
     const onAbort = () => { cleanup(); stopWhisper(); reject(new DOMException('Transcrição cancelada', 'AbortError')); };
     const cleanup = () => {
+      if (timer) clearTimeout(timer);
       w.removeEventListener('message', onMsg);
       w.removeEventListener('error', onErr);
       signal?.removeEventListener('abort', onAbort);
     };
     const onMsg = (ev: MessageEvent) => {
       const m = ev.data as { type: string; id?: number; loaded?: number; total?: number; message?: string };
-      if (m.type === 'progress') onProgress?.(m.loaded ?? 0, m.total ?? 0);
+      if (m.type === 'progress') { arm(); onProgress?.(m.loaded ?? 0, m.total ?? 0); }
       else if (m.type === 'error' && (m.id === undefined || m.id === id)) { cleanup(); reject(new Error(m.message || 'erro no Whisper')); }
       else if ((m.type === 'ready' && msg.type === 'load') || (m.type === 'result' && m.id === id)) { cleanup(); resolve(m as T); }
     };
@@ -86,6 +96,7 @@ function request<T>(w: Worker, msg: Record<string, unknown>, onProgress: ((loade
     signal?.addEventListener('abort', onAbort);
     w.addEventListener('message', onMsg);
     w.addEventListener('error', onErr);
+    arm();
     w.postMessage({ ...msg, id }, transfer);
   });
 }
@@ -134,7 +145,7 @@ export async function transcribeMedia(asset: MediaAsset, opts: TranscribeOptions
     const a = cuts[i], b = cuts[i + 1];
     opts.onStatus?.(`Transcrevendo a fala… ${Math.round((a / total) * 100)}%`, a / total);
     const piece = audio.slice(Math.floor(a * 16000), Math.floor(b * 16000)); // cópia: transferida ao worker
-    const res = await request<{ chunks: WhisperChunk[] }>(getWorker(), { type: 'transcribe', audio: piece, language: whisperLanguage(opts.language ?? 'pt-BR') }, undefined, opts.signal, [piece.buffer]);
+    const res = await request<{ chunks: WhisperChunk[] }>(getWorker(), { type: 'transcribe', audio: piece, language: whisperLanguage(opts.language ?? 'pt-BR') }, undefined, opts.signal, [piece.buffer], Math.max(60_000, (b - a) * 8000));
     for (const c of res.chunks) chunks.push({ text: c.text, timestamp: [c.timestamp[0] + a, c.timestamp[1] === null ? null : c.timestamp[1] + a] });
   }
   opts.onStatus?.('Transcrevendo a fala… 100%', 1);
