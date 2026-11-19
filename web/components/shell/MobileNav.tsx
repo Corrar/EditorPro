@@ -1,71 +1,101 @@
 'use client';
-/* celular (≤899px): barra inferior de botões circulares (Mídia, Texto, Legendas,
-   Efeitos, IA, Menu) + bottom-sheet "Menu" com tudo (padrão Radar) */
-import { useState } from 'react';
+/* celular (≤899px): barra inferior .ep-tabbar (Início, Mídia, Texto/Editar, IA, Menu — ativo em
+   círculo laranja) + Menu em bottom-sheet .ep-sheet2 (busca, card de IA, acesso rápido, seções) */
+import { useEffect, useState } from 'react';
 import { useInstallPrompt } from '@/lib/pwa';
 import { useEditor } from '@/lib/store';
-import { IconChat, IconCog, IconDownload, IconFolder, IconGrid, IconLogout, IconMoon, IconSun } from './icons';
+import { usePendingComments } from '@/components/panels/ReviewTab';
+import { IconChat, IconChevRight, IconClose, IconCog, IconDownload, IconFolder, IconGrid, IconHome, IconLogout, IconMoon, IconSearch, IconSpark, IconSun } from './icons';
 import type { NavProps } from './Sidebar';
 import { logout } from './session';
-import { usePendingComments } from '@/components/panels/ReviewTab';
 import { TOOLS, toolDef, type ToolId } from './tools';
-
-const PRIMARY: ToolId[] = ['media', 'text', 'captions', 'effects'];
 
 export default function MobileNav({ chatOpen, onChat, ...p }: NavProps & { chatOpen: boolean; onChat: (open: boolean) => void }) {
   const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
   const { canInstall, install, iosHint } = useInstallPrompt();
   const hasSel = useEditor((s) => s.selection.length > 0);
   const pendingCm = usePendingComments();
   const ed = p.view === 'editor';
   const isTool = (id: ToolId) => ed && p.toolOpen && p.tool === id;
   const go = (fn: () => void) => { fn(); setOpen(false); };
-  const primary = hasSel ? (['edit', ...PRIMARY.slice(0, 3)] as ToolId[]) : PRIMARY;
+  useEffect(() => { if (!open) setQ(''); }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  }, [open]);
+
+  const second: ToolId = hasSel ? 'edit' : 'text';
+  const tabs: { key: string; label: string; icon: React.ReactNode; active: boolean; run: () => void }[] = [
+    { key: 'home', label: 'Início', icon: <IconHome size={22} />, active: !open && p.view === 'home', run: () => { onChat(false); p.onHome(); } },
+    { key: 'media', label: 'Mídia', icon: (() => { const I = toolDef('media').Icon; return <I size={22} />; })(), active: !open && isTool('media') && !chatOpen, run: () => { onChat(false); p.onTool('media'); } },
+    { key: second, label: toolDef(second).label, icon: (() => { const I = toolDef(second).Icon; return <I size={22} />; })(), active: !open && isTool(second) && !chatOpen, run: () => { onChat(false); p.onTool(second); } },
+    { key: 'ai', label: 'IA', icon: <IconChat size={22} />, active: !open && ed && chatOpen, run: () => onChat(!chatOpen) },
+  ];
+
+  const ql = q.trim().toLowerCase();
+  const tools = TOOLS.filter((t) => (t.id !== 'edit' || hasSel) && (!ql || t.label.toLowerCase().includes(ql)));
+  const match = (s: string) => !ql || s.toLowerCase().includes(ql);
 
   return (
     <>
-      <nav className={`ep-bottomnav${ed && chatOpen ? ' chat' : ''}`} aria-label="Ferramentas">
-        {primary.map((id) => {
-          const { label, Icon } = toolDef(id);
-          return (
-            <button key={id} type="button" className={`ep-bnitem${isTool(id) ? ' active' : ''}`} onClick={() => go(() => { onChat(false); p.onTool(id); })} aria-label={label} title={label}>
-              <span className="ic"><Icon size={21} /></span><span className="lb">{label}</span>
-            </button>
-          );
-        })}
-        <button type="button" className={`ep-bnitem${ed && chatOpen ? ' active' : ''}`} onClick={() => go(() => onChat(!chatOpen))} aria-label="Chat com a IA" title="IA">
-          <span className="ic"><IconChat size={21} /></span><span className="lb">IA</span>
-        </button>
-        <button type="button" className={`ep-bnitem${open ? ' active' : ''}`} onClick={() => setOpen((v) => !v)} aria-label="Abrir menu" title="Menu">
-          <span className="ic"><IconGrid size={21} />{pendingCm ? <span className="bdot" /> : null}</span><span className="lb">Menu</span>
+      <nav className={`ep-tabbar ep-mtabbar${ed && chatOpen ? ' chat' : ''}`} aria-label="Navegação">
+        {tabs.map((t) => (
+          <button key={t.key} type="button" className={`ep-tab${t.active ? ' on' : ''}`} onClick={() => go(t.run)} aria-label={t.label} aria-current={t.active ? 'page' : undefined}>
+            <span className="ic">{t.icon}</span><span className="lb">{t.label}</span>
+          </button>
+        ))}
+        <button type="button" className={`ep-tab${open ? ' on' : ''}`} onClick={() => setOpen((v) => !v)} aria-label="Abrir menu" aria-expanded={open}>
+          <span className="ic"><IconGrid size={22} />{pendingCm ? <span className="bdot" /> : null}</span><span className="lb">Menu</span>
         </button>
       </nav>
 
       {open && (
         <div className="ep-menusheet-bg" onClick={() => setOpen(false)}>
-          <div className="ep-menusheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Menu">
-            <div className="ep-menugrip" />
-            <div className="ep-menutitle">Ferramentas</div>
-            <div className="ep-menugrid">
-              {TOOLS.filter((t) => t.id !== 'edit' || hasSel).map(({ id, label, Icon }) => (
-                <button key={id} type="button" className={`ep-menucell${isTool(id) ? ' active' : ''}`} onClick={() => go(() => { onChat(false); p.onTool(id); })}>
-                  <Icon size={20} /><span className="t">{label}</span>
-                  {id === 'review' && pendingCm ? <span className="c nb mono">{pendingCm}</span> : null}
+          <div className="ep-sheet2 ep-menusheet2" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Menu">
+            <div className="ep-sheet2-head">
+              <span />
+              <span className="ep-h-sheet">Menu</span>
+              <button type="button" className="ep-circle" onClick={() => setOpen(false)} aria-label="Fechar menu"><IconClose size={20} /></button>
+            </div>
+            <label className="ep-searchpill">
+              <IconSearch size={18} />
+              <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar ferramenta" aria-label="Buscar ferramenta" />
+            </label>
+
+            {match('assistente ia chat') && (
+              <button type="button" className="ep-aicard ep-menu-ai" onClick={() => go(() => onChat(true))}>
+                <span className="spark"><IconSpark size={24} /></span>
+                <span><span className="t">Assistente IA</span><span className="d">Peça qualquer edição: “corta as pausas”, “legenda maior”…</span></span>
+              </button>
+            )}
+
+            {tools.length > 0 && <h3 className="ep-h-section ep-menu-h">Acesso rápido</h3>}
+            <div className="ep-tiles ep-menu-tiles">
+              {tools.map(({ id, label, Icon }) => (
+                <button key={id} type="button" className={`ep-tile${isTool(id) ? ' on' : ''}`} onClick={() => go(() => { onChat(false); p.onTool(id); })}>
+                  <span className="ic"><Icon size={24} /></span>
+                  <span className="lb">{label}{id === 'review' && pendingCm ? <span className="ep-tag accent ep-menu-count">{pendingCm}</span> : null}</span>
                 </button>
               ))}
             </div>
-            <div className="ep-menutitle" style={{ marginTop: 16 }}>Conta</div>
-            <div className="ep-menugrid">
-              <button type="button" className={`ep-menucell${p.view === 'home' ? ' active' : ''}`} onClick={() => go(p.onHome)}><IconFolder size={20} /><span className="t">Meus projetos</span></button>
-              <button type="button" className="ep-menucell" onClick={() => go(p.onSettings)}><IconCog size={20} /><span className="t">Configurações</span></button>
-              <button type="button" className="ep-menucell" onClick={() => go(p.onTheme)}>{p.dark ? <IconSun size={20} /> : <IconMoon size={20} />}<span className="t">{p.dark ? 'Tema claro' : 'Tema escuro'}</span></button>
-              {(canInstall || iosHint) && (
-                <button type="button" className="ep-menucell ep-installcell" onClick={() => (canInstall ? go(() => void install()) : go(p.onSettings))}>
-                  <IconDownload size={20} /><span className="t">Instalar app</span>
-                </button>
-              )}
-              <button type="button" className="ep-menucell danger" onClick={() => void logout()}><IconLogout size={20} /><span className="t">Sair</span></button>
+
+            <h3 className="ep-h-section ep-menu-h">Projeto</h3>
+            <div className="ep-rows">
+              {match('meus projetos') && <button type="button" className="ep-row" onClick={() => go(p.onHome)}><span>Meus projetos</span><IconFolder size={20} /></button>}
+              {match('início home') && <button type="button" className="ep-row" onClick={() => go(p.onHome)}><span>Início</span><IconHome size={20} /></button>}
             </div>
+
+            <h3 className="ep-h-section ep-menu-h">Conta</h3>
+            <div className="ep-rows">
+              <button type="button" className="ep-row" onClick={() => go(p.onSettings)}><span>Configurações</span><IconCog size={20} /></button>
+              <button type="button" className="ep-row" onClick={() => go(p.onTheme)}><span>{p.dark ? 'Tema claro' : 'Tema escuro'}</span>{p.dark ? <IconSun size={20} /> : <IconMoon size={20} />}</button>
+              {(canInstall || iosHint) && <button type="button" className="ep-row" onClick={() => (canInstall ? go(() => void install()) : go(p.onSettings))}><span>Instalar app</span><IconDownload size={20} /></button>}
+              <button type="button" className="ep-row danger" onClick={() => void logout()}><span>Sair</span><IconLogout size={20} /></button>
+            </div>
+            <p className="ep-menu-foot">EditorPro <IconChevRight size={12} /> editor de vídeo com IA</p>
           </div>
         </div>
       )}
