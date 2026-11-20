@@ -5,7 +5,7 @@ import { audibleClips, gainEnvelope } from '../engine/audio';
 import { buildAudioChain, noiseGate, peakGain } from '../engine/audioFx';
 import { curveOf, sourceOffset, sourceSpan } from '../engine/speed';
 import { wsola } from './timeStretch';
-import { decodeAudioRange } from './audioDecode';
+import { decodeAudioRange, type FullDecodeCache } from './audioDecode';
 
 /** recorta [from, from+dur) de um buffer (com reverso, portão de ruído e normalização opcionais) */
 function segment(ctx: BaseAudioContext, buf: AudioBuffer, from: number, dur: number, opts: { reverse?: boolean; gate?: number; normalize?: number }): AudioBuffer | null {
@@ -67,16 +67,23 @@ export async function mixProjectAudio(
   let done = 0;
   // só o Blob (handle barato, o arquivo fica no disco) por asset; o áudio é decodificado por clipe, só o trecho usado
   const blobs = new Map<string, Promise<Blob | null>>();
+  // MP3/WAV inteiros: 1 decodificação por asset, liberada depois do último clipe dele
+  const full: FullDecodeCache = new Map();
+  const left = new Map<string, number>();
+  for (const it of items) left.set(it.asset.id, (left.get(it.asset.id) ?? 0) + 1);
   const warned = new Set<string>();
   for (const { clip, track, asset } of items) {
     if (opts.signal?.aborted) throw new DOMException('Exportação cancelada', 'AbortError');
+    const n = (left.get(asset.id) ?? 1) - 1;
+    left.set(asset.id, n);
     let bp = blobs.get(asset.id);
     if (!bp) { bp = asset.url ? fetch(asset.url).then((r) => r.blob()).catch(() => null) : Promise.resolve(null); blobs.set(asset.id, bp); }
     const blob = await bp;
     const want = sourceSpan(clip);
     const res = blob
-      ? await decodeAudioRange(ctx, asset, blob, Math.max(0, clip.in - 0.05), clip.in + want + 0.05)
+      ? await decodeAudioRange(ctx, asset, blob, Math.max(0, clip.in - 0.05), clip.in + want + 0.05, full)
       : { range: null, warning: `O áudio de "${asset.name}" não pôde ser incluído (arquivo indisponível).` };
+    if (n <= 0) { full.delete(asset.id); blobs.delete(asset.id); }
     done++;
     opts.onProgress?.(done / items.length);
     if (res.warning && !warned.has(asset.id)) { warned.add(asset.id); console.warn('[export]', res.warning); opts.onWarning?.(res.warning); }

@@ -167,6 +167,16 @@ export function musicTrack(id: string): MusicTrack | undefined {
   return BY_ID.get(id);
 }
 
+/** duração máxima que o motor gera (s) */
+export const MUSIC_MAX_SECONDS = 600;
+
+const BY_FILE = new Map(MUSIC_CATALOG.map((t) => [`${t.name}.wav`, t]));
+
+/** asset gerado pelo catálogo (re-renderizável em qualquer duração): "<Nome>.wav" marcado `library` */
+export function isCatalogMusicAsset(a: { kind: string; name: string; library?: boolean } | undefined): boolean {
+  return !!a && !!a.library && a.kind === 'audio' && BY_FILE.has(a.name);
+}
+
 /** receita final da faixa (gênero + alterações) */
 export function trackStyle(t: MusicTrack): Style {
   return mergeStyle(STYLES[t.genre], t.style);

@@ -108,7 +108,10 @@ const isMp4Like = (a: MediaAsset) => !a.mime || /mp4|quicktime|mov|m4a|m4v|3gp|a
  * Decodifica o áudio de [from, to] (tempo de origem, s) do asset. null + sem aviso = o arquivo
  * não tem trilha de áudio (vídeo mudo); null + aviso = tinha som mas não deu p/ incluir.
  */
-export async function decodeAudioRange(ctx: BaseAudioContext, asset: MediaAsset, blob: Blob, from: number, to: number): Promise<RangeResult> {
+/** decodificação INTEIRA compartilhada entre os clipes do mesmo asset (o mix solta ao terminar o último) */
+export type FullDecodeCache = Map<string, Promise<{ buffer: AudioBuffer } | { error: unknown }>>;
+
+export async function decodeAudioRange(ctx: BaseAudioContext, asset: MediaAsset, blob: Blob, from: number, to: number, full?: FullDecodeCache): Promise<RangeResult> {
   const fail = (why: string): RangeResult => ({ range: null, warning: `O áudio de "${asset.name}" não pôde ser incluído (${why}).` });
   let hasAudio: true | null = asset.kind === 'audio' ? true : asset.waveform?.length ? true : null;
   if (isMp4Like(asset)) {
@@ -129,12 +132,17 @@ export async function decodeAudioRange(ctx: BaseAudioContext, asset: MediaAsset,
   if (blob.size > MAX_FULL_DECODE_BYTES) {
     return fail('arquivo grande demais para decodificar neste aparelho');
   }
-  try {
-    const buffer = await ctx.decodeAudioData(await blob.arrayBuffer());
-    return { range: { buffer, t0: 0 } };
-  } catch (e) {
-    console.warn('[export] sem áudio decodificável em', asset.name, e);
-    // sem índice nem waveform não dá p/ saber se havia som (ex.: WebM mudo): não alarma
-    return hasAudio ? fail(e instanceof RangeError ? 'memória insuficiente' : 'formato não suportado pelo navegador') : { range: null };
+  // MP3/WAV/WebM: o arquivo inteiro é decodificado UMA vez por asset (antes: uma vez por clipe —
+  // música de 5 min cortada em 12 pedaços = 12 decodificações e ~5 GB de pico)
+  let job = full?.get(asset.id);
+  if (!job) {
+    job = blob.arrayBuffer().then((ab) => ctx.decodeAudioData(ab)).then((buffer) => ({ buffer }), (error: unknown) => ({ error }));
+    full?.set(asset.id, job);
   }
+  const r = await job;
+  if ('buffer' in r) return { range: { buffer: r.buffer, t0: 0 } };
+  const e = r.error;
+  console.warn('[export] sem áudio decodificável em', asset.name, e);
+  // sem índice nem waveform não dá p/ saber se havia som (ex.: WebM mudo): não alarma
+  return hasAudio ? fail(e instanceof RangeError ? 'memória insuficiente' : 'formato não suportado pelo navegador') : { range: null };
 }

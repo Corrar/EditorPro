@@ -5,7 +5,8 @@
    ===================================================================== */
 import type { MediaAsset, Seconds } from '../types';
 import { musicTrack } from './catalog';
-import { beatMarkers } from './engine';
+import { MIN_DURATION, beatMarkers } from './engine';
+import { sourceSpan } from '../engine/speed';
 import { beatMarkerOps, fitMusicDuration, musicClipOps, musicRefitOps, musicTrackForAsset, type MusicClipOptions } from './ops';
 import { renderMusic } from './render';
 
@@ -58,6 +59,10 @@ export async function insertMusic(id: string, opts: InsertMusicOptions = {}): Pr
  * faixa no tamanho novo (BPM ajustado para terminar no compasso, com final) e
  * troca o asset do clipe. `newDuration` padrão = duração atual do clipe.
  * Devolve false se o clipe não for música do catálogo. 1 dispatch (1 desfazer).
+ *
+ * O render é assíncrono: se nesse meio-tempo o clipe mudou (Desfazer, outro
+ * aparo, outra mídia), o resultado velho é descartado — senão um refit atrasado
+ * (sem histórico) reaplicaria um aparo desfeito ou sobrescreveria o aparo mais novo.
  */
 export async function refitMusicClip(clipId: string, newDuration?: Seconds, opts: { history?: boolean } = {}): Promise<boolean> {
   const { useEditor } = await import('../store');
@@ -67,10 +72,19 @@ export async function refitMusicClip(clipId: string, newDuration?: Seconds, opts
   const track = musicTrackForAsset(st.assets[clip.assetId]);
   if (!track) return false;
   const duration = Math.round((newDuration ?? clip.duration) * 1000) / 1000;
-  if (Math.abs(duration - (st.assets[clip.assetId]?.duration ?? 0)) < 0.02 && clip.in === 0) return true;
-  const asset = await prepareMusicAsset(track.id, duration);
+  // quanto de música o clipe toca (velocidade/curva incluídas): é isso que precisa ser renderizado
+  const span = Math.round(sourceSpan({ ...clip, duration }) * 1000) / 1000;
+  // curto demais p/ o motor (mín. 2 s): renderizar cresceria o clipe por cima do vizinho — fica como está
+  if (span < MIN_DURATION) return false;
+  if (Math.abs(span - (st.assets[clip.assetId]?.duration ?? 0)) < 0.02 && clip.in === 0) return true;
+  const asset = await prepareMusicAsset(track.id, span);
   const now = useEditor.getState();
-  const ops = musicRefitOps(now.project, clipId, asset);
+  const cur = now.project.tracks.flatMap((t) => t.clips).find((c) => c.id === clipId);
+  const same = cur && cur.type === 'audio' && cur.assetId === clip.assetId && cur.in === clip.in
+    && Math.abs(cur.duration - clip.duration) < 1e-6 && cur.speed === clip.speed
+    && cur.speedCurve === clip.speedCurve && cur.speedPreset === clip.speedPreset;
+  if (!same) return false;
+  const ops = musicRefitOps(now.project, clipId, asset, duration);
   if (!ops.length) return false;
   now.dispatch(ops, opts.history === false ? { history: false } : undefined);
   return true;
