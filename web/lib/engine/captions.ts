@@ -192,7 +192,9 @@ function rhythmGroups(words: ChunkWord[], o: RhythmOpts, cuts: Seconds[]): Chunk
   for (let j = 1; j <= N; j++) {
     for (let i = j - 1; i >= 0 && j - i <= o.maxWords; i--) {
       const n = j - i;
-      if (n > 1 && bs[j - 2] === -Infinity) break; // quebra obrigatória não fica dentro do bloco
+      // quebra obrigatória não fica dentro do bloco: ao crescer para trás, a fronteira nova é a de i (antes: bs[j-2],
+      // sempre a mesma → "Sim. vamos lá agora" num bloco só)
+      if (n > 1 && bs[i] === -Infinity) break;
       let chars = -1;
       for (let k = i; k < j; k++) chars += words[k].text.length + 1;
       const dur = words[j - 1].end - words[i].start;
