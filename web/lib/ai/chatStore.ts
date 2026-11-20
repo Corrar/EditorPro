@@ -247,7 +247,9 @@ export const useAIChat = create<AIChatState>((set, get) => {
         }
         const after = editor().project;
         const changed = after !== get().runs[msgId]?.before;
-        patchRun(msgId, { phase: undefined, progress: undefined, done: true, after: changed ? after : undefined, final: after });
+        // parada por edição manual: o projeto atual já inclui a edição do usuário — "Desfazer esta edição"
+        // a desfaria junto (fica o "Voltar para antes desta edição", que avisa que desfaz o que veio depois)
+        patchRun(msgId, { phase: undefined, progress: undefined, done: true, after: changed && stopReason !== 'manual' ? after : undefined, final: after });
         editor().updateMessage(msgId, { text: stopReason === 'manual' ? 'Parei a edição porque você mexeu no projeto.' : 'Edição parada.', status: 'done' });
         return false;
       }

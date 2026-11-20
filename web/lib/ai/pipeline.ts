@@ -23,7 +23,7 @@ import { describeStyle, modelRequestText, styleOps, styleScopeFromText, type Sty
 import { smoothMotionOps, wantsPunchMotion } from './template';
 import { failing, fidelityLine, fidelityOf, renderedColor, repairOps } from './fidelity';
 import { materializeSfx, sanitizeSfxRequests, type SfxRequest } from './library';
-import { asOwn, isAbort as isRunAbort } from './runGuard';
+import { asOwn, isAbort as isRunAbort, isOwnChange } from './runGuard';
 import { MAX_AI_OPS, finalizeClaude, type FinalizeDeps, type Finalized } from './finalize';
 import { runScript } from './script/run';
 import { createGraphicAsset, updateGraphicAsset } from './svg';
@@ -209,15 +209,26 @@ export async function withSingleUndo<T>(fn: () => Promise<T>): Promise<T> {
   const s0 = store();
   const pastBefore = s0.past;
   const projectBefore = s0.project;
+  // edição MANUAL no meio (ela para a execução): o passo de desfazer da IA termina antes dela —
+  // senão o 1º Desfazer do usuário apagaria a edição dele junto com tudo o que a IA fez
+  let manualFrom: Project | null = null;
+  const unsub = useEditor.subscribe((st, prev) => {
+    if (!manualFrom && st.project !== prev.project && st.project.id === prev.project.id && !st.live.running && !prev.live.running && !isOwnChange()) manualFrom = prev.project;
+  });
   try {
     return await fn();
   } finally {
+    unsub();
     const s = store();
     // ponto de corte pela identidade (funciona com o histórico no limite de 100 passos);
     // projeto trocado no meio: não mexe no histórico do outro
     const i = s.past.lastIndexOf(projectBefore);
+    const m = manualFrom ? s.past.lastIndexOf(manualFrom) : -1;
     if (s.project !== projectBefore && s.project.id === projectBefore.id) {
-      if (i >= 0 && i < s.past.length - 1) useEditor.setState({ past: s.past.slice(0, i + 1), future: [] });
+      if (m >= 0) {
+        // [... antes da IA, (lotes da IA…), fim da IA, (manual…)] -> [... antes da IA, fim da IA, (manual…)]
+        if (i >= 0 && m > i + 1) useEditor.setState({ past: [...s.past.slice(0, i + 1), ...s.past.slice(m)] });
+      } else if (i >= 0 && i < s.past.length - 1) useEditor.setState({ past: s.past.slice(0, i + 1), future: [] });
       else if (i < 0 && s.past.length >= pastBefore.length + 2) useEditor.setState({ past: [...pastBefore, projectBefore].slice(-100), future: [] });
     }
   }

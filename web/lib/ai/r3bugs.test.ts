@@ -1,6 +1,6 @@
 /* bugs da revisão r3 (IA): cada teste falhava antes da correção */
 import vm from 'node:vm';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { applyOps, type EditOp } from '../ops';
 import { createProject, makeVideoClip } from '../defaults';
 import type { MediaAsset, Project } from '../types';
@@ -10,6 +10,10 @@ import { finalizeClaude } from './finalize';
 import { EditResponseSchema } from './schemas';
 import { sanitizeOps } from './validate';
 import { useEditor } from '../store';
+import * as pipeline from './pipeline';
+import { withSingleUndo } from './pipeline';
+import { useAIChat } from './chatStore';
+import { abortError } from './runGuard';
 
 const src: MediaAsset = { id: 'a1', kind: 'video', role: 'source', name: 'b.mp4', mime: 'video/mp4', size: 1, duration: 20 };
 const assets: Record<string, MediaAsset> = { a1: src };
@@ -85,6 +89,59 @@ describe('run_script: o Worker não deixa o script sair para a rede', () => {
     const fake = { onmessage: null as ((ev: MessageEvent) => void) | null, onerror: null, terminate() {}, postMessage() { setTimeout(() => this.onmessage?.({ data: { hello: 1 } } as MessageEvent), 0); } };
     const r = await runScript('return []', base(), assets, { makeWorker: () => fake });
     expect('error' in r && r.error).toMatch(/inválida/);
+  });
+});
+
+describe('withSingleUndo: edição manual que parou a IA não é engolida pelo passo de desfazer da IA', () => {
+  const vol = (id: string) => (useEditor.getState().project.tracks.flatMap((t) => t.clips).find((c) => c.id === id) as { volume: number }).volume;
+  const two = () => applyOps(base(), [{ op: 'add_clip', trackId: 'track_video_1', clip: { ...makeVideoClip(src, 10), id: 'c2', duration: 10, in: 10 } }] as EditOp[]).project;
+
+  it('o 1º desfazer volta só a edição manual; o 2º volta a IA inteira (1 passo)', async () => {
+    useEditor.setState({ project: two(), past: [], future: [], assets, messages: [], live: { running: false, done: 0, total: 0 } });
+    await withSingleUndo(async () => {
+      await useEditor.getState().applyLive([{ op: 'update_clip', clipId: 'c1', patch: { volume: 0.3 }, explain: 'a' }], { delayMs: 0 });
+      await useEditor.getState().applyLive([{ op: 'update_clip', clipId: 'c1', patch: { volume: 0.4 }, explain: 'b' }], { delayMs: 0 });
+      // o usuário mexe no projeto entre os lotes -> a execução é parada (AbortError)
+      useEditor.getState().dispatch({ op: 'update_clip', clipId: 'c2', patch: { volume: 0.9 } });
+      throw abortError('Edição parada');
+    }).catch(() => {});
+    expect([vol('c1'), vol('c2')]).toEqual([0.4, 0.9]);
+    useEditor.getState().undo();
+    expect([vol('c1'), vol('c2')]).toEqual([0.4, 1]); // antes: [1, 1] — o desfazer apagava a IA junto
+    useEditor.getState().undo();
+    expect([vol('c1'), vol('c2')]).toEqual([1, 1]);
+  });
+
+  it('chat: execução parada por edição manual não oferece "Desfazer esta edição" (ele desfaria a edição do usuário junto)', async () => {
+    useEditor.setState({ project: two(), past: [], future: [], assets, messages: [], live: { running: false, done: 0, total: 0 } });
+    useAIChat.setState({ status: { configured: false, provider: 'demo' } as never, fast: true, busy: false });
+    const spy = vi.spyOn(pipeline, 'chatEdit').mockImplementation(async (_t, o) => pipeline.withSingleUndo(async () => {
+      await o!.apply!([{ op: 'update_clip', clipId: 'c1', patch: { volume: 0.3 }, explain: 'a' }], { delayMs: 0 });
+      await new Promise((r) => setTimeout(r, 30));
+      await o!.apply!([{ op: 'update_clip', clipId: 'c1', patch: { volume: 0.4 }, explain: 'b' }], { delayMs: 0 });
+      return { reply: 'ok', ops: [], appliedIds: [], provider: 'demo', warnings: [] };
+    }));
+    const run = useAIChat.getState().send('x');
+    await new Promise((r) => setTimeout(r, 10));
+    useEditor.getState().dispatch({ op: 'update_clip', clipId: 'c2', patch: { volume: 0.9 } });
+    await run;
+    spy.mockRestore();
+    const msg = [...useEditor.getState().messages].reverse().find((m) => m.role === 'assistant')!;
+    expect(msg.text).toMatch(/Parei a edição/);
+    useAIChat.getState().undoRun(msg.id);
+    expect([vol('c1'), vol('c2')]).toEqual([0.3, 0.9]); // antes: [1, 1] — a edição do usuário sumia
+    useEditor.getState().undo();
+    expect([vol('c1'), vol('c2')]).toEqual([0.3, 1]);
+  });
+
+  it('sem edição manual continua juntando todos os lotes num passo só', async () => {
+    useEditor.setState({ project: two(), past: [], future: [], assets, messages: [], live: { running: false, done: 0, total: 0 } });
+    await withSingleUndo(async () => {
+      await useEditor.getState().applyLive([{ op: 'update_clip', clipId: 'c1', patch: { volume: 0.3 }, explain: 'a' }], { delayMs: 0 });
+      await useEditor.getState().applyLive([{ op: 'update_clip', clipId: 'c2', patch: { volume: 0.4 }, explain: 'b' }], { delayMs: 0 });
+    });
+    useEditor.getState().undo();
+    expect([vol('c1'), vol('c2')]).toEqual([1, 1]);
   });
 });
 
