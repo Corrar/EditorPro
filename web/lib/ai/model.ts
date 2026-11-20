@@ -6,8 +6,8 @@
    - modelRequestText: pedido equivalente para o Claude
    ===================================================================== */
 import { applyOps, type EditOp } from '../ops';
-import type { CaptionStyle, Project, StyleProfile } from '../types';
-import { colorOps, norm, videoClipsOf } from './demo';
+import type { CaptionStyle, Id, MediaAsset, Project, StyleProfile } from '../types';
+import { colorOps, modelAspectFits, norm, videoClipsOf } from './demo';
 import { templateCaptionStyle, templateOps } from './template';
 import { captionPresetDef } from '../library';
 
@@ -91,7 +91,7 @@ export const SCOPE_LABELS: Record<Exclude<StyleScope, 'all'>, string> = { captio
  * - cores: `graded` = a cor já foi casada (colorGrade) → tira presets antigos (não empilha dois looks);
  *   sem grade, usa o preset do perfil
  */
-export function styleOps(p: Project, s: StyleProfile, scope: StyleScope = 'all', opts: { graded?: boolean } = {}): { ops: EditOp[]; said: string[] } {
+export function styleOps(p: Project, s: StyleProfile, scope: StyleScope = 'all', opts: { graded?: boolean; assets?: Record<Id, MediaAsset> } = {}): { ops: EditOp[]; said: string[] } {
   const ops: EditOp[] = [];
   const said: string[] = [];
   let sim = p;
@@ -132,6 +132,10 @@ export function styleOps(p: Project, s: StyleProfile, scope: StyleScope = 'all',
     }
   }
 
-  if (scope === 'all' && s.aspect && s.aspect !== sim.aspect) push([{ op: 'set_aspect', aspect: s.aspect, explain: `Formato ${s.aspect} como o modelo` }], `formato ${s.aspect}`);
+  if (scope === 'all' && s.aspect && s.aspect !== sim.aspect) {
+    // modelo deitado não deita material em pé (o "cover" cortaria ~2/3 da imagem)
+    if (opts.assets && !modelAspectFits(sim, opts.assets, s.aspect)) said.push(`mantive o formato em pé do seu material (o modelo é ${s.aspect})`);
+    else push([{ op: 'set_aspect', aspect: s.aspect, explain: `Formato ${s.aspect} como o modelo` }], `formato ${s.aspect}`);
+  }
   return { ops, said };
 }

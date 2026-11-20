@@ -8,7 +8,7 @@ import type {
   AspectRatio, AudioClip, AudioEffectKind, CaptionSegment, CaptionStyle, ChatContext as UIChatContext, Clip, ClipAnimation, ColorPreset, Id,
   Keyframe, MediaAsset, Project, ReferenceTemplate, Seconds, SpeedPreset, StyleMotion, StyleProfile, TransitionKind, VideoClip, VisualEffectKind,
 } from '../types';
-import { DEFAULT_TRANSFORM } from '../types';
+import { ASPECT_SIZES, DEFAULT_TRANSFORM } from '../types';
 import { beatMarkerOps, beatSyncOps, chapterOps, fillerOps, highlightOps, hookFromTranscript, hookOps, kfWithout, mergeKfProps, timelineBeats } from './features';
 import { applyOps, clipEnd, projectDuration, type EditOp } from '../ops';
 import { DEFAULT_TEXT_STYLE } from '../defaults';
@@ -619,6 +619,21 @@ export interface FirstEditInput {
   colorGraded?: boolean;
 }
 
+/**
+ * O formato do modelo serve para este material? Material EM PÉ (celular) num formato deitado (16:9)
+ * perde ~2/3 da imagem no "cover" (rosto cortado) — aí fica o formato do material. Deitado → em pé
+ * (reenquadrar para Reels) é o uso comum e segue o modelo. Sem medida do material: segue o modelo.
+ */
+export function modelAspectFits(p: Project, assets: Record<Id, MediaAsset>, aspect: AspectRatio): boolean {
+  const size = ASPECT_SIZES[aspect];
+  if (!size || size.width <= size.height) return true;
+  // material principal: o vídeo com mais tempo na timeline
+  const time = new Map<Id, number>();
+  for (const c of videoClipsOf(p)) time.set(c.assetId, (time.get(c.assetId) ?? 0) + c.duration);
+  const main = [...time.entries()].sort((a, b) => b[1] - a[1]).map(([id]) => assets[id]).find((a) => a?.width && a?.height);
+  return !main || main.height! <= main.width! * 1.1;
+}
+
 export function planFirstEdit(input: FirstEditInput): DemoResult {
   const { assets, brief, silencesByAsset, style } = input;
   const intent = parseBrief(brief);
@@ -635,8 +650,10 @@ export function planFirstEdit(input: FirstEditInput): DemoResult {
     ops.push(...more);
   };
 
-  // formato pedido (ou do exemplo) se for diferente do atual
-  const aspect = intent.aspect ?? style?.aspect;
+  // formato pedido (ou do exemplo) se for diferente do atual — o do modelo não deita material em pé
+  const keepPortrait = !intent.aspect && !!style?.aspect && !modelAspectFits(p, assets, style.aspect);
+  if (keepPortrait) notes.push(`Mantive o formato em pé (${p.aspect}) do seu material: o modelo é deitado (${style!.aspect}) e virar o vídeo cortaria a maior parte da imagem. Para deitar mesmo assim, diga "formato 16:9".`);
+  const aspect = intent.aspect ?? (keepPortrait ? undefined : style?.aspect);
   if (aspect && aspect !== p.aspect) {
     push([{ op: 'set_aspect', aspect, explain: `Ajustando o formato para ${aspect}` }]);
     said.push(`formato ${aspect}`);

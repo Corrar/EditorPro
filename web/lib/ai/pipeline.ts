@@ -579,7 +579,7 @@ async function demoChat(text: string, apply: NonNullable<PipelineOptions['apply'
     // cor: combina com as cores medidas do modelo (ColorGrade); sem modelo legível, usa o preset do perfil
     const grade = scope === 'all' || scope === 'colors' ? await matchColorOps(opts) : null;
     const graded = !!grade?.ops.length;
-    const styled = styleOps(store().project, st, scope, { graded });
+    const styled = styleOps(store().project, st, scope, { graded, assets: store().assets });
     const raw = graded ? [...grade!.ops, ...styled.ops] : styled.ops;
     const said = graded ? ['cor combinada com o modelo', ...styled.said] : styled.said;
     const { ops } = sanitizeOps(raw, store().project, store().assets, MAX_AI_OPS);

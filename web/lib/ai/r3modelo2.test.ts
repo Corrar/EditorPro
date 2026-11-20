@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { applyOps, type EditOp } from '../ops';
 import { createProject, makeVideoClip } from '../defaults';
 import type { CaptionSegment, MediaAsset, Project, ReferenceTemplate } from '../types';
-import { styleFromCuts } from './demo';
+import { planFirstEdit, styleFromCuts } from './demo';
+import { styleOps } from './model';
 import { fidelityOf } from './fidelity';
 import { templateLengths, templateOps } from './template';
 import { resolveDuration } from './frames';
@@ -57,6 +58,31 @@ describe('modelo sem cortes (uma tomada só)', () => {
   it('modelo curtinho de uma tomada não vira "muito rápido" (o Claude cortaria a cada 0,4 s)', () => {
     expect(styleFromCuts([], 0.4, {}, color, oneShot(0.4)).pacing).toBe('slow');
     expect(styleFromCuts([], 0.4, {}, color).pacing).toBe('slow');
+  });
+});
+
+describe('modelo deitado (16:9) com material em pé (9:16)', () => {
+  const land = styleFromCuts([2, 4, 6], 8, { width: 1280, height: 720 }, color);
+  it('1ª edição demo: mantém o formato em pé do material (antes: virava 16:9 e o "cover" cortava 2/3 da imagem)', () => {
+    expect(land.aspect).toBe('16:9');
+    const r = planFirstEdit({ project: withSpeech(10), assets: { a1: src }, brief: 'edita igual ao modelo', silencesByAsset: {}, style: land });
+    expect(r.ops.some((o) => o.op === 'set_aspect')).toBe(false);
+    expect(r.reply).toMatch(/formato em pé|vertical/i);
+  });
+  it('pedido explícito de 16:9 no brief continua valendo', () => {
+    const r = planFirstEdit({ project: withSpeech(10), assets: { a1: src }, brief: 'versão 16:9 para o YouTube igual ao modelo', silencesByAsset: {}, style: land });
+    expect(r.ops.some((o) => o.op === 'set_aspect' && o.aspect === '16:9')).toBe(true);
+  });
+  it('"reedite seguindo o modelo" (styleOps) também não deita o vídeo', () => {
+    const { ops } = styleOps(withSpeech(10), land, 'all', { assets: { a1: src } });
+    expect(ops.some((o) => o.op === 'set_aspect')).toBe(false);
+  });
+  it('material deitado + modelo em pé: segue o modelo (reenquadrar para Reels é o uso comum)', () => {
+    const wide: MediaAsset = { ...src, width: 1920, height: 1080 };
+    const vert = styleFromCuts([2, 4, 6], 8, { width: 720, height: 1280 }, color);
+    const p = applyOps(createProject(), [{ op: 'set_aspect', aspect: '16:9' }, { op: 'add_clip', trackId: 'track_video_1', clip: { ...makeVideoClip(wide, 0), id: 'c1' } }]).project;
+    const r = planFirstEdit({ project: p, assets: { a1: wide }, brief: 'igual ao modelo', silencesByAsset: {}, style: vert });
+    expect(r.ops.some((o) => o.op === 'set_aspect' && o.aspect === '9:16')).toBe(true);
   });
 });
 
