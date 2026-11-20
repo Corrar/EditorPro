@@ -20,3 +20,7 @@ Vídeo: `ffmpeg -f lavfi -i testsrc2=duration=40:size=1080x1920:rate=30 -f lavfi
   tocando + 6 splits, pausa + salto + applyLive (fase "paused"), depois toca. Antes 1–2 pretas por rodada; agora 0.
 - `node geo.cjs <dir> [mobile]` — geometria nativa a cada rAF com transform: scale (width/height fixos na caixa-base):
   tocando um zoom, 1 mudança de transform por rAF e 1 largura só; parado, preview nativo ≈ exportFrame.
+- `node retire.cjs <dir> mobile [rodadas]` (com `node burn.cjs 4 700 &` carregando a CPU) — r3: o `<video>` exibido que
+  ia para 'retiring' era removido após 4 s mesmo sem substituto → preview preto por segundos com seeks lentos. Sonda
+  por rAF ("nativo sem video visível") + linha do tempo de opacidade/remoção. Antes: 4 de 6 rodadas; agora 0
+  (blink2 com a mesma carga: antes 3 pretas em 4 rodadas; agora 0 em 6).
