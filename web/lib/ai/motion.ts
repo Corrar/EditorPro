@@ -232,14 +232,16 @@ export function detectCuts(track: MotionTrack, minResidual = 25): number[] {
 }
 
 /** movimento por tomada a partir dos pares (só os pares dentro da tomada) */
-export function shotMotions(track: MotionTrack, cuts: number[], frame: { w: number; h: number }): ShotMotion[] {
+export function shotMotions(track: MotionTrack, cuts: number[], frame: { w: number; h: number }, exclude: { a: number; b: number }[] = []): ShotMotion[] {
   const end = track.times[track.times.length - 1] ?? 0;
   const bounds = [track.times[0] ?? 0, ...cuts, end];
   const out: ShotMotion[] = [];
+  // pares dentro de um dissolver misturam duas cenas: não medem movimento de câmera
+  const mixed = (i: number) => exclude.some((r) => track.times[i + 1] > r.a + 1e-6 && track.times[i] < r.b - 1e-6);
   for (let k = 0; k < bounds.length - 1; k++) {
     const a = bounds[k], b = bounds[k + 1];
     if (b - a < 0.05) continue;
-    const idx = track.pairs.map((_, i) => i).filter((i) => track.times[i] >= a - 1e-6 && track.times[i + 1] <= b + 1e-6);
+    const idx = track.pairs.map((_, i) => i).filter((i) => track.times[i] >= a - 1e-6 && track.times[i + 1] <= b + 1e-6 && !mixed(i));
     const ls = idx.map((i) => Math.log(track.pairs[i].s));
     const zoomTotal = Math.exp(ls.reduce((x, y) => x + y, 0));
     const panX = idx.reduce((n, i) => n + track.pairs[i].tx, 0) / frame.w;
@@ -310,7 +312,28 @@ export function blendScore(a: Gray, mid: Gray, b: Gray): number {
   return best / Math.max(1e-6, Math.min(ea, eb));
 }
 
+export interface TransitionEvent { kind: TransitionKind; t: number; duration: number }
+
 export function detectTransitions(track: MotionTrack, cuts: number[], lum?: number[], gray?: Gray[]): ReferenceTemplate['transitions'] {
+  return summarizeTransitions(transitionEvents(track, cuts, lum, gray), cuts.length);
+}
+
+/** frequência e duração típica de cada tipo (corte seco + transições achadas) */
+export function summarizeTransitions(out: TransitionEvent[], nCuts: number): ReferenceTemplate['transitions'] {
+  const n = Math.max(1, nCuts + out.length);
+  const kinds = new Map<TransitionKind, { d: number[]; c: number }>();
+  for (const o of out) {
+    const e = kinds.get(o.kind) ?? { d: [], c: 0 };
+    e.d.push(o.duration); e.c++;
+    kinds.set(o.kind, e);
+  }
+  const list: ReferenceTemplate['transitions'] = [{ kind: 'cut', duration: 0, frequency: r3(nCuts / n) }];
+  for (const [kind, e] of kinds) list.push({ kind, duration: r3(median(e.d)), frequency: r3(e.c / n) });
+  return list;
+}
+
+/** cada transição achada (instante do meio e duração) */
+export function transitionEvents(track: MotionTrack, cuts: number[], lum?: number[], gray?: Gray[]): TransitionEvent[] {
   const res = track.pairs.map((p) => p.residual);
   const med = median(res);
   const out: { kind: TransitionKind; t: number; duration: number }[] = [];
@@ -335,16 +358,7 @@ export function detectTransitions(track: MotionTrack, cuts: number[], lum?: numb
       if (l > Math.min(250, lm + 70) && (i === 0 || l - lum[i - 1] > 50)) out.push({ kind: 'flash', t: track.times[i], duration: 0.2 });
     });
   }
-  const n = Math.max(1, cuts.length + out.length);
-  const kinds = new Map<TransitionKind, { d: number[]; c: number }>();
-  for (const o of out) {
-    const e = kinds.get(o.kind) ?? { d: [], c: 0 };
-    e.d.push(o.duration); e.c++;
-    kinds.set(o.kind, e);
-  }
-  const list: ReferenceTemplate['transitions'] = [{ kind: 'cut', duration: 0, frequency: r3(cuts.length / n) }];
-  for (const [kind, e] of kinds) list.push({ kind, duration: r3(median(e.d)), frequency: r3(e.c / n) });
-  return list;
+  return out;
 }
 
 /* ---------- faixa de legenda ---------- */
@@ -488,15 +502,21 @@ export function measureReference(gray: Gray[], times: number[], rgb: RgbFrame[] 
   const pairs: PairMotion[] = [];
   for (let i = 1; i < n; i++) pairs.push(alignPair(gray[i - 1], gray[i], ao));
   const track: MotionTrack = { times: times.slice(0, n), pairs };
-  const cuts = detectCuts(track);
+  const hard = detectCuts(track);
+  const events = transitionEvents(track, hard, gray.slice(0, n).map(meanLum), gray);
+  // um dissolver também troca de tomada: o meio dele é um limite (antes a tomada atravessava o
+  // dissolver, o ritmo sumia e o zoom da tomada media a mistura das duas cenas)
+  const fades = events.filter((e) => e.kind === 'crossfade');
+  const cuts: number[] = [];
+  for (const c of [...hard, ...fades.map((f) => r3(f.t))].sort((a, b) => a - b)) if (!cuts.length || c - cuts[cuts.length - 1] >= 0.25) cuts.push(c);
   const duration = opts.duration ?? (n ? times[n - 1] + (n > 1 ? times[n - 1] - times[n - 2] : 0.1) / 2 : 0);
   const frame = { w: gray[0]?.w ?? 108, h: gray[0]?.h ?? 192 };
-  const perShot = shotMotions(track, cuts, frame);
+  const perShot = shotMotions(track, cuts, frame, fades.map((f) => ({ a: f.t - f.duration / 2, b: f.t + f.duration / 2 })));
   // tomadas começam em 0 e terminam na duração (a amostragem começa/termina meio passo para dentro)
   if (perShot.length) { perShot[0].start = 0; perShot[perShot.length - 1].end = r3(duration); }
   const motion = summarizeMotion(perShot);
   const shots = [0, ...cuts].map((s, i, a) => ({ start: r3(s), end: r3(i + 1 < a.length ? a[i + 1] : duration) })).filter((s) => s.end > s.start);
-  const transitions = detectTransitions(track, cuts, gray.slice(0, n).map(meanLum), gray);
+  const transitions = summarizeTransitions(events, hard.length);
   const template: ReferenceTemplate = {
     shots,
     shotStats: shotStatsOf(shots.length > 3 ? shots.slice(1, -1) : shots),

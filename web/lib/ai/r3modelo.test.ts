@@ -96,3 +96,26 @@ describe('medição do modelo: pan lento não vira zoom', () => {
     }
   });
 });
+
+describe('medição do modelo: dissolver também é troca de tomada', () => {
+  it('3 tomadas de 2,5 s ligadas por dissolver de 0,5 s: 3 tomadas, limites no meio do dissolver, zoom sem a mistura', () => {
+    const gray: Gray[] = [], times: number[] = [];
+    const shot = (k: number, t: number) => scene(1 + 0.06 * Math.max(0, Math.min(1, (t - 2 * k) / 2.5)), k * 4);
+    for (let i = 0; i < 65; i++) {
+      const t = i / 10 + 0.05;
+      // tomada k vai de 2k a 2k+2,5; o dissolver de k−1 para k ocupa [2k, 2k+0,5]
+      const k = Math.min(2, Math.floor(t / 2));
+      const al = k > 0 && t - 2 * k < 0.5 ? (t - 2 * k) / 0.5 : 1;
+      const B = shot(k, t);
+      const A = al < 1 ? shot(k - 1, t) : undefined;
+      gray.push(A ? { w: GW, h: GH, data: A.data.map((v, j) => v * (1 - al) + B.data[j] * al) as Float32Array } : B);
+      times.push(+t.toFixed(3));
+    }
+    const m = measureReference(gray, times, [], { duration: 6.5 });
+    expect(m.template.transitions.some((x) => x.kind === 'crossfade')).toBe(true);
+    expect(m.template.shots).toHaveLength(3);
+    expect(Math.abs(m.template.shots[1].start - 2.25)).toBeLessThan(0.15);
+    expect(Math.abs(m.template.shots[2].start - 4.25)).toBeLessThan(0.15);
+    for (const s of m.template.motion.perShot) expect(s.zoomTotal).toBeLessThan(1.08);
+  });
+});
