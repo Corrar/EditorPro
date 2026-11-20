@@ -87,43 +87,97 @@ export function alignedResidual(prev: Gray, cur: Gray, s: number, tx: number, ty
 export interface PairMotion { s: number; tx: number; ty: number; residual: number; raw: number }
 
 /**
+ * Refino conjunto (Gauss–Newton / Lucas–Kanade) de escala + translação a partir de um palpite:
+ * a escala e o deslocamento são acoplados (perto da borda, um zoom pequeno parece um deslocamento),
+ * então refiná-los um de cada vez prende num mínimo falso — um pan lento virava "zoom".
+ * Devolve o palpite se não melhorar o resíduo.
+ */
+function refineJoint(prev: Gray, cur: Gray, init: { s: number; tx: number; ty: number; residual: number }, o: AlignOpts, iters = 6, st = 2): { s: number; tx: number; ty: number; residual: number } {
+  const w = prev.w, h = prev.h, d = prev.data;
+  const gx = new Float32Array(w * h), gy = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = y * w + x;
+    gx[i] = (d[y * w + Math.min(w - 1, x + 1)] - d[y * w + Math.max(0, x - 1)]) / 2;
+    gy[i] = (d[Math.min(h - 1, y + 1) * w + x] - d[Math.max(0, y - 1) * w + x]) / 2;
+  }
+  const G: Gray = { w, h, data: gx }, Gy: Gray = { w, h, data: gy };
+  const bw = Math.round(cur.w * (o.border ?? 0.12)), bh = Math.round(cur.h * (o.border ?? 0.12));
+  const cx = (cur.w - 1) / 2, cy = (cur.h - 1) / 2;
+  const my0 = o.mask ? o.mask.y0 * cur.h : Infinity, my1 = o.mask ? o.mask.y1 * cur.h : -Infinity;
+  const shift = (o.shift ?? 3) + 1, sMin = (o.sMin ?? 0.97) - 0.01, sMax = (o.sMax ?? 1.06) + 0.01;
+  let { s, tx, ty } = init;
+  for (let it = 0; it < iters; it++) {
+    let a00 = 0, a01 = 0, a02 = 0, a11 = 0, a12 = 0, a22 = 0, b0 = 0, b1 = 0, b2 = 0;
+    for (let y = bh; y < cur.h - bh; y += st) {
+      if (y >= my0 && y <= my1) continue;
+      for (let x = bw; x < cur.w - bw; x += st) {
+        const px = cx + (x - cx) / s - tx, py = cy + (y - cy) / s - ty;
+        if (px < 0 || py < 0 || px > w - 1 || py > h - 1) continue;
+        const e = cur.data[y * cur.w + x] - sample(prev, px, py);
+        const ix = sample(G, px, py), iy = sample(Gy, px, py);
+        // ∂I/∂s, ∂I/∂tx, ∂I/∂ty do quadro anterior amostrado
+        const js = -(ix * (x - cx) + iy * (y - cy)) / (s * s), jx = -ix, jy = -iy;
+        a00 += js * js; a01 += js * jx; a02 += js * jy; a11 += jx * jx; a12 += jx * jy; a22 += jy * jy;
+        b0 += js * e; b1 += jx * e; b2 += jy * e;
+      }
+    }
+    // resolve o 3×3 (Cramer); sem textura suficiente, para
+    const det = a00 * (a11 * a22 - a12 * a12) - a01 * (a01 * a22 - a12 * a02) + a02 * (a01 * a12 - a11 * a02);
+    if (!Number.isFinite(det) || Math.abs(det) < 1e-9) break;
+    const ds = (b0 * (a11 * a22 - a12 * a12) - a01 * (b1 * a22 - a12 * b2) + a02 * (b1 * a12 - a11 * b2)) / det;
+    const dtx = (a00 * (b1 * a22 - a12 * b2) - b0 * (a01 * a22 - a12 * a02) + a02 * (a01 * b2 - b1 * a02)) / det;
+    const dty = (a00 * (a11 * b2 - b1 * a12) - a01 * (a01 * b2 - b1 * a02) + b0 * (a01 * a12 - a11 * a02)) / det;
+    if (![ds, dtx, dty].every(Number.isFinite)) break;
+    s = Math.max(sMin, Math.min(sMax, s + Math.max(-0.02, Math.min(0.02, ds))));
+    tx = Math.max(-shift, Math.min(shift, tx + Math.max(-1, Math.min(1, dtx))));
+    ty = Math.max(-shift, Math.min(shift, ty + Math.max(-1, Math.min(1, dty))));
+    if (Math.abs(ds) < 1e-5 && Math.abs(dtx) < 0.005 && Math.abs(dty) < 0.005) break;
+  }
+  const residual = alignedResidual(prev, cur, s, tx, ty, { ...o, stride: 1 });
+  return residual < init.residual ? { s, tx, ty, residual } : init;
+}
+
+/**
  * Melhor (escala, translação) entre dois quadros vizinhos, do grosso ao fino:
- * escala em passos de ~0,01 (amostrando 1 a cada 3 px) → refino ±0,01 → translação ±shift →
- * refino fino da escala (resolução cheia só no fim).
+ * escala em passos de ~0,01 (amostrando 1 a cada 3 px) → translação inteira ±shift (nessa escala e
+ * na escala 1) → refino da escala → refino CONJUNTO subpixel (Gauss–Newton, resolução cheia).
  */
 export function alignPair(prev: Gray, cur: Gray, o: AlignOpts = {}): PairMotion {
   const sMin = o.sMin ?? 0.97, sMax = o.sMax ?? 1.06, shift = o.shift ?? 3;
   const coarseN = Math.max(5, Math.round((sMax - sMin) / 0.01) + 1);
   const at = (st: number) => ({ ...o, stride: st });
-  const raw = alignedResidual(prev, cur, 1, 0, 0, at(2));
-  let best = { s: 1, tx: 0, ty: 0, residual: alignedResidual(prev, cur, 1, 0, 0, at(3)) };
+  const R = (s: number, tx: number, ty: number, st: number) => alignedResidual(prev, cur, s, tx, ty, at(st));
+  const raw = R(1, 0, 0, 2);
+  const step = (sMax - sMin) / (coarseN - 1);
+  // 1) escala grossa sem translação
+  let s0 = 1, r0 = R(1, 0, 0, 3);
   for (let i = 0; i < coarseN; i++) {
     const s = sMin + ((sMax - sMin) * i) / (coarseN - 1);
-    const r = alignedResidual(prev, cur, s, 0, 0, at(3));
-    if (r < best.residual) best = { s, tx: 0, ty: 0, residual: r };
+    const r = R(s, 0, 0, 3);
+    if (r < r0) { s0 = s; r0 = r; }
   }
-  const step = (sMax - sMin) / (coarseN - 1);
-  let mid = { ...best, residual: alignedResidual(prev, cur, best.s, 0, 0, at(2)) };
-  for (let k = -4; k <= 4; k++) {
-    if (!k) continue;
-    const s = best.s + (step * k) / 4;
-    const r = alignedResidual(prev, cur, s, 0, 0, at(2));
-    if (r < mid.residual) mid = { ...mid, s, residual: r };
-  }
-  for (let ty = -shift; ty <= shift; ty++) {
-    for (let tx = -shift; tx <= shift; tx++) {
-      if (!tx && !ty) continue;
-      const r = alignedResidual(prev, cur, mid.s, tx, ty, at(2));
-      if (r < mid.residual) mid = { s: mid.s, tx, ty, residual: r };
+  // 2) translação inteira nessa escala E na escala 1 (num pan a escala grossa sai torta)
+  let mid = { s: s0, tx: 0, ty: 0, residual: r0 };
+  for (const s of s0 === 1 ? [s0] : [s0, 1]) {
+    for (let ty = -shift; ty <= shift; ty++) {
+      for (let tx = -shift; tx <= shift; tx++) {
+        if (!tx && !ty && s === s0) continue;
+        const r = R(s, tx, ty, 3);
+        if (r < mid.residual) mid = { s, tx, ty, residual: r };
+      }
     }
   }
-  let fine = { ...mid, residual: alignedResidual(prev, cur, mid.s, mid.tx, mid.ty, at(1)) };
-  for (let k = -3; k <= 3; k++) {
+  // 3) refino da escala com a translação achada
+  const sm = mid.s;
+  mid = { ...mid, residual: R(sm, mid.tx, mid.ty, 2) };
+  for (let k = -4; k <= 4; k++) {
     if (!k) continue;
-    const s = mid.s + (step * k) / 12;
-    const r = alignedResidual(prev, cur, s, mid.tx, mid.ty, at(1));
-    if (r < fine.residual) fine = { ...fine, s, residual: r };
+    const s = sm + (step * k) / 4;
+    const r = R(s, mid.tx, mid.ty, 2);
+    if (r < mid.residual) mid = { ...mid, s, residual: r };
   }
+  // 4) refino conjunto subpixel em resolução cheia
+  const fine = refineJoint(prev, cur, { ...mid, residual: R(mid.s, mid.tx, mid.ty, 1) }, o);
   return { ...fine, raw };
 }
 

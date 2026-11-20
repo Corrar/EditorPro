@@ -5,7 +5,7 @@ import { createProject, makeVideoClip } from '../defaults';
 import type { CaptionSegment, Keyframe, MediaAsset, Project, ReferenceTemplate } from '../types';
 import { styleFromCuts } from './demo';
 import { fidelityOf } from './fidelity';
-import { edgePxPerFrame } from './motion';
+import { edgePxPerFrame, measureReference, type Gray } from './motion';
 import { smoothMotionOps, templateOps } from './template';
 import { sanitizeOps } from './validate';
 
@@ -69,5 +69,30 @@ describe('fidelidade: modelo com movimento lateral (pan)', () => {
     expect(f.scores.movimento).toBeGreaterThanOrEqual(0.8);
     // sem movimento nenhum a nota cai
     expect(fidelityOf(withSpeech(15), st)!.scores.movimento).toBeLessThan(0.5);
+  });
+});
+
+/** textura procedural (como em motion.test.ts) com zoom `s` e deslocamento `dx` (px) */
+const GW = 108, GH = 192;
+function scene(s: number, seed = 0, dx = 0): Gray {
+  const d = new Float32Array(GW * GH);
+  for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) {
+    const k = 1 + 0.35 * (seed % 3);
+    const u = ((x - GW / 2) / s + GW / 2 + dx) * k + seed * 37.3, v = ((y - GH / 2) / s + GH / 2) * k + seed * 91.7;
+    d[y * GW + x] = 128 + 50 * Math.sin(u * 0.21 + seed) * Math.cos(v * 0.17 - seed) + 35 * Math.sin((u + v) * 0.09 + seed * 2) + 20 * Math.cos(u * 0.53 - v * 0.31 + seed);
+  }
+  return { w: GW, h: GH, data: d };
+}
+
+describe('medição do modelo: pan lento não vira zoom', () => {
+  it('deslocamento subpixel por quadro (0,6–1,7 px a 108 px): modo pan, zoom 1, pan medido certo', () => {
+    for (const v of [0.6, 1.2, 1.7]) {
+      const gray: Gray[] = [], times: number[] = [];
+      for (let i = 0; i < 30; i++) { gray.push(scene(1, 1, i * v)); times.push(+(i / 10).toFixed(3)); }
+      const m = measureReference(gray, times, []);
+      expect(m.template.motion.mode).toBe('pan');
+      expect(Math.abs(m.template.motion.perShot[0].zoomTotal - 1)).toBeLessThan(0.01);
+      expect(Math.abs(m.template.motion.perShot[0].panX - (-29 * v) / GW)).toBeLessThan(0.03);
+    }
   });
 });
