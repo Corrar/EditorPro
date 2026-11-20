@@ -9,7 +9,7 @@ import type {
   Keyframe, MediaAsset, Project, ReferenceTemplate, Seconds, SpeedPreset, StyleMotion, StyleProfile, TransitionKind, VideoClip, VisualEffectKind,
 } from '../types';
 import { DEFAULT_TRANSFORM } from '../types';
-import { beatMarkerOps, beatSyncOps, chapterOps, fillerOps, highlightOps, hookFromTranscript, hookOps, mergeKfProps, timelineBeats } from './features';
+import { beatMarkerOps, beatSyncOps, chapterOps, fillerOps, highlightOps, hookFromTranscript, hookOps, kfWithout, mergeKfProps, timelineBeats } from './features';
 import { applyOps, clipEnd, projectDuration, type EditOp } from '../ops';
 import { DEFAULT_TEXT_STYLE } from '../defaults';
 import { formatTime, uid } from '../util';
@@ -482,7 +482,7 @@ export function zoomOps(p: Project, strong = false, only?: Set<Id>, mode: 'smoot
 export function removeZoomOps(p: Project, only?: Set<Id>): EditOp[] {
   return videoClipsOf(p)
     .filter((c) => !c.locked && (!only || only.has(c.id)) && (c.keyframes?.length || c.transform.scale !== 1))
-    .map((c) => ({ op: 'update_clip' as const, clipId: c.id, patch: { keyframes: mergeKfProps(c.keyframes, [], ['scale']), transform: { ...c.transform, scale: 1 } }, explain: `Tirando o zoom do clipe de ${fmt(c.start)}` }));
+    .map((c) => ({ op: 'update_clip' as const, clipId: c.id, patch: { keyframes: kfWithout(c.keyframes, ['scale'], { scale: 1 }), transform: { ...c.transform, scale: 1 } }, explain: `Tirando o zoom do clipe de ${fmt(c.start)}` }));
 }
 
 export function colorOps(p: Project, preset: ColorPreset, name: string, only?: Set<Id>): EditOp[] {

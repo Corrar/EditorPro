@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { applyOps, type EditOp } from '../ops';
 import { createProject, makeVideoClip } from '../defaults';
 import type { CaptionSegment, Keyframe, MediaAsset, Project, ReferenceTemplate } from '../types';
-import { styleFromCuts } from './demo';
-import { fidelityOf } from './fidelity';
+import { chatIntent, styleFromCuts, zoomOps } from './demo';
+import { failing, fidelityOf, repairOps } from './fidelity';
 import { edgePxPerFrame, measureReference, type Gray, type RgbFrame } from './motion';
 import { smoothMotionOps, templateOps } from './template';
 import { sanitizeOps } from './validate';
@@ -147,5 +147,36 @@ describe('medição do modelo: vídeo deitado repostado em pé (tarjas pretas)',
     expect(Math.abs(m.template.motion.avgZoomPerShot - 1.15)).toBeLessThan(0.04);
     expect(m.template.captions).toBeTruthy();
     expect(Math.abs(m.template.captions!.region.y0 - band.y0 / GH)).toBeLessThan(0.02);
+  });
+});
+
+describe('conserto: modelo de câmera parada', () => {
+  it('zoom a mais num modelo parado: o conserto tira o zoom (antes: não fazia nada e a nota ficava baixa)', () => {
+    const t: ReferenceTemplate = {
+      shots: Array.from({ length: 6 }, (_, i) => ({ start: i * 2, end: (i + 1) * 2 })), shotStats: { median: 2, p10: 2, p90: 2 },
+      motion: { mode: 'static', avgZoomPerShot: 1, easing: 'easeInOut', direction: 'in', punchFrequency: 0, perShot: [] },
+      transitions: [{ kind: 'cut', duration: 0, frequency: 1 }], color,
+    };
+    const st = styleFromCuts([2, 4, 6, 8, 10], 12, {}, color, t);
+    let p = withSpeech(15);
+    p = sanitizeOps(templateOps(p, st).ops, p, assets).project;
+    p = applyOps(p, zoomOps(p)).project; // edição antiga com aproximação em cada tomada
+    const f = fidelityOf(p, st, { r: 0.6, g: 0.47, b: 0.35 })!;
+    expect(failing(f)).toContain('movimento');
+    const fixed = sanitizeOps(repairOps(p, st, failing(f)), p, assets).project;
+    expect(fidelityOf(fixed, st, { r: 0.6, g: 0.47, b: 0.35 })!.scores.movimento).toBeGreaterThanOrEqual(0.8);
+  });
+});
+
+describe('"tira o zoom" passando pelo validador', () => {
+  it('tomadas com zoom + deriva lateral (réplica do modelo): o zoom sai mesmo (antes: o validador devolvia o zoom)', () => {
+    let p = withSpeech(15);
+    p = applyOps(p, [3, 6, 9, 12].map((at, i) => ({ op: 'split_clip', clipId: i ? `n${i}` : 'c1', at, newId: `n${i + 1}` }) as EditOp)).project;
+    p = sanitizeOps(zoomOps(p), p, assets).project;
+    const zoomed = (q: Project) => q.tracks[0].clips.filter((c) => c.type === 'video' && edgePxPerFrame(c.keyframes, c.duration, { base: { x: 0 } }) > 0 && new Set((c.keyframes ?? []).map((k) => k.transform.scale).filter((v) => v !== undefined)).size > 1).length;
+    expect(zoomed(p)).toBeGreaterThan(0);
+    const r = chatIntent('tira o zoom', { project: p, assets });
+    const after = sanitizeOps(r.ops, p, assets).project;
+    expect(zoomed(after)).toBe(0);
   });
 });

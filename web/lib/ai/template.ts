@@ -9,7 +9,7 @@
    ===================================================================== */
 import type { CaptionStyle, Easing, Id, Keyframe, MotionMode, Project, ReferenceTemplate, Seconds, StyleProfile, TransitionKind, VideoClip } from '../types';
 import { allWords, applyOps, type EditOp } from '../ops';
-import { mergeKfProps } from './features';
+import { kfWithout, mergeKfProps } from './features';
 import { isObj, r3, sanitizeStyleMotion, smoothKeyframes } from './sanitize';
 import { uid } from '../util';
 
@@ -300,6 +300,11 @@ export function templateOps(p: Project, style: StyleProfile, opts: { wantsPunch?
   }
   if (opts.motion !== false) {
     const spec = motionSpecOf(style, opts.wantsPunch);
+    if (!hasMotion(spec) && (spec.mode === 'static' || spec.mode === 'handheld')) {
+      // modelo de câmera parada: tira zoom animado que já esteja nas tomadas (edição antiga/IA)
+      const zoomed = mainClips(sim).filter((c) => !c.locked && (c.keyframes ?? []).some((k) => typeof k.transform.scale === 'number'));
+      push(zoomed.map((c) => ({ op: 'update_clip' as const, clipId: c.id, patch: { keyframes: kfWithout(c.keyframes, ['scale'], { scale: c.transform.scale ?? 1 }) }, explain: `Câmera parada em ${fmt(c.start)} (como no modelo)` })), zoomed.length ? 'câmera parada como no modelo' : undefined);
+    }
     const m = shotMotionOps(sim, spec);
     const name = spec.mode === 'punch' ? 'zoom em pancada' : spec.mode === 'pan' ? 'movimento lateral suave' : 'aproximação lenta e suave em cada tomada';
     push(m, m.length ? name : undefined);
