@@ -964,7 +964,15 @@ async function matchColorOps(opts: PipelineOptions): Promise<{ ops: EditOp[]; na
     const st = await colorStatsOf(a);
     if (st) grades[a.id] = matchColorGrade(model, st);
   }
-  return { ops: colorGradeOps(store().project, grades), name: ref.name };
+  // a cor casada SUBSTITUI o look antigo do clipe (um preset por baixo do colorGrade empilhava dois looks;
+  // a fidelidade mal percebia: 85% com a cor média parecida)
+  const p = store().project;
+  const ops = colorGradeOps(p, grades).map((o) => {
+    if (o.op !== 'update_clip') return o;
+    const c = allClips(p).find((x) => x.id === o.clipId);
+    return c && 'colorPreset' in c && c.colorPreset && c.colorPreset !== 'none' ? ({ ...o, patch: { ...o.patch, colorPreset: 'none' } } as EditOp) : o;
+  });
+  return { ops, name: ref.name };
 }
 
 /**
