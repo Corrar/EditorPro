@@ -12,6 +12,7 @@ import { emit } from '../events';
 import { getStatus, type AIStatus } from './client';
 import { AI_CURSOR_STEP_MS } from '../aiCursor';
 import { orderForViewing, shortExplain } from './order';
+import { groupLabel, liveStepDelay, planLiveSteps } from './livePace';
 import { SCOPE_LABELS, styleScopeFromText, wantsApplyNow, type StyleScope } from './model';
 import { explainChanges, HELP_TEXT, isExplainRequest, isHelpRequest } from './suggest';
 import { DEMO_HELP } from './demo';
@@ -99,7 +100,7 @@ export function waitForAsset(name: string, before: Set<Id>, ms = 30000): Promise
 
 /** ms por passo do applyLive: lento p/ ver o cursor; "Mais rápido" encurta (lido a cada passo) */
 export const FAST_STEP_MS = 350;
-/** acima disso o lote não passa inteiro pelo cursor ao vivo */
+/** acima disso o lote não é reordenado para assistir (fica na ordem que veio) */
 export const LIVE_MAX_STEPS = 40;
 export function stepDelay(fast: boolean, requested?: number): number {
   const base = requested ?? AI_CURSOR_STEP_MS;
@@ -152,52 +153,47 @@ export const useAIChat = create<AIChatState>((set, get) => {
     });
     const guard = () => { if (runCtrl.signal.aborted || editor().project.id !== pid) throw abortError(); };
 
+    let seq = 0; // ids únicos das ops/passos de todos os lotes desta execução
     const apply: PipelineOptions['apply'] = async (ops: EditOp[], o) => {
       guard();
-      const base = get().runs[msgId]?.steps.length ?? 0;
+      const base = seq;
+      seq += ops.length + 1;
       // ordem boa de assistir (cortes -> legendas -> efeitos -> textos -> áudio) e balão curto no cursor
-      // lote enorme (ex.: run_script com centenas de ops): mostra as primeiras ao vivo e aplica o resto de uma vez
-      const big = ops.length > LIVE_MAX_STEPS;
-      const ordered = big ? ops : orderForViewing(ops, editor().project);
-      const allIds = ordered.map((op, i) => op.id ?? `${msgId}_${base + i}`);
-      const live = big ? ordered.slice(0, LIVE_MAX_STEPS - 1) : ordered;
-      const rest = big ? ordered.slice(LIVE_MAX_STEPS - 1).map((op, i) => ({ ...op, id: allIds[LIVE_MAX_STEPS - 1 + i] })) : [];
-      const restId = `${msgId}_rest_${base}`;
-      const ids = allIds.slice(0, live.length);
-      const withIds = live.map((op, i) => ({ ...op, id: ids[i], explain: shortExplain(op.explain) }));
+      // (lote enorme, ex.: run_script com centenas de ops, fica na ordem dele: reordenar custaria caro)
+      const ordered = ops.length > LIVE_MAX_STEPS ? ops : orderForViewing(ops, editor().project);
+      const withIds = ordered.map((op, i) => ({ ...op, id: op.id ?? `${msgId}_${base + i}`, explain: shortExplain(op.explain) }));
+      // lote grande: as primeiras ops uma a uma, o resto em poucos passos por tipo (≤ ~7 s no total)
+      const plan = planLiveSteps(withIds, stepDelay(get().fast, o?.delayMs));
+      const stepIds = plan.steps.map((g, k) => (g.length === 1 ? withIds[g[0]].id! : `${msgId}_g${base}_${k}`));
+      const stepOf = new Map<number, number>();
+      plan.steps.forEach((g, k) => g.forEach((i) => stepOf.set(i, k)));
       patchRun(msgId, (r) => ({
-        steps: [
-          ...r.steps,
-          ...withIds.map((op) => ({ id: op.id!, text: op.explain || 'Editando', state: 'pending' as StepState })),
-          ...(rest.length ? [{ id: restId, text: `Mais ${rest.length} mudanças de uma vez`, state: 'pending' as StepState }] : []),
-        ],
+        steps: [...r.steps, ...plan.steps.map((g, k) => ({ id: stepIds[k], text: groupLabel(g.map((i) => withIds[i])) || 'Editando', state: 'pending' as StepState }))],
       }));
       editor().updateMessage(msgId, { status: 'applying' });
       patchRun(msgId, { phase: 'Editando…', progress: undefined });
-      let lastStep = -1;
-      const idx = new Map(ids.map((id, i) => [id, i]));
+      const idx = new Map(stepIds.map((id, k) => [id, k]));
       const applied = await editor().applyLive(withIds, {
         ...o,
-        delayMs: () => stepDelay(get().fast, o?.delayMs),
+        steps: plan.steps,
+        delayMs: (k) => liveStepDelay(plan, k, stepDelay(get().fast, o?.delayMs)),
         onStep: (_op, i) => {
-          lastStep = i;
+          const k = stepOf.get(i) ?? 0;
           patchRun(msgId, (r) => ({
-            steps: r.steps.map((st) => (st.id === ids[i] ? { ...st, state: 'active' } : st.state === 'active' && (idx.get(st.id) ?? Infinity) < i ? { ...st, state: 'done' } : st)),
+            steps: r.steps.map((st) => (st.id === stepIds[k] ? { ...st, state: 'active' } : st.state === 'active' && (idx.get(st.id) ?? Infinity) < k ? { ...st, state: 'done' } : st)),
           }));
         },
       });
       const ok = new Set(applied);
-      let restDone = false;
-      if (rest.length && lastStep === withIds.length - 1 && applied.length > 0) {
-        patchRun(msgId, (r) => ({ steps: r.steps.map((st) => (st.id === restId ? { ...st, state: 'active' } : st)) }));
-        asOwn(() => editor().dispatch(rest));
-        restDone = true;
-      }
       patchRun(msgId, (r) => ({
-        steps: r.steps.map((st) => (ids.includes(st.id) ? { ...st, state: ok.has(st.id) ? 'done' : 'skipped' } : st.id === restId ? { ...st, state: restDone ? 'done' : 'skipped' } : st)),
+        steps: r.steps.map((st) => {
+          const k = idx.get(st.id);
+          if (k === undefined) return st;
+          return { ...st, state: plan.steps[k].some((i) => ok.has(withIds[i].id!)) ? 'done' : 'skipped' };
+        }),
       }));
       guard(); // Parar no meio do lote: a execução inteira para aqui
-      return restDone ? [...applied, ...rest.map((o) => o.id!)] : applied;
+      return applied;
     };
 
     try {

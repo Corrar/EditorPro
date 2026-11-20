@@ -68,7 +68,8 @@ export interface EditorState {
   /** aplica ops da IA uma a uma, com pausa, movendo o playhead e destacando ("editando ao vivo").
    *  Tudo vira UM passo de desfazer. Retorna os ids das ops aplicadas. */
   /** delayMs pode ser função: lida a cada passo (ex.: botão "Mais rápido" no meio da edição) */
-  applyLive: (ops: EditOp[], opts?: { delayMs?: number | (() => number); onStep?: (op: EditOp, i: number) => void }) => Promise<Id[]>;
+  /** steps (aditivo): agrupa ops num passo só (índices em ordem); delayMs(step, steps) lê o passo atual */
+  applyLive: (ops: EditOp[], opts?: { delayMs?: number | ((step: number, steps: number) => number); onStep?: (op: EditOp, i: number) => void; steps?: number[][] }) => Promise<Id[]>;
   cancelLive: () => void;
 }
 
@@ -164,32 +165,42 @@ export const useEditor = create<EditorState>((set, get) => ({
     if (get().live.running) get().cancelLive();
     const token = ++liveToken;
     const ops = rawOps.map(normalizeOp);
-    const delayOf = () => (typeof opts.delayMs === 'function' ? opts.delayMs() : opts.delayMs ?? 450);
+    // passos: cada op sozinha (padrão) ou os grupos pedidos (lote grande: o resto entra em poucos passos)
+    const steps = opts.steps?.length ? opts.steps.filter((g) => g.length) : ops.map((_, i) => [i]);
+    const delayOf = (k: number) => (typeof opts.delayMs === 'function' ? opts.delayMs(k, steps.length) : opts.delayMs ?? 450);
     const before = get().project;
     liveBefore = before;
     const applied: Id[] = [];
     set({ live: { running: true, done: 0, total: ops.length }, playing: false });
-    for (let i = 0; i < ops.length; i++) {
+    for (let k = 0; k < steps.length; k++) {
       if (token !== liveToken) break; // cancelado / projeto trocado / desfazer
-      const op = ops[i];
+      const group = steps[k].filter((i) => ops[i]);
+      if (!group.length) continue;
+      const op = ops[group[0]];
       const cur = get().project;
       const focus = opFocus(cur, op);
       set((s) => ({
         live: { ...s.live, current: op, highlightClipId: focus.clipId },
         playhead: focus.time ?? s.playhead,
       }));
-      opts.onStep?.(op, i);
-      await sleep(delayOf() / 2);
+      for (const i of group) opts.onStep?.(ops[i], i);
+      await sleep(delayOf(k) / 2);
       if (token !== liveToken) break; // "Parar" durante a espera: não aplica a op pendente
-      try {
-        const next = applyOp(get().project, op);
-        const f2 = opFocus(next, op);
-        set((s) => ({ project: next, live: { ...s.live, done: i + 1, highlightClipId: f2.clipId ?? s.live.highlightClipId } }));
-        applied.push(op.id!);
-      } catch (e) {
-        console.warn('[editor] op da IA ignorada', op, e);
+      let next = get().project;
+      let lastOp = op;
+      for (const i of group) {
+        try {
+          next = applyOp(next, ops[i]);
+          applied.push(ops[i].id!);
+          lastOp = ops[i];
+        } catch (e) {
+          console.warn('[editor] op da IA ignorada', ops[i], e);
+        }
       }
-      await sleep(delayOf() / 2);
+      const f2 = opFocus(next, lastOp);
+      const doneN = group[group.length - 1] + 1;
+      set((s) => ({ project: next, live: { ...s.live, done: doneN, highlightClipId: f2.clipId ?? s.live.highlightClipId } }));
+      await sleep(delayOf(k) / 2);
     }
     // ainda é o dono do lote: fecha como UM passo de desfazer (se foi cancelado, cancelLive já fechou)
     if (token === liveToken) {
