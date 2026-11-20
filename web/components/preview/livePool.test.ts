@@ -109,3 +109,34 @@ describe('r3: GainNode novo nasce no ganho do clipe (sem estouro de volume cheio
     expect(g.setTargetAtTime).not.toHaveBeenCalled();
   });
 });
+
+describe('r3: elemento NA TELA não é destruído pelo prazo de 4 s enquanto nada o substituiu', () => {
+  const mkEl = () => ({ pause: vi.fn(), removeAttribute: vi.fn(), load: vi.fn(), remove: vi.fn(), dataset: {} });
+  it('drop() do exibido: segue na tela até outro quadro ser apresentado (antes: preto após 4 s com seeks lentos)', async () => {
+    vi.useFakeTimers();
+    const g = globalThis as unknown as { window?: unknown };
+    const hadWindow = 'window' in g;
+    if (!hadWindow) g.window = globalThis;
+    try {
+      const { LiveMediaPool } = await import('./livePool');
+      const pool = new LiveMediaPool() as unknown as { shown: unknown; retiring: unknown[]; drop(el: object): void };
+      const el = mkEl();
+      pool.shown = el;
+      pool.drop(el);
+      expect(el.remove).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(4100);
+      // nenhum substituto apresentou: continua na tela (congelado no último quadro > tela preta)
+      expect(el.remove).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(20000);
+      expect(el.remove).not.toHaveBeenCalled();
+      // outro elemento passou a ser o exibido: o prazo seguinte o descarta
+      pool.shown = mkEl();
+      vi.advanceTimersByTime(4100);
+      expect(el.remove).toHaveBeenCalled();
+      expect(pool.retiring).not.toContain(el);
+    } finally {
+      vi.useRealTimers();
+      if (!hadWindow) delete g.window;
+    }
+  });
+});

@@ -126,6 +126,17 @@ export class LiveMediaPool implements MediaSources {
     this.retiring.splice(i, 1);
     this.destroy(el);
   }
+  /**
+   * Prazo de descarte de um elemento 'retiring'. Se ele AINDA é o exibido (nenhum substituto apresentou —
+   * seeks lentos no celular, IA editando), não destrói: renova o prazo. Antes, após 4 s ele era removido
+   * na marra e o preview ficava preto até outro elemento apresentar (r3; repro: blink2 com CPU carregada).
+   */
+  private retireLater(el: AV) {
+    window.setTimeout(() => {
+      if (!this.retiring.includes(el)) return;
+      if (el === this.shown) this.retireLater(el); else this.retire(el);
+    }, 4000);
+  }
   /** elemento exibido no modo nativo */
   private shown: HTMLVideoElement | null = null;
   /**
@@ -136,7 +147,7 @@ export class LiveMediaPool implements MediaSources {
   private drop(el: AV) {
     if (el !== this.shown) { this.destroy(el); return; }
     el.pause();
-    if (!this.retiring.includes(el)) { this.retiring.push(el); window.setTimeout(() => this.retire(el), 4000); }
+    if (!this.retiring.includes(el)) { this.retiring.push(el); this.retireLater(el); }
   }
   /** chamado quando um quadro novo fica disponível (seek terminou / dados carregaram) */
   onFrame: () => void = () => {};
@@ -209,7 +220,7 @@ export class LiveMediaPool implements MediaSources {
       // último quadro, até o novo apresentar — sem piscar nem pular o playhead
       el.pause();
       this.retiring.push(el);
-      window.setTimeout(() => this.retire(el!), 4000);
+      this.retireLater(el);
       this.byClip.delete(clip.id);
       el = undefined;
     }
