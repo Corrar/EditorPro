@@ -99,7 +99,7 @@ export default function MobileToolbar({ onTool, onAi, onMenu, tool, toolOpen }: 
     { id: 'overlay', label: 'Sobrepor', icon: 'overlay', run: () => pipInput.current?.click() },
     { id: 'captions', label: 'Legendas', icon: 'captions', run: () => openPanel('captions'), on: isOn('captions') },
     { id: 'filters', label: 'Filtros', icon: 'filters', run: () => openPanel('filters'), on: isOn('filters') },
-    { id: 'adjust', label: 'Ajustar', icon: 'adjust', run: () => openPanel('adjust'), on: isOn('adjust') },
+    { id: 'adjust', label: 'Ajustes', icon: 'adjust', run: () => openPanel('adjust'), on: isOn('adjust') },
     ...(colorOk ? [{ id: 'color', label: 'Cor', icon: 'filters' as IconName, run: () => openPanel('color'), on: isOn('color') }] : []),
     { id: 'stickers', label: 'Stickers', icon: 'stickers', run: () => openPanel('stickers'), on: isOn('stickers') },
     { id: 'templates', label: 'Modelos', icon: 'templates', run: () => openPanel('templates'), on: isOn('templates'), tag: 'Novo' },
