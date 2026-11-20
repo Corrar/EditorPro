@@ -610,10 +610,19 @@ function applyOpInner(p: Project, op: EditOp): Project {
       let gaps: { start: Seconds; end: Seconds }[];
       if (op.ranges?.length) gaps = op.ranges.filter((g) => g.end - g.start >= min);
       else {
-        const words = allWords(p).filter((w) => w.end > w.start).sort((x, y) => x.start - y.start);
+        // legenda sem tempo por palavra (texto corrigido à mão, "Nova legenda") conta como fala do início ao fim —
+        // antes ela ficava invisível e a fala dela era cortada como "pausa"
+        const words = p.captions.segments
+          .flatMap((s) => (s.words?.length ? s.words : s.text.trim() ? [{ start: s.start, end: s.end }] : []))
+          .filter((w) => w.end > w.start).sort((x, y) => x.start - y.start);
         gaps = [];
         if (words.length && words[0].start >= min) gaps.push({ start: 0, end: words[0].start });
-        for (let k = 1; k < words.length; k++) if (words[k].start - words[k - 1].end >= min) gaps.push({ start: words[k - 1].end, end: words[k].start });
+        // fim da fala até aqui (palavras/legendas podem se sobrepor: a pausa começa depois da que termina por último)
+        let spoken = words.length ? words[0].end : 0;
+        for (let k = 1; k < words.length; k++) {
+          if (words[k].start - spoken >= min) gaps.push({ start: spoken, end: words[k].start });
+          spoken = Math.max(spoken, words[k].end);
+        }
       }
       let out = p;
       for (const g of [...gaps].sort((x, y) => y.start - x.start)) {
