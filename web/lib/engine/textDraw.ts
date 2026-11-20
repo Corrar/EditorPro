@@ -4,7 +4,7 @@
    em linhas, animação de bloco e por unidade, caixas, sombra, brilho,
    contorno, gradiente e emoji; drawTextClip/drawCaptions montam os parâmetros.
    ===================================================================== */
-import { animateClip } from './animate';
+import { animateClip, propsChangingAt } from './animate';
 import type { CaptionStyle, Project, Seconds, TextClip, TextStyle } from '../types';
 import { interpolateTransform, easeOutBack, easeOutBounce, ease, clamp01 } from './easing';
 import { balanceLines, layoutWords, splitText, textAnimState, fontPx, type AnimState } from './text';
@@ -435,7 +435,10 @@ export function drawTextClip(ctx: Ctx, clip0: TextClip, t: Seconds, W: number, H
   // só guarda bitmap com a fonte CARREGADA (check() otimista desenha direto, mas não vai para o cache) e
   // com a época das fontes na chave — senão o bitmap da fonte reserva fica para sempre (r2 biblioteca #1)
   if (fontReady && fontLoaded(style.fontFamily, style.fontWeight || 700, !!style.italic)
-    && !unit && !paints && !style.backgroundBlur && isStaticAnim(anim) && W * H <= TEXT_CACHE_MAX_PX) {
+    && !unit && !paints && !style.backgroundBlur && isStaticAnim(anim) && W * H <= TEXT_CACHE_MAX_PX
+    // estilo animado por keyframes (cor/tamanho mudando): a chave muda a cada quadro → desenha direto,
+    // senão é um bitmap do quadro inteiro novo por quadro (r3; parado de novo, volta ao cache)
+    && !propsChangingAt(clip0, local, 'style.')) {
     const key = JSON.stringify([fontEpoch(), raw, style, W, H, anim.sweep > 0, anim.underlineDraw > 0, anim.boxReveal]);
     let bmp = textCache.get(key);
     if (bmp) { textCache.delete(key); textCache.set(key, bmp); } else {

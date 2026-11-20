@@ -60,3 +60,83 @@ describe('iOS: volume só leitura → GainNode (r2 #5)', () => {
     expect(wantsRoute({ ...base, routed: true, hasCtx: false })).toBe(true); // uma vez no grafo, fica
   });
 });
+
+describe('r3: GainNode novo nasce no ganho do clipe (sem estouro de volume cheio)', () => {
+  const mkCtx = () => {
+    const gains: { gain: { value: number; setTargetAtTime: ReturnType<typeof vi.fn>; setValueAtTime: ReturnType<typeof vi.fn>; cancelScheduledValues: ReturnType<typeof vi.fn> }; connect: ReturnType<typeof vi.fn> }[] = [];
+    const ctx = {
+      currentTime: 3,
+      destination: {},
+      createMediaElementSource: vi.fn(() => ({ connect: vi.fn(), disconnect: vi.fn() })),
+      createGain: vi.fn(() => {
+        // como no navegador: GainNode nasce com gain = 1
+        const g = { gain: { value: 1, setTargetAtTime: vi.fn(), setValueAtTime: vi.fn(), cancelScheduledValues: vi.fn() }, connect: vi.fn(), disconnect: vi.fn() };
+        gains.push(g);
+        return g;
+      }),
+    };
+    return { ctx, gains };
+  };
+  it('automação de volume começando em 0,2: o nó começa em 0,2 (antes: rampa de 1 → 0,2 = estalo alto)', async () => {
+    const { LiveMediaPool } = await import('./livePool');
+    const pool = new LiveMediaPool() as unknown as { actx: unknown; route(el: object, clip: object, gain: number): boolean };
+    const { ctx, gains } = mkCtx();
+    pool.actx = ctx;
+    const el = { volume: 1 };
+    const clip = { id: 'a', type: 'audio', assetId: 'x', start: 0, duration: 3, in: 0, speed: 1, volume: 1, keyframes: [{ t: 0, transform: {}, props: { volume: 0.2 } }, { t: 2, transform: {}, props: { volume: 1 } }] };
+    expect(pool.route(el, clip, 0.2)).toBe(true);
+    expect(gains).toHaveLength(1);
+    const g = gains[0].gain;
+    // nada de rampa partindo de 1 no nó recém-criado
+    expect(g.setTargetAtTime).not.toHaveBeenCalled();
+    expect(g.value).toBeCloseTo(0.2);
+    // nos passos seguintes, rampa suave normal
+    pool.route(el, clip, 0.3);
+    expect(g.setTargetAtTime).toHaveBeenLastCalledWith(0.3, 3, expect.any(Number));
+  });
+  it('elemento mudo reaproveitado (pré-carga → clipe ativo): salta p/ o ganho novo em vez de rampa do anterior', async () => {
+    const { LiveMediaPool } = await import('./livePool');
+    const pool = new LiveMediaPool() as unknown as { actx: unknown; route(el: object, clip: object, gain: number): boolean };
+    const { ctx, gains } = mkCtx();
+    pool.actx = ctx;
+    const el = { volume: 1, muted: false };
+    const clip = { id: 'a', type: 'audio', assetId: 'x', start: 0, duration: 3, in: 0, speed: 1, volume: 1, keyframes: [{ t: 0, transform: {}, props: { volume: 1 } }] };
+    pool.route(el, clip, 1);
+    el.muted = true;
+    pool.route(el, clip, 0.1);
+    const g = gains[0].gain;
+    expect(g.setValueAtTime).toHaveBeenLastCalledWith(0.1, 3);
+    expect(g.setTargetAtTime).not.toHaveBeenCalled();
+  });
+});
+
+describe('r3: elemento NA TELA não é destruído pelo prazo de 4 s enquanto nada o substituiu', () => {
+  const mkEl = () => ({ pause: vi.fn(), removeAttribute: vi.fn(), load: vi.fn(), remove: vi.fn(), dataset: {} });
+  it('drop() do exibido: segue na tela até outro quadro ser apresentado (antes: preto após 4 s com seeks lentos)', async () => {
+    vi.useFakeTimers();
+    const g = globalThis as unknown as { window?: unknown };
+    const hadWindow = 'window' in g;
+    if (!hadWindow) g.window = globalThis;
+    try {
+      const { LiveMediaPool } = await import('./livePool');
+      const pool = new LiveMediaPool() as unknown as { shown: unknown; retiring: unknown[]; drop(el: object): void };
+      const el = mkEl();
+      pool.shown = el;
+      pool.drop(el);
+      expect(el.remove).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(4100);
+      // nenhum substituto apresentou: continua na tela (congelado no último quadro > tela preta)
+      expect(el.remove).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(20000);
+      expect(el.remove).not.toHaveBeenCalled();
+      // outro elemento passou a ser o exibido: o prazo seguinte o descarta
+      pool.shown = mkEl();
+      vi.advanceTimersByTime(4100);
+      expect(el.remove).toHaveBeenCalled();
+      expect(pool.retiring).not.toContain(el);
+    } finally {
+      vi.useRealTimers();
+      if (!hadWindow) delete g.window;
+    }
+  });
+});

@@ -8,7 +8,8 @@
      'volume' · 'fadeIn' · 'fadeOut' · 'scale' · 'rotation' · 'fill' · 'stroke' · 'cornerRadius'
      'style.fontSize' · 'style.color' · 'style.strokeWidth' · 'style.letterSpacing' · 'style.opacity'
      'style.highlightColor' · 'style.background' · 'position.x' · 'position.y'
-     'effects.0.intensity' · 'effects.1.speed' · 'effects.0.angle' · 'effects.0.params.amount'
+     'effects.0.intensity' · 'effects.1.speed' · 'effects.0.angle' · 'effects.0.params.0' (uParams[0..7]
+     do shader da IA; também 'transitionIn.params.N')
      'filters.brightness' (o value do Filter daquele kind; cria se não existir)
      'colorGrade.saturation' · 'colorGrade.lift.r' (cria colorGrade se faltar)
      'mask.x|y|w|h|rotation|feather' · 'chromaKey.similarity|smoothness'
@@ -158,6 +159,17 @@ function setPath(root: Obj, path: string[], v: Val): Obj | null {
     next[idx] = sub;
     return { ...root, effects: next };
   }
+  // 'params.I' (uParams[0..7] dos shaders da IA): lista numérica, índice 0..7 (completa com zeros)
+  if (head === 'params' && rest.length === 1) {
+    const idx = Number(rest[0]);
+    if (typeof v !== 'number' || !Number.isInteger(idx) || idx < 0 || idx > 7) return null;
+    const cur = root.params;
+    if (cur !== undefined && !Array.isArray(cur)) return null;
+    const next = Array.isArray(cur) ? (cur as unknown[]).slice() : [];
+    while (next.length < idx) next.push(0);
+    next[idx] = v;
+    return { ...root, params: next };
+  }
   if (!rest.length) {
     if (!compatible(root[head], v)) return null;
     return { ...root, [head]: v };
@@ -184,6 +196,23 @@ export function hasPropKeyframes(clip: Clip): boolean {
 export function hasVolumeKeyframes(clip: Clip): boolean {
   const plan = planOf((clip as { keyframes?: Keyframe[] }).keyframes);
   return !!plan && plan.tracks.some((tr) => tr.path.length === 1 && (tr.path[0] === 'volume' || tr.path[0] === 'fadeIn' || tr.path[0] === 'fadeOut'));
+}
+
+/**
+ * Alguma prop animada está MUDANDO em `tLocal` (entre o 1º e o último keyframe de uma trilha com
+ * valores diferentes)? Fora disso o valor fica parado — caches por valor (bitmap de texto) voltam a servir.
+ * `prefix` limita aos caminhos que começam por ele (ex.: 'style.').
+ */
+export function propsChangingAt(clip: Clip, tLocal: number, prefix = ''): boolean {
+  const plan = planOf((clip as { keyframes?: Keyframe[] }).keyframes);
+  if (!plan) return false;
+  for (const tr of plan.tracks) {
+    if (prefix && !(tr.path.join('.') + '.').startsWith(prefix)) continue;
+    const k = tr.keys;
+    if (k.length < 2 || tLocal <= k[0].t || tLocal >= k[k.length - 1].t) continue;
+    if (k.some((x) => x.v !== k[0].v)) return true;
+  }
+  return false;
 }
 
 /**

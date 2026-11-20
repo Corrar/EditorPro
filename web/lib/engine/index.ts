@@ -8,6 +8,7 @@ import { trackLayers, type LayerItem } from './timing';
 import { applyAdjustment, drawBackground, drawCaptions, drawLayer, drawTextClip } from './draw';
 import { isShaderTransition, runShaderTransition, shaderTransitionsAvailable } from './shaderTransitions';
 import { scratch } from './surface';
+import { animateClip } from './animate';
 
 export type MediaElement = HTMLVideoElement | HTMLImageElement | HTMLAudioElement | ImageBitmap | VideoFrame | HTMLCanvasElement | OffscreenCanvas;
 
@@ -70,8 +71,10 @@ export function renderFrame(ctx: CanvasRenderingContext2D, project: Project, t: 
         const { c: to, ctx: tc } = scratch(ctx.canvas, W, H, 22);
         tc.drawImage(base as CanvasImageSource, 0, 0);
         drawLayer(tc, plain(inL), t, elFor(inL.clip), W, H, { offline: media.offline });
+        // (fx) código/params da transição 'custom' — com os keyframes resolvidos ('transitionIn.params.N')
+        const inClip = animateClip(inL.clip, t - inL.clip.start);
         const mixed = runShaderTransition(inL.transition!.kind as never, from as TexImageSource, to as TexImageSource, inL.transition!.progress, W, H,
-          'transitionIn' in inL.clip ? inL.clip.transitionIn : undefined); // (fx) código da transição 'custom'
+          'transitionIn' in inClip ? inClip.transitionIn : undefined);
         ctx.drawImage((mixed ?? to) as CanvasImageSource, 0, 0);
         for (const l of layers) if (l !== inL && l !== outL) drawLayer(ctx, l, t, elFor(l.clip), W, H, { offline: media.offline });
       } else {

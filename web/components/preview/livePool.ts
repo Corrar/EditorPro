@@ -126,6 +126,17 @@ export class LiveMediaPool implements MediaSources {
     this.retiring.splice(i, 1);
     this.destroy(el);
   }
+  /**
+   * Prazo de descarte de um elemento 'retiring'. Se ele AINDA é o exibido (nenhum substituto apresentou —
+   * seeks lentos no celular, IA editando), não destrói: renova o prazo. Antes, após 4 s ele era removido
+   * na marra e o preview ficava preto até outro elemento apresentar (r3; repro: blink2 com CPU carregada).
+   */
+  private retireLater(el: AV) {
+    window.setTimeout(() => {
+      if (!this.retiring.includes(el)) return;
+      if (el === this.shown) this.retireLater(el); else this.retire(el);
+    }, 4000);
+  }
   /** elemento exibido no modo nativo */
   private shown: HTMLVideoElement | null = null;
   /**
@@ -136,7 +147,7 @@ export class LiveMediaPool implements MediaSources {
   private drop(el: AV) {
     if (el !== this.shown) { this.destroy(el); return; }
     el.pause();
-    if (!this.retiring.includes(el)) { this.retiring.push(el); window.setTimeout(() => this.retire(el), 4000); }
+    if (!this.retiring.includes(el)) { this.retiring.push(el); this.retireLater(el); }
   }
   /** chamado quando um quadro novo fica disponível (seek terminou / dados carregaram) */
   onFrame: () => void = () => {};
@@ -209,7 +220,7 @@ export class LiveMediaPool implements MediaSources {
       // último quadro, até o novo apresentar — sem piscar nem pular o playhead
       el.pause();
       this.retiring.push(el);
-      window.setTimeout(() => this.retire(el!), 4000);
+      this.retireLater(el);
       this.byClip.delete(clip.id);
       el = undefined;
     }
@@ -450,10 +461,15 @@ export class LiveMediaPool implements MediaSources {
     // automação de volume (props.volume) também vai pelo GainNode: rampas suaves, sem cliques
     // iOS: volume do elemento é só leitura → qualquer ganho ≠ 1 (volume, fades, ducking) vai pelo GainNode (r2 #5)
     if (!wantsRoute({ hasCtx: !!this.actx, routed: !!r, chain: needsAudioChain(fx, pitch), volumeKf: hasVolumeKeyframes(clip), gain, volumeReadOnly: volumeIsReadOnly() })) return false;
+    let fresh = false;
     if (!r) {
       try {
         const source = this.actx!.createMediaElementSource(el);
         const g = this.actx!.createGain();
+        // GainNode nasce em 1: começa JÁ no ganho do clipe — a rampa partindo de 1 soltava ~50 ms de
+        // volume cheio (estalo) em clipe com automação/volume baixo ao entrar no corte (r3)
+        g.gain.value = Math.max(0, gain);
+        fresh = true;
         g.connect(this.actx!.destination);
         r = { source, gain: g, chain: null, key: '' };
         this.routes.set(el, r);
@@ -468,7 +484,13 @@ export class LiveMediaPool implements MediaSources {
       r.key = key;
     }
     el.volume = 1;
-    r.gain.gain.setTargetAtTime(Math.max(0, gain), this.actx!.currentTime, 0.015);
+    if (fresh) return true;
+    const now = this.actx!.currentTime, g = r.gain.gain;
+    if (el.muted) {
+      // mudo (pré-carga/vizinho/reuso por outro clipe): nada soa — salta direto p/ o ganho novo, senão ao
+      // desmutar a rampa partiria do ganho do uso anterior (estalo)
+      try { g.cancelScheduledValues(now); g.setValueAtTime(Math.max(0, gain), now); } catch { g.value = Math.max(0, gain); }
+    } else g.setTargetAtTime(Math.max(0, gain), now, 0.015);
     return true;
   }
 
