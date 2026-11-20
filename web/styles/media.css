@@ -57,7 +57,7 @@
 }
 
 /* ---------- Gerar com IA ---------- */
-.ep-gen { margin:16px 14px 0; padding:14px; border:0; border-radius:var(--r-md); background:var(--tile); }
+.ep-gen { scroll-margin-top:84px; /* rolar até ela (ferramenta "Gerar com IA") sem esconder o título sob o cabeçalho fixo */ margin:16px 14px 0; padding:14px; border:0; border-radius:var(--r-md); background:var(--tile); }
 .ep-gen-h { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
 .ep-gen-h h4 { display:inline-flex; align-items:center; gap:7px; font-size:13.5px; font-weight:700; }
 .ep-gen-h h4 svg { color:var(--green); }
@@ -78,7 +78,7 @@
 .ep-genprog span { position:relative; display:grid; place-items:center; height:100%; font-size:11.5px; font-weight:600; color:var(--ink); }
 .ep-asset-usemodel { display:flex; align-items:center; justify-content:center; gap:6px; width:100%; min-height:36px; margin-top:6px; border:0; border-radius:10px; background:var(--tintG, rgba(242,104,31,.12)); color:var(--green); font:inherit; font-size:12px; font-weight:700; cursor:pointer; }
 .ep-asset-usemodel:active { transform:scale(.98); }
-.ep-asset-proxy { position:absolute; left:6px; top:30px; font-size:9.5px; font-weight:700; color:#fff; border-radius:6px; padding:2px 6px; background:rgba(20,20,22,.78); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); }
+.ep-asset-proxy { position:absolute; left:6px; bottom:27px; /* acima do "N× na timeline": no topo ficava sob os botões + e lixeira */ font-size:9.5px; font-weight:700; color:#fff; border-radius:6px; padding:2px 6px; background:rgba(20,20,22,.78); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); }
 .ep-asset-proxy.busy::before { content:''; display:inline-block; width:6px; height:6px; margin-right:4px; border-radius:50%; background:var(--green); animation:epPulse 1s ease-in-out infinite; vertical-align:1px; }
 .ep-asset-proxy.ok { background:rgba(22,163,74,.88); }
 
