@@ -10,9 +10,10 @@ import { useEditor } from '../store';
 import { AIClientError, analyzeReference, getStatus, requestEdit, translateSegments, type AIStatus, type EditFrame } from './client';
 import { beatsOf, colorStatsOf, sampleReference, silencesFor } from './analysis';
 import { colorGradeOps, matchColorGrade } from './colormatch';
-import { CAPTION_ADD, canonVerbs, chatIntent, demoNeeds, planFirstEdit, silenceCutOps, silenceOptsFromText, speechRanges, type Range } from './demo';
+import { CAPTION_ADD, canonVerbs, chatIntent, demoNeeds, fmtSec, PAUSES_ALREADY_CUT, pausesAlreadyCut, planFirstEdit, silenceCutOps, silenceOptsFromText, speechRanges, type Range } from './demo';
 import { deviceProfile, framesFromThumbnails, sampleVideo } from './frames';
 import { captionsMediaToTimeline } from './timemap';
+import { fitDurationOps, targetDurationFromText } from './fit';
 import { sanitizeOps } from './validate';
 import { chooseWhisper, transcribeMedia, type TranscribeInfo } from './whisper';
 import { captionsNeedTranscription } from './legacyCaptions';
@@ -379,6 +380,26 @@ export function captionMissReply(run: CaptionRun): { text: string; actions: AskO
 
 /* ---------- 1ª edição ---------- */
 
+/** linha final da resposta: o tamanho do vídeo (e o pedido, se houve) */
+export function durationLine(brief: string, p: Project = store().project): string {
+  const target = targetDurationFromText(brief);
+  const d = projectDuration(p);
+  if (d <= 0) return '';
+  return `\nDuração final: ${fmtSec(d)}${target ? ` (você pediu ${fmtSec(target)})` : ''}.`;
+}
+
+/** Claude passou do tempo pedido no brief: encurta (sem cortar palavra, mantendo o gancho) */
+async function fitToBrief(brief: string, apply: NonNullable<PipelineOptions['apply']>): Promise<string> {
+  const target = targetDurationFromText(brief);
+  const p = store().project;
+  if (!target || projectDuration(p) <= target + 1) return '';
+  const f = fitDurationOps(p, target, { brief });
+  const clean = f.ops.length ? sanitizeOps(f.ops, p, store().assets).ops : [];
+  if (!clean.length) return '';
+  await apply(clean, { delayMs: 200 });
+  return `\nAjustei para caber em ${fmtSec(target)}: ${f.said.join(' e ')}.`;
+}
+
 export async function runFirstEdit(opts: PipelineOptions & { brief: string }): Promise<PipelineResult> {
   const apply = opts.apply ?? defaultApply;
   const status = await getStatus();
@@ -490,7 +511,9 @@ export async function runFirstEdit(opts: PipelineOptions & { brief: string }): P
       opts.onStatus?.('Editando…');
       const appliedIds = ops.length ? await apply(ops) : [];
       reply += await afterClaude(fin, before, userText, apply, opts, warnings);
+      reply += await fitToBrief(brief, apply);
       reply += await checkFidelity(apply, opts);
+      reply += durationLine(brief);
       return { reply: reply + capNote(), ops, appliedIds, provider: 'anthropic' as const, warnings, actions: capActions() };
     }
 
@@ -539,6 +562,7 @@ export async function runFirstEdit(opts: PipelineOptions & { brief: string }): P
     opts.onStatus?.('Editando…');
     const appliedIds = ops.length ? await apply(ops) : [];
     reply += await checkFidelity(apply, opts);
+    reply += durationLine(brief);
     return { reply: reply + capNote(), ops, appliedIds, provider: 'demo' as const, warnings, actions: capActions() };
   });
 }
@@ -817,7 +841,13 @@ async function localFeature(text: string, apply: NonNullable<PipelineOptions['ap
     const silences = await silencesFor(sourceAssets(store().assets).filter((a) => a.kind !== 'image' && used.has(a.id)), sOpts);
     const { ops, removed } = silenceCutOps(store().project, silences);
     const lim = sOpts?.minSilence ? ` (pausas ≥ ${sOpts.minSilence.toString().replace('.', ',')} s)` : '';
-    if (!ops.length) return { reply: `Não encontrei pausas para cortar${lim}.`, ops: [], appliedIds: [], provider, warnings };
+    if (!ops.length) {
+      // o áudio tem pausas, mas nenhuma está mais na timeline: já foram cortadas (resposta clara em vez de "não encontrei")
+      const reply = pausesAlreadyCut(silences)
+        ? `${PAUSES_ALREADY_CUT.charAt(0).toUpperCase()}${PAUSES_ALREADY_CUT.slice(1)}.`
+        : `Não encontrei pausas para cortar${lim}${sOpts?.minSilence && sOpts.minSilence <= 0.3 ? '' : ' — para apertar até as curtas, diga “corta todas as pausas”'}.`;
+      return { reply, ops: [], appliedIds: [], provider, warnings };
+    }
     return done(ops, `Cortei ${ops.length} pausa${ops.length > 1 ? 's' : ''}${lim}: ${removed.toFixed(1).replace('.', ',')} s a menos.`);
   }
 

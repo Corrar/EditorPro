@@ -10,13 +10,14 @@ import type {
 } from '../types';
 import { ASPECT_SIZES, DEFAULT_TRANSFORM } from '../types';
 import { beatMarkerOps, beatSyncOps, chapterOps, fillerOps, highlightOps, hookFromTranscript, hookOps, kfWithout, mergeKfProps, timelineBeats } from './features';
-import { applyOps, clipEnd, projectDuration, type EditOp } from '../ops';
+import { allWords, applyOps, clipEnd, projectDuration, type EditOp } from '../ops';
 import { DEFAULT_TEXT_STYLE } from '../defaults';
 import { formatTime, uid } from '../util';
 import { distributeWords, r3, splitSegment } from './sanitize';
 import { captionsMediaToTimeline, clipsOfAsset, mediaRangeToTimeline, mergeRanges } from './timemap';
 import { demoLibraryOps } from './library';
-import { motionSpecOf, shotMotionOps, templateOps, type MotionSpec } from './template';
+import { hasMotion, motionSpecOf, rhythmSplitOps, shotMotionOps, templateOps, templateTransition, type MotionSpec } from './template';
+import { fitDurationOps, targetDurationFromText } from './fit';
 
 export interface Range { start: Seconds; end: Seconds }
 export interface DemoResult { reply: string; ops: EditOp[]; undo?: boolean }
@@ -57,6 +58,8 @@ export function canonVerbs(text: string): string {
 }
 
 const fmt = (t: number) => formatTime(t, { decimals: true });
+/** "20 s", "19,6 s" */
+export const fmtSec = (t: number) => `${(Math.round(t * 10) / 10).toString().replace('.', ',')} s`;
 
 /* ---------- silêncios (áudio) ---------- */
 
@@ -164,6 +167,12 @@ export function silenceCutOps(p: Project, silencesByAsset: Record<Id, Range[]>):
   }
   return { ops, removed: r3(removed) };
 }
+
+/** o áudio TEM pausas, mas nenhuma está mais na timeline (já foram cortadas antes) */
+export function pausesAlreadyCut(silencesByAsset: Record<Id, Range[]>): boolean {
+  return Object.values(silencesByAsset).some((r) => r.some((s) => s.end - s.start >= 0.2));
+}
+export const PAUSES_ALREADY_CUT = 'as pausas já foram cortadas (na 1ª edição): não sobrou nenhuma na timeline. Para apertar até as curtas, diga “corta todas as pausas”';
 
 /* ---------- cortes do vídeo-exemplo (diferença entre quadros) ---------- */
 
@@ -682,6 +691,23 @@ export function planFirstEdit(input: FirstEditInput): DemoResult {
     if (cut.length) said.push(`cortei ${cut.length} pausa${cut.length > 1 ? 's' : ''} (${removed.toFixed(1)} s a menos)`);
   }
 
+  // 2a) duração pedida ("Reels de 20s", "até 15 s"): encurta o que não tem fala e tira frases inteiras
+  //     menos importantes (cortes nos respiros, nunca no meio da palavra; o gancho fica). Antes do ritmo
+  //     do modelo: os cortes/movimento por tomada são calculados já no vídeo do tamanho certo
+  const target = targetDurationFromText(brief);
+  if (target) {
+    const before = projectDuration(p);
+    const speech: Range[] = [];
+    for (const [id, sil] of Object.entries(silencesByAsset)) {
+      const clips = clipsOfAsset(p, id).filter((c) => c.type === 'video' || c.type === 'audio');
+      for (const r of speechRanges(sil, durations[id])) speech.push(...mediaRangeToTimeline(clips, r.start, r.end));
+    }
+    const fit = fitDurationOps(p, target, { brief, speech });
+    push(fit.ops);
+    if (fit.ops.length) said.push(`deixei com ~${fmtSec(fit.final)} como você pediu (${fit.said.join(' e ')}; eram ${fmtSec(before)})`);
+    else if (before < target - 3) notes.push(`Você pediu ${fmtSec(target)}, mas o material editado tem só ${fmtSec(before)} — não estiquei o vídeo.`);
+  }
+
   // 2b) vídeo modelo = molde definitivo: corta no ritmo das tomadas dele (nos respiros da fala),
   //     movimento de câmera medido, só as transições dele e a legenda dele
   // com modelo, "Reels/TikTok" no brief é a plataforma, não um pedido de legenda: só vale estilo de legenda citado
@@ -780,6 +806,129 @@ export function planFirstEdit(input: FirstEditInput): DemoResult {
   return { reply, ops };
 }
 
+/* ---------- "deixa mais dinâmico" ---------- */
+
+const sigOf = (p: Project) => JSON.stringify(p.tracks) + JSON.stringify(p.captions);
+
+/** só as ops que mudam o projeto de verdade (a resposta não promete o que não aconteceu) */
+export function effectiveOps(p: Project, ops: EditOp[]): { ops: EditOp[]; project: Project } {
+  const out: EditOp[] = [];
+  let cur = p;
+  let sig = sigOf(p);
+  for (const op of ops) {
+    const r = applyOps(cur, [op]);
+    if (r.errors.length) continue;
+    const s2 = sigOf(r.project);
+    if (s2 === sig) continue;
+    out.push(op);
+    cur = r.project;
+    sig = s2;
+  }
+  return { ops: out, project: cur };
+}
+
+/** clipes da trilha principal (a 1ª de vídeo), em ordem */
+function mainVideoClips(p: Project): VideoClip[] {
+  const tr = p.tracks.find((x) => x.kind === 'video');
+  return (tr?.clips ?? []).filter((c): c is VideoClip => c.type === 'video').sort((a, b) => a.start - b.start);
+}
+
+/**
+ * "Deixa mais dinâmico" sem pancada nem tremor: (1) aperta os respiros da fala (nunca no meio da palavra),
+ * (2) legendas em blocos curtos (se o modelo não ditou a legenda), (3) sem modelo e com tomadas longas,
+ * corta no ritmo (~2,5 s, nos respiros), (4) tomada parada ganha a aproximação suave (ou o movimento do modelo),
+ * (5) transições só se o modelo tiver. Devolve só o que muda; nada a mudar -> `said` explica com honestidade.
+ */
+export function dynamicOps(p0: Project, silencesByAsset?: Record<Id, Range[]>): { ops: EditOp[]; said: string[] } {
+  let p = p0;
+  const ops: EditOp[] = [];
+  const said: string[] = [];
+  const push = (more: EditOp[], phrase?: (eff: EditOp[], before: Project) => string) => {
+    if (!more.length) return;
+    const before = p;
+    const r = effectiveOps(p, more);
+    if (!r.ops.length) return;
+    p = r.project;
+    ops.push(...r.ops);
+    if (phrase) said.push(phrase(r.ops, before));
+  };
+  const style = p.style;
+  const tpl = style?.template;
+  const less = (before: Project) => (projectDuration(before) - projectDuration(p)).toFixed(1).replace('.', ',');
+
+  // 1) cortes mais justos: respiros entre palavras de 0,3–2 s ficam com ~0,16 s (mais que 2 s é trecho sem fala de propósito)
+  const words = allWords(p).filter((w) => w.end > w.start).sort((a, b) => a.start - b.start);
+  if (words.length > 1) {
+    const ranges: Range[] = [];
+    let spoken = words[0].end;
+    for (let k = 1; k < words.length; k++) {
+      const gap = words[k].start - spoken;
+      if (gap >= 0.3 && gap <= 2) ranges.push({ start: r3(spoken), end: r3(words[k].start) });
+      spoken = Math.max(spoken, words[k].end);
+    }
+    if (ranges.length) push([{ op: 'cut_pauses', minPause: 0.3, keep: 0.08, ranges, explain: `Apertando ${ranges.length} respiro${ranges.length > 1 ? 's' : ''} da fala` }], (_e, b) => `apertei ${ranges.length} respiro${ranges.length > 1 ? 's' : ''} da fala (${less(b)} s a menos, sem cortar palavra)`);
+  } else if (silencesByAsset) {
+    const { ops: cut } = silenceCutOps(p, silencesByAsset);
+    push(cut, (e, b) => `cortei ${e.length} pausa${e.length > 1 ? 's' : ''} (${less(b)} s a menos)`);
+  }
+
+  // 1b) trecho longo SEM fala (b-roll, tempo morto > 4 s): fica com 3 s (1,5 s do começo + 1,5 s do fim, p/ não
+  //     cortar a chamada final), cortado longe das palavras
+  const ws = allWords(p).filter((w) => w.end > w.start).sort((a, b) => a.start - b.start);
+  if (ws.length) {
+    const T = projectDuration(p);
+    const dead: Range[] = [];
+    const add = (a: number, b: number) => { if (b - a > 4) dead.push({ start: r3(a + 1.5), end: r3(b - 1.5) }); };
+    add(0, ws[0].start - 0.15);
+    let spoken = ws[0].end;
+    for (let k = 1; k < ws.length; k++) { add(spoken + 0.15, ws[k].start - 0.15); spoken = Math.max(spoken, ws[k].end); }
+    add(spoken + 0.15, T);
+    let shift = 0;
+    const cuts: EditOp[] = dead.map((r) => {
+      const op: EditOp = { op: 'ripple_delete', start: r3(r.start - shift), end: r3(r.end - shift), explain: `Encurtando o trecho sem fala em ${fmt(r.start - shift)}` };
+      shift += r.end - r.start;
+      return op;
+    });
+    push(cuts, (e, b) => `encurtei ${e.length > 1 ? `${e.length} trechos` : 'o trecho'} sem fala para 3 s (${less(b)} s a menos)`);
+  }
+
+  // 2) legendas em blocos curtos (até 3 palavras) — a legenda do modelo manda, se houver
+  if (p.captions.segments.length && !tpl?.captions) {
+    const st = p.captions.style;
+    const max = Math.max(1, Math.floor(st.maxWords || 3));
+    const slow = st.rhythm === 'line' || st.rhythm === 'phrase' || st.rhythm === 'count' || (!st.rhythm && max > 3);
+    if (slow) push([{ op: 'set_caption_style', style: { rhythm: 'punch', maxWords: Math.min(3, max) }, explain: 'Legendas em blocos curtos, no ritmo da fala' }], () => 'legendas em blocos curtos (até 3 palavras), no ritmo da fala');
+  }
+
+  // 3) sem modelo: tomadas longas (média > 4 s) viram tomadas de ~2,5 s, cortadas nos respiros da fala
+  const spec = motionSpecOf(style);
+  if (!tpl) {
+    const shots = mainVideoClips(p).filter((c) => !c.locked);
+    const avg = shots.length ? shots.reduce((n, c) => n + c.duration, 0) / shots.length : 0;
+    if (avg > 4) push(rhythmSplitOps(p, [2.5], 30), (e) => `${e.length} corte${e.length > 1 ? 's' : ''} a mais (tomadas de ~2,5 s, nos respiros da fala)`);
+  }
+
+  // 4) tomada parada ganha movimento suave (o do modelo, se houver; modelo parado = fica parado)
+  const still = mainVideoClips(p).filter((c) => !c.locked && !(c.keyframes ?? []).some((k) => typeof k.transform.scale === 'number' || typeof k.transform.x === 'number'));
+  if (still.length && hasMotion(spec)) {
+    const name = spec.mode === 'punch' ? 'zoom em pancada (como no modelo)' : spec.mode === 'pan' ? 'movimento lateral suave' : 'aproximação suave';
+    push(shotMotionOps(p, spec, new Set(still.map((c) => c.id))), (e) => `${name} em ${e.length} tomada${e.length > 1 ? 's' : ''} que estava${e.length > 1 ? 'm' : ''} parada${e.length > 1 ? 's' : ''}`);
+  }
+
+  // 5) transições: só as do modelo, nos cortes que ainda não têm
+  const tr = style && tpl ? templateTransition(style) : undefined;
+  if (tr) {
+    const every = Math.max(1, Math.round(1 / Math.max(0.05, tr.frequency)));
+    const clips = mainVideoClips(p).filter((c) => !c.locked).slice(1);
+    push(clips.filter((c, i) => (i + 1) % every === 0 && !c.transitionIn).map((c) => ({ op: 'update_clip' as const, clipId: c.id, patch: { transitionIn: { kind: tr.kind, duration: r3(Math.min(tr.duration, c.duration / 2)) } }, explain: `Transição do modelo em ${fmt(c.start)}` })), (e) => `${e.length} transiç${e.length > 1 ? 'ões' : 'ão'} do modelo`);
+  }
+
+  if (!ops.length) {
+    said.push(`já está no ritmo mais dinâmico que dá sem pancada${tpl ? ' e sem fugir do modelo' : ''}: não sobrou respiro para apertar, ${p.captions.segments.length ? 'as legendas já vão em blocos curtos e ' : ''}todas as tomadas já têm movimento. Para ir além, diga “zoom punch” (pancada) ou “acelera 1.1x”`);
+  }
+  return { ops, said };
+}
+
 /* ---------- comandos do chat (modo demo) ---------- */
 
 export interface ChatContext {
@@ -850,6 +999,8 @@ export function silenceOptsFromText(text: string): SilenceOptions | undefined {
     if (v > 0) out.minSilence = Math.max(0.15, Math.min(5, v));
   } else if (/agressiv|toda(s)? (as )?pausa|ate as (pequenas|curtas)|bem colad|maximo|tudo que (for|e) pausa/.test(t)) out.minSilence = 0.3;
   else if (/so (as )?(pausas? )?(longas|grandes)|leve|suave|so o (que|tempo) morto|pausas? (longas|grandes)/.test(t)) out.minSilence = 1;
+  // "mais dinâmico" sem palavras da fala: corta também as pausas médias (as ≥ 0,55 s já saíram na 1ª edição)
+  else if (/dinamic|mais ritmo|mais energia/.test(t)) out.minSilence = 0.35;
   if (/sem respiro|colad|bem justo|apertad/.test(t)) out.pad = 0.05;
   else if (/natural|com respiro|respira/.test(t)) out.pad = 0.2;
   return Object.keys(out).length ? out : undefined;
@@ -955,7 +1106,7 @@ export function chatIntent(text: string, ctx: ChatContext): DemoResult {
     if (ctx.silencesByAsset) {
       const { ops: cut, removed } = silenceCutOps(p, ctx.silencesByAsset);
       if (cut.length) push(cut, `cortei ${cut.length} pausa${cut.length > 1 ? 's' : ''} (${removed.toFixed(1)} s)`);
-      else said.push('não encontrei pausas para cortar');
+      else said.push(pausesAlreadyCut(ctx.silencesByAsset) ? PAUSES_ALREADY_CUT : 'não encontrei pausas longas na fala para cortar (para apertar até as curtas, diga “corta todas as pausas”)');
     }
   }
 
@@ -1188,15 +1339,11 @@ export function chatIntent(text: string, ctx: ChatContext): DemoResult {
     said.push('traduzir legendas precisa da IA (Claude) — configure a ANTHROPIC_API_KEY no servidor');
   }
 
-  // --- mais dinâmico (combo)
+  // --- mais dinâmico (combo): só o que MUDA de verdade, suave, respeitando o modelo; nada a fazer = diz isso
   if (/dinamic|mais energia|mais ritmo|mais rapido e|prender (a )?atencao/.test(t) && !ops.some((o) => o.op === 'ripple_delete')) {
-    if (ctx.silencesByAsset) {
-      const tight: Record<Id, Range[]> = ctx.silencesByAsset;
-      const { ops: cut, removed } = silenceCutOps(p, tight);
-      if (cut.length) push(cut, `cortei ${cut.length} pausas (${removed.toFixed(1)} s)`);
-    }
-    if (!ops.some((o) => o.op === 'update_clip' && 'keyframes' in (o.patch ?? {}))) push(zoomOps(p, true), 'zoom suave nas tomadas');
-    if (p.captions.segments.length) push([{ op: 'set_caption_style', style: captionLookFrom('tiktok')!.style, explain: 'Legendas rápidas estilo TikTok' }], 'legendas rápidas');
+    const d = dynamicOps(p, ctx.silencesByAsset);
+    push(d.ops);
+    said.push(...d.said);
   }
 
   // "coloque legenda" com as legendas já ligadas: responde em vez de "não entendi"
