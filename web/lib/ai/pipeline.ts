@@ -712,9 +712,10 @@ async function localFeature(text: string, apply: NonNullable<PipelineOptions['ap
   };
 
   // pôr/trocar música sem arquivo do usuário → catálogo de músicas geradas por código
-  const musicReq = chatMusicRequest(text);
+  const curMusic = backgroundMusicClips(store().project, store().assets);
+  const musicReq = chatMusicRequest(text, curMusic.length > 0);
   if (musicReq && !userMusic(store().assets).length) {
-    const cur = backgroundMusicClips(store().project, store().assets);
+    const cur = curMusic;
     const exclude = (await Promise.all(cur.map((c) => catalogIdOf(c.type === 'audio' ? store().assets[c.assetId] : undefined)))).filter((x): x is string => !!x);
     const removeOps: EditOp[] = cur.map((c) => ({ op: 'remove_clip', clipId: c.id, explain: 'Tirando a música anterior' }));
     const sim = removeOps.length ? applyOps(store().project, removeOps).project : store().project;

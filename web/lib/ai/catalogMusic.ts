@@ -14,11 +14,21 @@ export function asksForMusic(text: string): boolean {
   return /musica|trilha|som de fundo|musiquinha|\bbgm\b/.test(t) && !/sem (musica|trilha)/.test(t);
 }
 
-/** no chat: pedido direto para pôr/trocar música ("coloca uma música calma", "troca a música") */
-export function chatMusicRequest(text: string): 'add' | 'swap' | null {
+/** ajuste da trilha que já está lá (volume, trecho, fade, tirar) — não é pedido de outra faixa */
+const MUSIC_ADJUST = /volume|abaix|aument|diminu|(mais|menos) (alt|baix|fort|frac|suave)|\balt[ao]\b|\bbaix[ao]\b|fade|\bmute|\bmudo\b|\bsobe|\bdesce|comec|inicio|\bfinal\b|\bfim\b|\bcort|\btir[ae]\b|remov|apag|\d/;
+
+/**
+ * no chat: pedido direto para pôr/trocar música ("coloca uma música calma", "troca a música").
+ * Com música já na timeline (`hasMusic`), ajuste dela ("quero a música mais baixa", "muda o volume da
+ * música") NÃO é troca: devolve null e o pedido segue para o Claude/demo, que mexem na trilha atual.
+ */
+export function chatMusicRequest(text: string, hasMusic = false): 'add' | 'swap' | null {
   const t = fold(text);
   if (!asksForMusic(t)) return null;
-  if (/(troc|mud|outra|substitu)\w*.{0,25}(musica|trilha)|(musica|trilha).{0,20}(outra|diferente)/.test(t)) return 'swap';
+  const adjust = MUSIC_ADJUST.test(t);
+  if (/(troc|substitu)\w*.{0,25}(musica|trilha)|(outra|nova|diferente) (musica|trilha)|(musica|trilha).{0,20}(outra|diferente)/.test(t)) return 'swap';
+  if (/\bmud\w*.{0,25}(musica|trilha)/.test(t) && !adjust) return 'swap';
+  if (hasMusic && adjust) return null;
   if (/(coloc|adicion|poe|ponha|bota|insir|insere|quero|inclu|acrescent|met[ea]|usa|use)\w*.{0,40}(musica|trilha|som de fundo|musiquinha)/.test(t)) return 'add';
   return null;
 }
