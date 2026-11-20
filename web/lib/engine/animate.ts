@@ -199,6 +199,23 @@ export function hasVolumeKeyframes(clip: Clip): boolean {
 }
 
 /**
+ * Alguma prop animada está MUDANDO em `tLocal` (entre o 1º e o último keyframe de uma trilha com
+ * valores diferentes)? Fora disso o valor fica parado — caches por valor (bitmap de texto) voltam a servir.
+ * `prefix` limita aos caminhos que começam por ele (ex.: 'style.').
+ */
+export function propsChangingAt(clip: Clip, tLocal: number, prefix = ''): boolean {
+  const plan = planOf((clip as { keyframes?: Keyframe[] }).keyframes);
+  if (!plan) return false;
+  for (const tr of plan.tracks) {
+    if (prefix && !(tr.path.join('.') + '.').startsWith(prefix)) continue;
+    const k = tr.keys;
+    if (k.length < 2 || tLocal <= k[0].t || tLocal >= k[k.length - 1].t) continue;
+    if (k.some((x) => x.v !== k[0].v)) return true;
+  }
+  return false;
+}
+
+/**
  * Clipe com as props animadas resolvidas no tempo local `tLocal` (segundos desde o início do clipe).
  * Sem props: devolve o mesmo objeto. Caminho inválido: ignorado.
  */
