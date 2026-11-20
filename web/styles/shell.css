@@ -649,6 +649,8 @@
   .ep-aicursor-click { animation-duration:.3s; }
 }
 .ep-root:has(.ep-modal-bg) .ep-aicursor-layer { display:none; } /* modais ficam por cima */
+/* celular: Exportar/Configurações (z 100) não podem ficar por baixo do botão/pílula da IA (z 112) nem da barra inferior (z 115) */
+html:has(.ep-modal-bg) :is(.ep-aifab2, .ep-aibadge-slot, .ep-mtools) { visibility:hidden; }
 .ep-aicursor.up .ep-aicursor-tag { top:auto; bottom:6px; }
 .ep-aicursor.up .ep-aicursor-bubble { top:auto; bottom:30px; }
 .ep-dz-extra { display:inline-flex; align-items:center; gap:6px; min-height:44px; margin:2px 14px 12px; padding:0 14px; border:0; border-radius:999px; background:var(--card); color:var(--ink); font:inherit; font-size:13px; font-weight:700; cursor:pointer; }
