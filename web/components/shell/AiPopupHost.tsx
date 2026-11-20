@@ -39,6 +39,13 @@ export default function AiPopupHost({ mode, setMode, onOpenChat, fabHidden, focu
     }, 1400); // deixa o "Pronto!" aparecer
     return () => clearTimeout(t);
   }, [active]);
+  /* minimizado e parado: a pílula "IA: N edições feitas" some depois de alguns segundos (o ✦ continua
+     reabrindo o resumo/desfazer). Antes ficava para sempre sobre o topo do vídeo, cobrindo título/legenda. */
+  useEffect(() => {
+    if (mode !== 'min' || active) return;
+    const t = setTimeout(() => { if (latest.current.mode === 'min') latest.current.setMode('closed'); }, 5000);
+    return () => clearTimeout(t);
+  }, [mode, active]);
   const showFab = !fabHidden && mode !== 'open';
   return (
     <>

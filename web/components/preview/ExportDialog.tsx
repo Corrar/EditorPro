@@ -115,7 +115,7 @@ export default function ExportDialog({ onClose, initial }: { onClose: () => void
       setPhase('done');
       const w = warnsRef.current;
       if (w.length) emit('ep:toast', { text: `${kind === 'video' ? 'Vídeo' : 'Áudio'} exportado, com aviso: ${w.slice(0, 2).join(' · ')}`, kind: 'info' });
-      else emit('ep:toast', { text: kind === 'video' ? 'Vídeo exportado! Clique em Baixar.' : 'Áudio exportado! Clique em Baixar.', kind: 'ok' });
+      else { const verb = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches ? 'Toque' : 'Clique'; emit('ep:toast', { text: `${kind === 'video' ? 'Vídeo' : 'Áudio'} exportado! ${verb} em Baixar.`, kind: 'ok' }); }
     } catch (e) {
       if ((e as Error)?.name === 'AbortError') { setPhase('idle'); setStage(''); setProgress(0); return; }
       console.error('[export]', e);

@@ -297,3 +297,22 @@
 @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
 /* menu ⋯ do preview aberto: esconde a pílula flutuante da IA que ficaria por cima dele */
 html[data-pv-menu] .ep-aibadge-slot { visibility:hidden; }
+
+/* celular estreito: as 3 velocidades numa linha só (antes "Máxima qualidade" caía sozinha numa 2ª linha) */
+@media (max-width: 480px) {
+  .ep-ex-seg[aria-label="Velocidade da exportação"] { display:flex; flex-wrap:nowrap; width:100%; }
+  .ep-ex-seg[aria-label="Velocidade da exportação"] button { flex:1 1 0; min-width:0; padding:4px 8px; line-height:1.15; white-space:normal; }
+}
+
+/* palco estreito no layout lado a lado (ex.: celular deitado 915×412 → palco ~420px): a barra de reprodução
+   passava da coluna e Visualização / Exportar / Tela cheia ficavam escondidos sob a timeline.
+   Sai o que já existe em outro lugar (início, quadro a quadro, Exportar do topo) e a barra cabe. */
+@media (min-width: 900px) {
+  @container (max-width: 560px) {
+    .ep-pv-controls .ep-pv-rew, .ep-pv-controls .ep-pv-exp,
+    .ep-pv-controls > [aria-label="Quadro anterior"], .ep-pv-controls > [aria-label="Próximo quadro"] { display:none; }
+    .ep-pv-controls .ep-pv-scrub { min-width:24px; }
+    .ep-pv-controls .ep-pv-tools { gap:4px; }
+    .ep-pv-controls .ep-pv-time { font-size:12px; }
+  }
+}

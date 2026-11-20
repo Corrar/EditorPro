@@ -103,7 +103,7 @@ export default function MobileToolbar({ onTool, onAi, onMenu, tool, toolOpen }: 
     ...(colorOk ? [{ id: 'color', label: 'Cor', icon: 'filters' as IconName, run: () => openPanel('color'), on: isOn('color') }] : []),
     { id: 'stickers', label: 'Stickers', icon: 'stickers', run: () => openPanel('stickers'), on: isOn('stickers') },
     { id: 'templates', label: 'Modelos', icon: 'templates', run: () => openPanel('templates'), on: isOn('templates'), tag: 'Novo' },
-    { id: 'gen', label: 'Gerar com IA', icon: 'ai', run: () => openPanel('media'), on: isOn('media'), tag: 'IA' },
+    { id: 'gen', label: 'Gerar com IA', icon: 'ai', run: () => { openPanel('media'); /* a seção "Gerar com IA" fica no fim da Mídia: rola até ela */ setTimeout(() => document.querySelector('.ep-side .ep-gen')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 350); }, on: isOn('media'), tag: 'IA' },
     { id: 'format', label: 'Proporção', icon: 'formats', run: () => openPanel('canvas'), on: isOn('canvas') },
     { id: 'bg', label: 'Fundo', icon: 'background', run: () => openPanel('canvas') },
     { id: 'transitions', label: 'Transições', icon: 'transitions', run: () => openPanel('transitions'), on: isOn('transitions') },
