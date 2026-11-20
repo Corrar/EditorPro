@@ -164,18 +164,34 @@ export function smoothKeyframes(kfs: Keyframe[], clipDuration: number): Keyframe
   for (let j = 1; j < idx.length; j++) {
     const a = out[idx[j - 1]], c = out[idx[j]];
     const ds = Math.abs((c.transform.scale as number) - (a.transform.scale as number));
-    if (ds < 1e-4) continue;
-    const span = c.t - a.t;
-    const need = Math.max(0.4, MIN_ZOOM_RAMP * Math.min(1, ds / 0.06), ds / MAX_SMOOTH_SCALE_RATE);
-    if (span >= need - 1e-6) { c.easing ??= 'easeInOut'; continue; }
+    // x no MESMO par de keyframes anda junto com a escala: a borda anda W/2·Δs + W·Δx (= W/2·(Δs + 2Δx))
+    const both = typeof a.transform.x === 'number' && typeof c.transform.x === 'number';
+    const dx = both ? Math.abs((c.transform.x as number) - (a.transform.x as number)) : 0;
+    const dEq = ds + 2 * dx;
+    if (dEq < 1e-4) continue;
+    const need = Math.max(0.4, MIN_ZOOM_RAMP * Math.min(1, dEq / 0.06), dEq / MAX_SMOOTH_SCALE_RATE);
+    if (c.t - a.t >= need - 1e-6) { c.easing ??= 'easeInOut'; continue; }
     const next = j + 1 < idx.length ? out[idx[j + 1]].t - 0.05 : clipDuration;
     const target = Math.min(a.t + need, next, clipDuration);
     if (target > c.t) {
-      // keyframe só de escala: anda; com outras props, o trecho mantém o tempo e só ganha easing
-      const onlyScale = !c.props && Object.keys(c.transform).every((key) => key === 'scale');
-      if (onlyScale) c.t = r3(target);
+      // keyframe só de câmera (escala/posição/giro): anda; com outras props, o trecho mantém o tempo
+      const onlyCamera = !c.props && Object.keys(c.transform).every((key) => key === 'scale' || key === 'x' || key === 'y' || key === 'rotation');
+      if (onlyCamera) c.t = r3(target);
     }
     c.easing = 'easeInOut';
+    // não deu para esticar (fim do clipe, próximo keyframe, outras props): encurta a variação
+    // para caber em ≤ MAX_SMOOTH_SCALE_RATE/s (≤8 px/quadro) em vez de deixar o tranco
+    const span = c.t - a.t;
+    const maxEq = MAX_SMOOTH_SCALE_RATE * Math.max(0, span);
+    if (dEq > maxEq + 1e-6) {
+      const k = maxEq / dEq;
+      const s0 = a.transform.scale as number;
+      c.transform.scale = r3(s0 + ((c.transform.scale as number) - s0) * k);
+      if (both) {
+        const x0 = a.transform.x as number;
+        c.transform.x = r3(x0 + ((c.transform.x as number) - x0) * k);
+      }
+    }
   }
   return out.sort((a, b) => a.t - b.t);
 }

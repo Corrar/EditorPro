@@ -144,7 +144,13 @@ describe('#5 zoom e reenquadramento não apagam os keyframes um do outro', () =>
     expect(kf.filter((k) => k.transform.scale !== undefined)).toHaveLength(2);
     const off = removeZoomOps(r.project);
     const p2 = applyOps(r.project, off).project;
-    expect((p2.tracks[0].clips[0] as VideoClip).keyframes!.map((k) => k.transform)).toEqual([{ x: 0.3 }, { x: -0.2 }]);
+    // o x fica; a escala vai parada em 1 (num keyframe só: o validador troca a propriedade inteira)
+    const kf2 = (p2.tracks[0].clips[0] as VideoClip).keyframes!;
+    expect(kf2.map((k) => k.transform.x)).toEqual([0.3, -0.2]);
+    expect(kf2.map((k) => k.transform.scale).filter((v) => v !== undefined)).toEqual([1]);
+    // e passando pelo validador (caminho real do chat) o zoom também sai
+    const p3 = sanitizeOps(off, r.project, assets).project;
+    expect((p3.tracks[0].clips[0] as VideoClip).keyframes!.map((k) => k.transform.scale).filter((v) => v !== undefined)).toEqual([1]);
   });
 });
 

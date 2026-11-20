@@ -364,6 +364,19 @@ export function mergeKfProps(existing: Keyframe[] | undefined, incoming: Keyfram
   return out;
 }
 
+/**
+ * Keyframes para mandar num update_clip que TIRA a animação de `props` (ex.: o zoom) e mantém o resto.
+ * O validador mescla keyframes por propriedade (só troca as que vêm no patch), então mandar só os que
+ * sobraram (ex.: o x do reenquadramento) deixava o zoom antigo de volta. Aqui a propriedade vai junto,
+ * parada no valor base, num único keyframe. Sem nada sobrando: [] (limpa tudo).
+ */
+export function kfWithout(existing: Keyframe[] | undefined, props: (keyof Keyframe['transform'])[], base: Partial<Keyframe['transform']> = {}): Keyframe[] {
+  const kept = mergeKfProps(existing, [], props as string[]);
+  if (!kept.length) return [];
+  const fixed = Object.fromEntries(props.map((k) => [k, base[k] ?? (k === 'scale' || k === 'opacity' ? 1 : 0)]));
+  return [{ ...kept[0], transform: { ...kept[0].transform, ...fixed } }, ...kept.slice(1)];
+}
+
 /** suaviza a trajetória do assunto (média móvel + zona morta p/ não "tremer") */
 export function smoothTrack(points: { t: number; x: number }[], window = 2, deadZone = 0.04): { t: number; x: number }[] {
   const sm = points.map((p, i) => {

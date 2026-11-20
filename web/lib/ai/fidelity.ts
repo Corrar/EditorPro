@@ -146,6 +146,18 @@ export function fidelityOf(p: Project, style: StyleProfile, resultColor?: { r: n
     const magS = clamp01(1 - Math.abs(Math.log(Math.log(Math.max(1.001, peak)) / Math.max(0.05, refMag))) / Math.log(3));
     scores.movimento = r2(0.7 * rateScore + 0.3 * magS);
     if (scores.movimento < FIDELITY_MIN) deltas.movimento = `${fmt(rate * 10)} pancadas por 10 s (modelo: ${fmt(refRate * 10)}), zoom máx. ${pct(peak - 1)}`;
+  } else if (spec.mode === 'pan') {
+    // movimento lateral: a escala fica parada (zoom fixo p/ não mostrar borda) — conta a deriva em x
+    const pans = clips.filter((c) => {
+      const kf = c.keyframes?.filter((k) => typeof k.transform.x === 'number') ?? [];
+      if (kf.length < 2) return false;
+      const a = interpolateTransform(c.transform, kf, 0).x, b = interpolateTransform(c.transform, kf, c.duration).x;
+      return Math.abs(b - a) > 0.01;
+    });
+    const share = pans.length / clips.length;
+    const smooth = pans.length ? pans.filter((c) => edgePxPerFrame(c.keyframes as Keyframe[], c.duration) <= 8.5).length / pans.length : 0;
+    scores.movimento = r2(0.6 * share + 0.4 * smooth);
+    if (scores.movimento < FIDELITY_MIN) deltas.movimento = `${pans.length}/${clips.length} tomadas com movimento lateral (modelo: em todas)`;
   } else {
     const share = moving.length / clips.length;
     const mag = median(moving.map((m) => Math.abs(Math.log(m.zoomTotal))));
