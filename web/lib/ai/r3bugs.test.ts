@@ -7,6 +7,8 @@ import type { MediaAsset, Project } from '../types';
 import { runSandboxed } from './script/sandbox';
 import { runScript, scriptInput, workerSource } from './script/run';
 import { finalizeClaude } from './finalize';
+import { EditResponseSchema } from './schemas';
+import { sanitizeOps } from './validate';
 import { useEditor } from '../store';
 
 const src: MediaAsset = { id: 'a1', kind: 'video', role: 'source', name: 'b.mp4', mime: 'video/mp4', size: 1, duration: 20 };
@@ -83,6 +85,16 @@ describe('run_script: o Worker não deixa o script sair para a rede', () => {
     const fake = { onmessage: null as ((ev: MessageEvent) => void) | null, onerror: null, terminate() {}, postMessage() { setTimeout(() => this.onmessage?.({ data: { hello: 1 } } as MessageEvent), 0); } };
     const r = await runScript('return []', base(), assets, { makeWorker: () => fake });
     expect('error' in r && r.error).toMatch(/inválida/);
+  });
+});
+
+describe('add_graphic: campos do prompt existem no schema da saída estruturada', () => {
+  it('keyframes do gráfico (prompt: "add_graphic {…, keyframes?}") não somem no parse do schema', () => {
+    const kf = [{ t: 0, transform: { scale: 0.2 }, easing: 'easeOut' }, { t: 1, transform: { scale: 0.4 }, easing: 'easeOut' }];
+    const raw = EditResponseSchema.parse({ reply: 'ok', ops: [{ op: 'add_graphic', explain: 'Selo', svg: '<svg viewBox="0 0 10 10"/>', name: 'Selo', start: 0, duration: 2, keyframes: kf }] });
+    expect((raw.ops[0] as Record<string, unknown>).keyframes).toEqual(kf);
+    const d = sanitizeOps(raw.ops, base(), assets).deferred[0];
+    expect(d.kind === 'graphic' && d.clip.keyframes).toEqual(kf);
   });
 });
 

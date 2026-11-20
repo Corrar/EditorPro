@@ -184,6 +184,7 @@ export const EditOpSchema = z.object({
   name: z.string().optional().describe('add_graphic: nome do gráfico'),
   assetId: z.string().optional().describe('update_graphic: id do gráfico'),
   transform: transform.optional().describe('add_graphic: posição/escala'),
+  keyframes: z.array(keyframe).optional().describe('add_graphic: animação do gráfico (t relativo ao início dele)'),
   animationIn: clipAnim.optional(),
   animationOut: clipAnim.optional(),
   animationLoop: clipAnim.optional(),
