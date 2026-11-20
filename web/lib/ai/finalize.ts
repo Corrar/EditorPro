@@ -9,7 +9,7 @@
    Puro o bastante para testar: request/runScript/gráficos são injetáveis.
    ===================================================================== */
 import type { ChatContext, ChatMessage, Id, MediaAsset, Project } from '../types';
-import type { EditOp } from '../ops';
+import { applyOps, type EditOp } from '../ops';
 import { uid } from '../util';
 import type { EditRequest, EditResponse } from './client';
 import type { SfxRequest } from './library';
@@ -157,6 +157,26 @@ async function materialize(res: EditResponse, base: Project, o: FinalizeOptions)
       continue;
     }
     if (d.kind === 'update_graphic') {
+      // gráfico em uso: desenha um asset NOVO e troca o assetId dos clipes por ops — entra no desfazer,
+      // o Parar descarta e o gráfico antigo fica intacto (re-rasterizar no lugar não tinha volta)
+      const users = sim.tracks.flatMap((t) => t.clips.filter((c) => c.type === 'image' && c.assetId === d.assetId).map((c) => ({ c, t })));
+      if (users.length && o.createGraphic) {
+        o.onStatus?.('Redesenhando o gráfico…');
+        try {
+          const old = o.getAssets()[d.assetId];
+          const asset = await o.createGraphic(d.svg, (old?.name ?? 'Gráfico').replace(/\.png$/i, ''), sim);
+          const swap: EditOp[] = [];
+          for (const { c, t } of users) {
+            if (t.locked || c.locked) { errors.push(`update_graphic: o clipe ${c.id} está travado — peça para o usuário destravar`); continue; }
+            swap.push({ op: 'update_clip', id: uid('op'), clipId: c.id, patch: { assetId: asset.id }, explain: d.explain ?? 'Redesenhando o gráfico' });
+          }
+          sim = applyOps(sim, swap).project;
+          ops.push(...swap);
+        } catch (e) {
+          errors.push(`update_graphic ${d.assetId} falhou: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        continue;
+      }
       if (!o.updateGraphic) { errors.push('update_graphic indisponível neste aparelho'); continue; }
       o.onStatus?.('Redesenhando o gráfico…');
       try { await o.updateGraphic(d.assetId, d.svg, sim); } catch (e) { errors.push(`update_graphic ${d.assetId} falhou: ${e instanceof Error ? e.message : String(e)}`); }

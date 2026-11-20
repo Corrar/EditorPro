@@ -81,14 +81,17 @@ export function summarizeProject(
     ...(s.words?.some((w) => w.id) ? { words: s.words.map((w) => `[${w.id ?? '?'} ${w.start.toFixed(2)}-${w.end.toFixed(2)}] ${w.text}`).join(' ') } : {}),
   }));
   const { fontFamily: _f, ...capStyle } = p.captions.style;
+  const inUse = new Set(p.tracks.flatMap((t) => t.clips.map((c) => ('assetId' in c ? c.assetId : undefined))).filter(Boolean));
   return {
     project: { name: p.name, aspect: p.aspect, size: `${p.width}x${p.height}`, fps: p.fps, duration: t2(projectDuration(p)), brief: p.brief || undefined },
     assets: Object.values(assets).filter((a) => !a.library).map((a) => ({
       id: a.id, kind: a.kind, role: a.role, name: a.name, duration: t2(a.duration),
       ...(a.width && a.height ? { size: `${a.width}x${a.height}` } : {}),
       ...(a.beats?.length ? { beats: a.beats.slice(0, 200).map(t2) } : {}),
-      // gráfico por código: o SVG volta p/ o Claude poder editar (update_graphic)
-      ...(a.role === 'graphic' && a.svg ? { svg: a.svg.length <= 6000 ? a.svg : `${a.svg.slice(0, 6000)}…(cortado)` } : {}),
+      // gráfico por código: o SVG volta p/ o Claude poder editar (update_graphic) — só o que está na timeline
+      // (redesenhar cria um asset novo; a versão antiga fica só para o desfazer)
+      ...(a.role === 'graphic' && a.svg && inUse.has(a.id) ? { svg: a.svg.length <= 6000 ? a.svg : `${a.svg.slice(0, 6000)}…(cortado)` } : {}),
+      ...(a.role === 'graphic' && !inUse.has(a.id) ? { offTimeline: true } : {}),
     })),
     tracks: p.tracks.map((t) => ({
       id: t.id, kind: t.kind, name: t.name,
