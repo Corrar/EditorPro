@@ -450,10 +450,15 @@ export class LiveMediaPool implements MediaSources {
     // automação de volume (props.volume) também vai pelo GainNode: rampas suaves, sem cliques
     // iOS: volume do elemento é só leitura → qualquer ganho ≠ 1 (volume, fades, ducking) vai pelo GainNode (r2 #5)
     if (!wantsRoute({ hasCtx: !!this.actx, routed: !!r, chain: needsAudioChain(fx, pitch), volumeKf: hasVolumeKeyframes(clip), gain, volumeReadOnly: volumeIsReadOnly() })) return false;
+    let fresh = false;
     if (!r) {
       try {
         const source = this.actx!.createMediaElementSource(el);
         const g = this.actx!.createGain();
+        // GainNode nasce em 1: começa JÁ no ganho do clipe — a rampa partindo de 1 soltava ~50 ms de
+        // volume cheio (estalo) em clipe com automação/volume baixo ao entrar no corte (r3)
+        g.gain.value = Math.max(0, gain);
+        fresh = true;
         g.connect(this.actx!.destination);
         r = { source, gain: g, chain: null, key: '' };
         this.routes.set(el, r);
@@ -468,7 +473,13 @@ export class LiveMediaPool implements MediaSources {
       r.key = key;
     }
     el.volume = 1;
-    r.gain.gain.setTargetAtTime(Math.max(0, gain), this.actx!.currentTime, 0.015);
+    if (fresh) return true;
+    const now = this.actx!.currentTime, g = r.gain.gain;
+    if (el.muted) {
+      // mudo (pré-carga/vizinho/reuso por outro clipe): nada soa — salta direto p/ o ganho novo, senão ao
+      // desmutar a rampa partiria do ganho do uso anterior (estalo)
+      try { g.cancelScheduledValues(now); g.setValueAtTime(Math.max(0, gain), now); } catch { g.value = Math.max(0, gain); }
+    } else g.setTargetAtTime(Math.max(0, gain), now, 0.015);
     return true;
   }
 
