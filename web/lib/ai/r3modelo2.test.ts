@@ -6,6 +6,7 @@ import type { CaptionSegment, MediaAsset, Project, ReferenceTemplate } from '../
 import { styleFromCuts } from './demo';
 import { fidelityOf } from './fidelity';
 import { templateLengths, templateOps } from './template';
+import { resolveDuration } from './frames';
 
 const src: MediaAsset = { id: 'a1', kind: 'video', role: 'source', name: 'bruto.mp4', mime: 'video/mp4', size: 1, duration: 10, width: 1080, height: 1920 };
 const base = (dur = 10): Project => applyOps(createProject(), [{ op: 'add_clip', trackId: 'track_video_1', clip: { ...makeVideoClip({ ...src, duration: dur }, 0), id: 'c1' } }]).project;
@@ -54,5 +55,42 @@ describe('modelo sem cortes (uma tomada só)', () => {
   it('modelo curtinho de uma tomada não vira "muito rápido" (o Claude cortaria a cada 0,4 s)', () => {
     expect(styleFromCuts([], 0.4, {}, color, oneShot(0.4)).pacing).toBe('slow');
     expect(styleFromCuts([], 0.4, {}, color).pacing).toBe('slow');
+  });
+});
+
+/** <video> falso: WebM do MediaRecorder (duration = Infinity até pular para o fim) */
+function fakeWebm(real: number, opts: { never?: boolean } = {}) {
+  const ls = new Map<string, Set<() => void>>();
+  let t = 0;
+  const v = {
+    duration: Infinity as number,
+    get currentTime() { return t; },
+    set currentTime(x: number) {
+      t = opts.never ? x : Math.min(x, real);
+      setTimeout(() => {
+        if (!opts.never && x > real) { v.duration = real; ls.get('durationchange')?.forEach((f) => f()); }
+        ls.get('seeked')?.forEach((f) => f());
+      }, 1);
+    },
+    addEventListener: (e: string, f: () => void) => { if (!ls.has(e)) ls.set(e, new Set()); ls.get(e)!.add(f); },
+    removeEventListener: (e: string, f: () => void) => { ls.get(e)?.delete(f); },
+  };
+  return v;
+}
+
+describe('WebM gravado no navegador (sem duração)', () => {
+  it('acha a duração de verdade e volta ao começo (antes: duração 0 → "Não consegui ler o vídeo-exemplo")', async () => {
+    const v = fakeWebm(5.967);
+    expect(await resolveDuration(v as never, 500)).toBeCloseTo(5.967, 3);
+    expect(v.currentTime).toBe(0);
+  });
+  it('duração normal: não mexe no vídeo', async () => {
+    const v = fakeWebm(3);
+    v.duration = 3;
+    expect(await resolveDuration(v as never, 500)).toBe(3);
+  });
+  it('navegador que nunca acha o fim: desiste no prazo com 0 (não trava)', async () => {
+    const v = fakeWebm(3, { never: true });
+    expect(await resolveDuration(v as never, 50)).toBe(0);
   });
 });

@@ -77,6 +77,37 @@ function waitEvent(el: HTMLMediaElement, ev: string, ms: number): Promise<void> 
   });
 }
 
+/** o que `resolveDuration` usa do <video> (testável com um objeto falso) */
+type DurationTarget = Pick<HTMLMediaElement, 'duration' | 'currentTime' | 'addEventListener' | 'removeEventListener'>;
+
+/**
+ * Duração de verdade. WebM gravado no navegador (MediaRecorder: gravação de tela, vídeo do próprio app)
+ * chega SEM duração (Infinity/NaN) — antes o modelo virava "não consegui ler" e o material não era
+ * amostrado. Truque padrão: pular para muito longe; o navegador acha o fim e corrige a duração.
+ * Volta ao começo depois. Sem resposta em `ms`, devolve 0.
+ */
+export async function resolveDuration(video: DurationTarget, ms = 8000): Promise<number> {
+  const ok = () => Number.isFinite(video.duration) && video.duration > 0;
+  if (ok()) return video.duration;
+  await new Promise<void>((resolve) => {
+    const evs = ['durationchange', 'seeked', 'timeupdate', 'loadeddata'] as const;
+    const finish = () => { clearTimeout(timer); evs.forEach((e) => video.removeEventListener(e, check)); resolve(); };
+    const check = () => { if (ok()) finish(); };
+    const timer = setTimeout(finish, ms);
+    evs.forEach((e) => video.addEventListener(e, check));
+    try { video.currentTime = 1e101; } catch { finish(); }
+  });
+  const d = ok() ? video.duration : 0;
+  // volta ao começo e espera o seek terminar (um 'seeked' atrasado enganaria o 1º quadro amostrado)
+  await new Promise<void>((resolve) => {
+    const finish = () => { clearTimeout(timer); video.removeEventListener('seeked', finish); resolve(); };
+    const timer = setTimeout(finish, 3000);
+    video.addEventListener('seeked', finish);
+    try { video.currentTime = 0; } catch { finish(); }
+  });
+  return d;
+}
+
 function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
@@ -138,7 +169,7 @@ export async function sampleVideo(url: string, opts: SampleOptions = {}): Promis
     if (video.readyState < 2) await waitEvent(video, 'loadeddata', 15000).catch(() => {});
     // Safari iOS às vezes só decodifica quadros depois de um play()
     try { await video.play(); video.pause(); } catch { /* autoplay bloqueado: seek ainda funciona */ }
-    const duration = Math.min(Number.isFinite(video.duration) ? video.duration : 0, opts.maxDuration ?? 120);
+    const duration = Math.min(await resolveDuration(video), opts.maxDuration ?? 120);
     const W = video.videoWidth || 16, H = video.videoHeight || 9;
     const scale = Math.min(1, maxSide / Math.max(W, H));
     const big = document.createElement('canvas');
@@ -251,7 +282,7 @@ export async function sampleMotionFrames(url: string, opts: { maxDuration?: numb
   try {
     await waitEvent(video, 'loadedmetadata', 15000);
     if (video.readyState < 2) await waitEvent(video, 'loadeddata', 15000).catch(() => {});
-    const duration = Math.min(Number.isFinite(video.duration) ? video.duration : 0, opts.maxDuration ?? (dev.weak ? 30 : 60));
+    const duration = Math.min(await resolveDuration(video), opts.maxDuration ?? (dev.weak ? 30 : 60));
     const W0 = video.videoWidth || 16, H0 = video.videoHeight || 9;
     const sc = maxSide / Math.max(W0, H0);
     const w = Math.max(8, Math.round(W0 * sc)), h = Math.max(8, Math.round(H0 * sc));
