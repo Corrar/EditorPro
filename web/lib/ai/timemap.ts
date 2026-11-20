@@ -58,19 +58,24 @@ export function captionsMediaToTimeline(p: Project, assetId: Id, segs: CaptionSe
     const order: Id[] = [];
     for (const w of words) {
       const mid = (w.start + w.end) / 2;
-      const hit = mediaToTimeline(clips, mid);
-      if (!hit) continue;
-      const c = clips.find((x) => x.id === hit.clipId)!;
-      const cEnd = c.start + c.duration;
-      const [ca, cb] = sourceRangeOf(c);
-      // inverso da curva de velocidade (antes: velocidade constante → até 14,6 s de deriva com "montagem")
-      const ta = timelineTimeForSource(c, Math.min(cb, Math.max(ca, w.start)))!;
-      const tb = timelineTimeForSource(c, Math.min(cb, Math.max(ca, w.end)))!;
-      const ws = Math.max(c.start, Math.min(ta, tb));
-      const we = Math.min(cEnd, Math.max(ta, tb));
-      if (we - ws < 0.01) continue;
-      if (!groups.has(hit.clipId)) { groups.set(hit.clipId, []); order.push(hit.clipId); }
-      groups.get(hit.clipId)!.push({ start: r3(ws), end: r3(we), text: w.text });
+      // TODOS os clipes que mostram essa fala (clipe duplicado, trecho repetido): antes só o 1º ganhava legenda.
+      // O mesmo instante da timeline não repete (vídeo + áudio vinculado da mesma mídia): vídeo vem 1º em `clips`.
+      const placed: { start: Seconds; end: Seconds }[] = [];
+      for (const c of clips) {
+        if (timelineTimeForSource(c, mid) === null) continue;
+        const cEnd = c.start + c.duration;
+        const [ca, cb] = sourceRangeOf(c);
+        // inverso da curva de velocidade (antes: velocidade constante → até 14,6 s de deriva com "montagem")
+        const ta = timelineTimeForSource(c, Math.min(cb, Math.max(ca, w.start)))!;
+        const tb = timelineTimeForSource(c, Math.min(cb, Math.max(ca, w.end)))!;
+        const ws = Math.max(c.start, Math.min(ta, tb));
+        const we = Math.min(cEnd, Math.max(ta, tb));
+        if (we - ws < 0.01) continue;
+        if (placed.some((x) => ws < x.end && we > x.start)) continue;
+        placed.push({ start: ws, end: we });
+        if (!groups.has(c.id)) { groups.set(c.id, []); order.push(c.id); }
+        groups.get(c.id)!.push({ start: r3(ws), end: r3(we), text: w.text });
+      }
     }
     order.forEach((cid, i) => {
       const ws = groups.get(cid)!.sort((a, b) => a.start - b.start);
@@ -82,6 +87,7 @@ export function captionsMediaToTimeline(p: Project, assetId: Id, segs: CaptionSe
         text,
         words: s.words?.length ? ws : undefined,
         ...(s.emphasis?.length ? { emphasis: s.emphasis } : {}),
+        assetId, // a legenda acompanha os clipes desta mídia (ops.retimeCaptions)
       });
     });
   }

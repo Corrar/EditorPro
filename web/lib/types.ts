@@ -511,6 +511,9 @@ export interface CaptionSegment {
   words?: CaptionWord[];
   /** palavras para destacar (ênfase) */
   emphasis?: string[];
+  /** (aditivo, legendas) mídia de onde a fala foi transcrita: a legenda acompanha os clipes DESSA mídia
+   *  (narração em áudio + b-roll em vídeo: mexer no b-roll não arrasta a legenda) */
+  assetId?: Id;
 }
 
 /** presets embutidos + ids da biblioteca (web/lib/library/captions) */

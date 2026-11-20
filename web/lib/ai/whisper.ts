@@ -317,7 +317,20 @@ export function chunksToCaptions(chunks: WhisperChunk[], runs: Range[] | undefin
 export async function transcribeMedia(asset: MediaAsset, opts: TranscribeOptions = {}): Promise<CaptionSegment[]> {
   if (!asset.url) throw new Error(`A mídia "${asset.name}" não está carregada.`);
   opts.onStatus?.('Lendo o áudio…');
-  const audio = await toMono16k(await decodeAudio(asset.url));
+  let decoded: AudioBuffer;
+  try {
+    decoded = await decodeAudio(asset.url);
+  } catch (e) {
+    // vídeo SEM faixa de áudio (gravação de tela, b-roll, stock): o navegador recusa com EncodingError.
+    // É "sem fala", não falha — antes a transcrição inteira caía (até a fala dos outros vídeos sumia).
+    // (Safari antigo chama o callback de erro com null)
+    if (e == null || (e instanceof DOMException && (e.name === 'EncodingError' || e.name === 'NotSupportedError'))) {
+      opts.onInfo?.({ mode: 'local', label: 'sem fala' });
+      return [];
+    }
+    throw e;
+  }
+  const audio = await toMono16k(decoded);
   const total = audio.length / 16000;
   const runs = energyRuns(audio, 16000);
   if (speechSeconds(runs) < 0.4) {

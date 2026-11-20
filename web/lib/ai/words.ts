@@ -183,3 +183,22 @@ export function alignWordTimes(old: CaptionWord[], tokens: string[], newId: () =
   return out;
 }
 function range(a: number, b: number): number[] { const r: number[] = []; for (let i = a; i < b; i++) r.push(i); return r; }
+
+/** gerador de ids de palavra no padrão wNNNNN, continuando depois do maior id já usado */
+export function wordIdMaker(existing: { id?: string }[]): () => string {
+  let next = existing.reduce((m, w) => { const n = /^w(\d+)$/.exec(w.id ?? '')?.[1]; return n ? Math.max(m, +n) : m; }, 0) + 1;
+  return () => `w${String(next++).padStart(5, '0')}`;
+}
+
+/**
+ * Texto de uma legenda editado à mão (painel Legendas): as palavras continuam com os tempos REAIS da fala
+ * (alinhadas às antigas). Antes o painel apagava `words` a cada tecla: o karaokê passava a acender por
+ * tempo proporcional, o ritmo perdia as pausas e "cortar pausas" via a frase como silêncio.
+ */
+export function retextSegment(seg: { words?: CaptionWord[] }, text: string, newId: () => string): { text: string; words: CaptionWord[] | undefined } {
+  const tokens = text.split(/\s+/).filter(Boolean);
+  const old = seg.words ?? [];
+  if (!old.length || !tokens.length) return { text, words: undefined };
+  if (tokens.length === old.length) return { text, words: old.map((w, i) => ({ ...w, text: tokens[i] })) };
+  return { text, words: alignWordTimes(old, tokens, newId) };
+}

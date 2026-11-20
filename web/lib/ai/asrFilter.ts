@@ -38,7 +38,12 @@ interface W { text: string; s: number; e: number; n: string; drop: boolean }
 
 const isNumeric = (n: string) => /^\d+$/.test(n);
 
-/** (a) loops: n-grama repetido na janela, contagens em sequência */
+/**
+ * (a) loops: n-grama repetido na janela, contagens em sequência.
+ * Fala normal repete palavra de conteúdo 3× em 10 palavras ("esse bolo é o melhor bolo… o bolo da vovó",
+ * "vai, vai, vai") — antes isso apagava a janela INTEIRA (até ~19 palavras reais em volta). Agora:
+ * 1-grama só a partir de 4×, e só o trecho entre a 1ª e a última repetição some (não as palavras vizinhas).
+ */
 function markLoops(ws: W[]) {
   const N = ws.length;
   const WIN = 10;
@@ -46,9 +51,9 @@ function markLoops(ws: W[]) {
     const win = ws.slice(i, i + WIN);
     if (win.length < 6) break;
     const toks = win.map((w) => w.n);
-    let loop = false;
-    for (let n = 1; n <= 3 && !loop; n++) {
-      const count = new Map<string, number>();
+    let span: [number, number] | null = null;
+    for (let n = 1; n <= 3; n++) {
+      const seen = new Map<string, number[]>();
       for (let k = 0; k + n <= toks.length; k++) {
         const g = toks.slice(k, k + n);
         if (g.some((x) => !x)) continue;
@@ -56,15 +61,21 @@ function markLoops(ws: W[]) {
         if (n === 1 && (STOP.has(g[0]) || g[0].length < 3)) continue;
         // 2/3-grama só de palavras funcionais ("de um", "que a") também é comum
         if (n > 1 && g.every((x) => STOP.has(x))) continue;
+        // 2/3-grama de uma palavra só ("vai vai") = repetição enfática; sequência longa cai no 1-grama/disco riscado
+        if (n > 1 && g.every((x) => x === g[0])) continue;
         const key = g.join(' ');
-        const c = (count.get(key) ?? 0) + 1;
-        count.set(key, c);
-        if (c >= 3) { loop = true; break; }
+        seen.set(key, [...(seen.get(key) ?? []), k]);
+      }
+      // trecho do loop: da 1ª à última ocorrência do n-grama repetido (todos os que passam do limite)
+      for (const at of seen.values()) {
+        if (at.length < (n === 1 ? 4 : 3)) continue;
+        const a = at[0], b = at[at.length - 1] + n - 1;
+        span = span ? [Math.min(span[0], a), Math.max(span[1], b)] : [a, b];
       }
     }
     // poucas palavras distintas numa janela inteira = disco riscado
-    if (!loop && new Set(toks).size <= 3 && toks.length >= WIN) loop = true;
-    if (loop) for (const w of win) w.drop = true;
+    if (!span && new Set(toks).size <= 3 && toks.length >= WIN) span = [0, win.length - 1];
+    if (span) for (let k = span[0]; k <= span[1]; k++) win[k].drop = true;
   }
   // contagem: ≥4 números seguidos
   let run: W[] = [];

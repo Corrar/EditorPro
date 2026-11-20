@@ -288,12 +288,17 @@ export function timelineTimeForSource(c: MediaClipV, m: Seconds): Seconds | null
   return c.start + (lo + hi) / 2;
 }
 
-/** clipe que "fala" no tempo t: vídeo primeiro, depois áudio que não é trilha de fundo (duckUnderVoice) */
-function anchorClipAt(p: Project, t: Seconds): MediaClipV | null {
+/**
+ * clipe que "fala" no tempo t. Legenda transcrita (`assetId`): só clipes DESSA mídia — antes, numa narração
+ * em áudio com b-roll em vídeo, o b-roll ganhava (vídeo primeiro) e mexer nele arrastava/apagava a legenda.
+ * Sem assetId (legenda manual/antiga): vídeo primeiro, depois áudio que não é trilha de fundo (duckUnderVoice).
+ */
+function anchorClipAt(p: Project, t: Seconds, assetId?: Id): MediaClipV | null {
   let best: MediaClipV | null = null;
   let rank = 9;
   for (const tr of p.tracks) for (const c of tr.clips) {
     if ((c.type !== 'video' && c.type !== 'audio') || t < c.start - EPS || t > clipEnd(c) + EPS) continue;
+    if (assetId && c.assetId !== assetId) continue;
     const r = c.type === 'video' ? 0 : c.duckUnderVoice ? 2 : 1;
     if (r < rank) { rank = r; best = c; }
   }
@@ -339,7 +344,7 @@ export function retimeCaptions(before: Project, after: Project): Project {
   for (const s of before.captions.segments) {
     const words = s.words ?? [];
     if (!words.length) {
-      const a = anchorClipAt(before, (s.start + s.end) / 2);
+      const a = anchorClipAt(before, (s.start + s.end) / 2, s.assetId);
       const ns = mapT(s.start, a), ne = mapT(s.end, a);
       if (ns === undefined && ne === undefined) { segments.push(s); continue; }
       changed = true;
@@ -350,7 +355,7 @@ export function retimeCaptions(before: Project, after: Project): Project {
     let touched = false;
     const out: typeof words = [];
     for (const w of words) {
-      const a = anchorClipAt(before, (w.start + w.end) / 2);
+      const a = anchorClipAt(before, (w.start + w.end) / 2, s.assetId);
       const ns = mapT(w.start, a), ne = mapT(w.end, a);
       if (ns === undefined && ne === undefined) { out.push(w); continue; }
       touched = true;
@@ -610,10 +615,19 @@ function applyOpInner(p: Project, op: EditOp): Project {
       let gaps: { start: Seconds; end: Seconds }[];
       if (op.ranges?.length) gaps = op.ranges.filter((g) => g.end - g.start >= min);
       else {
-        const words = allWords(p).filter((w) => w.end > w.start).sort((x, y) => x.start - y.start);
+        // legenda sem tempo por palavra (texto corrigido à mão, "Nova legenda") conta como fala do início ao fim —
+        // antes ela ficava invisível e a fala dela era cortada como "pausa"
+        const words = p.captions.segments
+          .flatMap((s) => (s.words?.length ? s.words : s.text.trim() ? [{ start: s.start, end: s.end }] : []))
+          .filter((w) => w.end > w.start).sort((x, y) => x.start - y.start);
         gaps = [];
         if (words.length && words[0].start >= min) gaps.push({ start: 0, end: words[0].start });
-        for (let k = 1; k < words.length; k++) if (words[k].start - words[k - 1].end >= min) gaps.push({ start: words[k - 1].end, end: words[k].start });
+        // fim da fala até aqui (palavras/legendas podem se sobrepor: a pausa começa depois da que termina por último)
+        let spoken = words.length ? words[0].end : 0;
+        for (let k = 1; k < words.length; k++) {
+          if (words[k].start - spoken >= min) gaps.push({ start: spoken, end: words[k].start });
+          spoken = Math.max(spoken, words[k].end);
+        }
       }
       let out = p;
       for (const g of [...gaps].sort((x, y) => y.start - x.start)) {

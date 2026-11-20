@@ -254,6 +254,27 @@ describe('ops — cortes de fala robustos (sessão legendas §2.8)', () => {
     expect(ws.every((w) => w.end > w.start)).toBe(true);
     expect(vlen(p)).toBeCloseTo(10 - 0.68 - 1.26, 6);
   });
+  it('cut_pauses não corta a fala de uma legenda sem tempo por palavra (texto corrigido à mão / "Nova legenda")', () => {
+    let p = applyOp(createProject(), { op: 'add_clip', trackId: 'track_video_1', clip: { ...makeVideoClip(asset2, 0), id: 'c1', duration: 10 } as VideoClip });
+    p = applyOp(p, { op: 'set_captions', segments: [
+      { id: 's1', start: 0.1, end: 1.0, text: 'oi gente', words: [W('w1', 0.1, 0.5, 'oi'), W('w2', 0.55, 1.0, 'gente')] },
+      { id: 's2', start: 1.3, end: 3.6, text: 'hoje tem bolo de chocolate' }, // corrigida no painel: sem words
+      { id: 's3', start: 3.8, end: 4.6, text: 'tudo bem', words: [W('w3', 3.8, 4.2, 'tudo'), W('w4', 4.25, 4.6, 'bem')] },
+    ] });
+    const out = applyOp(p, { op: 'cut_pauses' });
+    // antes: a "pausa" 1,0→3,8 s (a fala de s2) era cortada e a legenda s2 sumia
+    expect(out.captions.segments.map((s) => s.id)).toEqual(['s1', 's2', 's3']);
+    expect(vlen(out)).toBeCloseTo(10, 6);
+  });
+  it('cut_pauses: legendas sobrepostas (2 falas) — a pausa começa depois da fala que termina por último', () => {
+    let p = applyOp(createProject(), { op: 'add_clip', trackId: 'track_video_1', clip: { ...makeVideoClip(asset2, 0), id: 'c1', duration: 10 } as VideoClip });
+    p = applyOp(p, { op: 'set_captions', segments: [
+      { id: 'a', start: 0.1, end: 4, text: 'fala longa', words: [W('a1', 0.1, 0.4, 'fala'), W('a2', 0.45, 4, 'longa')] },
+      { id: 'b', start: 1, end: 1.4, text: 'sim', words: [W('b1', 1, 1.4, 'sim')] },
+      { id: 'c', start: 4.1, end: 4.5, text: 'ok', words: [W('c1', 4.1, 4.5, 'ok')] },
+    ] });
+    expect(vlen(applyOp(p, { op: 'cut_pauses' }))).toBeCloseTo(10, 6); // antes: cortava 1,52→3,98 (dentro de "longa")
+  });
   it('cut_pauses com ranges medidos no navegador', () => {
     const p = applyOp(proj(), { op: 'cut_pauses', ranges: [{ start: 2.0, end: 3.5 }], keep: 0.1 });
     expect(vlen(p)).toBeCloseTo(10 - 1.3, 6);

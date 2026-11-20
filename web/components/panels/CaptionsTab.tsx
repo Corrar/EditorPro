@@ -11,6 +11,8 @@ import { ColorField, CommitInput, EmptyHint, Section, Slider, TextField, Toggle 
 import { CAPTION_PRESETS, FONTS, TEXT_ANIMATIONS, parseTimeInput } from './presets';
 import { textSampleStyle } from './TextTab';
 import { askAI } from '@/components/shell/ui';
+import { allWords } from '@/lib/ops';
+import { retextSegment, wordIdMaker } from '@/lib/ai/words';
 
 function CaptionSample({ style }: { style: Partial<CaptionStyle> }) {
   const base = textSampleStyle({
@@ -112,7 +114,7 @@ export default function CaptionsTab() {
                   <button type="button" className="ep-segask" title="Perguntar à IA sobre esta legenda" aria-label="Perguntar à IA sobre esta legenda" onClick={() => askAI({ segmentId: s.id, range: { start: s.start, end: s.end }, label: `Legenda: “${s.text.slice(0, 32)}${s.text.length > 32 ? '…' : ''}”` })}><Icon name="ai" size={15} /></button>
                   <button type="button" className="ep-segdel" title="Remover legenda" onClick={() => removeSeg(s.id)}><IconTrash size={14} /></button>
                 </div>
-                <TextField value={s.text} onChange={(v, h) => upd(s.id, { text: v, words: undefined }, h)} />
+                <TextField value={s.text} onChange={(v, h) => upd(s.id, retextSegment(s, v, wordIdMaker(allWords(useEditor.getState().project))), h)} />
               </div>
             ))}
           </div>

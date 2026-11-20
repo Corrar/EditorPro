@@ -191,3 +191,22 @@ describe('wordsToSegments equilibra frases longas', () => {
     expect(segs[0].text.endsWith(',')).toBe(true);
   });
 });
+
+describe('filterAsr não apaga fala real com palavra repetida (review r3)', () => {
+  const mk = (txt: string) => txt.split(' ').map((t, i) => ({ text: ` ${t}`, timestamp: [i * 0.3, i * 0.3 + 0.25] as [number, number] }));
+  const VOZ = [{ start: 0, end: 100 }];
+  it.each([
+    'Esse bolo é o melhor bolo do mundo o bolo da minha avó e ela fazia todo domingo pra família inteira',
+    'Gente hoje eu trouxe uma receita incrível vai vai vai corre pra cozinha e separa tudo que a gente vai fazer agora mesmo',
+    'Olha olha olha que coisa linda ficou essa cobertura de chocolate com morango por cima',
+    'Corre, corre, corre que a promoção acaba hoje à meia-noite e não vai ter outra igual',
+  ])('"%s" fica inteira', (s) => {
+    // antes: 21 → 10, 23 → 6, 15 → 5, 16 → 6 palavras (a janela inteira em volta da repetição sumia)
+    expect(filterAsr(mk(s), VOZ, { duration: 100 }).map((x) => x.text.trim()).join(' ')).toBe(s);
+  });
+  it('loop de verdade ainda some, sem levar a fala de antes', () => {
+    const fala = 'hoje eu vou mostrar como fazer um bolo de chocolate muito fácil';
+    const w = mk(`${fala} obrigado obrigado obrigado obrigado obrigado obrigado obrigado obrigado obrigado obrigado obrigado obrigado`);
+    expect(filterAsr(w, VOZ, { duration: 100 }).map((x) => x.text.trim()).join(' ')).toBe(fala);
+  });
+});

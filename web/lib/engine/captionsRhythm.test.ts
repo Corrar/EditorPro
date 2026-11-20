@@ -126,3 +126,23 @@ describe('ritmo respeita a legenda encurtada/movida (regressão r2 biblioteca #2
     expect(ch[ch.length - 1].end).toBeLessThanOrEqual(3 + 1e-9);
   });
 });
+
+describe('quebra obrigatória nunca fica DENTRO do bloco (review r3: a DP só olhava a última fronteira)', () => {
+  const W = (text: string, start: number, end: number) => ({ text, start, end });
+  it('fim de frase curto seguido de fala rápida: "Sim." não divide bloco com a frase seguinte', () => {
+    const words = [W('Sim.', 0, 0.1), W('vamos', 0.12, 0.3), W('lá', 0.32, 0.42), W('agora', 0.44, 0.7)];
+    const s: CaptionSegment = { id: 's', start: 0, end: 0.7, text: words.map((w) => w.text).join(' '), words };
+    for (const maxWords of [3, 4, 7]) {
+      const ch = chunkCaptionsFor([s], { maxWords });
+      for (const c of ch) for (let k = 0; k < c.words.length - 1; k++) expect(c.words[k].text, `maxWords ${maxWords}: ${c.words.map((w) => w.text).join(' ')}`).not.toMatch(/[.!?…]$/);
+    }
+  });
+  it('pausa longa (≥ hardGap) no meio: as palavras depois da pausa não aparecem antes de serem ditas', () => {
+    const words = [W('Então', 0, 0.12), W('olha', 0.9, 1.0), W('isso', 1.02, 1.2)];
+    const s: CaptionSegment = { id: 's', start: 0, end: 1.2, text: 'Então olha isso', words };
+    for (const maxWords of [3, 7]) {
+      const ch = chunkCaptionsFor([s], { maxWords });
+      for (const c of ch) for (let k = 1; k < c.words.length; k++) expect(c.words[k].start - c.words[k - 1].end, `maxWords ${maxWords}`).toBeLessThan(0.5);
+    }
+  });
+});
