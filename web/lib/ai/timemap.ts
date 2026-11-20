@@ -87,6 +87,7 @@ export function captionsMediaToTimeline(p: Project, assetId: Id, segs: CaptionSe
         text,
         words: s.words?.length ? ws : undefined,
         ...(s.emphasis?.length ? { emphasis: s.emphasis } : {}),
+        assetId, // a legenda acompanha os clipes desta mídia (ops.retimeCaptions)
       });
     });
   }

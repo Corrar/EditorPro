@@ -288,12 +288,17 @@ export function timelineTimeForSource(c: MediaClipV, m: Seconds): Seconds | null
   return c.start + (lo + hi) / 2;
 }
 
-/** clipe que "fala" no tempo t: vídeo primeiro, depois áudio que não é trilha de fundo (duckUnderVoice) */
-function anchorClipAt(p: Project, t: Seconds): MediaClipV | null {
+/**
+ * clipe que "fala" no tempo t. Legenda transcrita (`assetId`): só clipes DESSA mídia — antes, numa narração
+ * em áudio com b-roll em vídeo, o b-roll ganhava (vídeo primeiro) e mexer nele arrastava/apagava a legenda.
+ * Sem assetId (legenda manual/antiga): vídeo primeiro, depois áudio que não é trilha de fundo (duckUnderVoice).
+ */
+function anchorClipAt(p: Project, t: Seconds, assetId?: Id): MediaClipV | null {
   let best: MediaClipV | null = null;
   let rank = 9;
   for (const tr of p.tracks) for (const c of tr.clips) {
     if ((c.type !== 'video' && c.type !== 'audio') || t < c.start - EPS || t > clipEnd(c) + EPS) continue;
+    if (assetId && c.assetId !== assetId) continue;
     const r = c.type === 'video' ? 0 : c.duckUnderVoice ? 2 : 1;
     if (r < rank) { rank = r; best = c; }
   }
@@ -339,7 +344,7 @@ export function retimeCaptions(before: Project, after: Project): Project {
   for (const s of before.captions.segments) {
     const words = s.words ?? [];
     if (!words.length) {
-      const a = anchorClipAt(before, (s.start + s.end) / 2);
+      const a = anchorClipAt(before, (s.start + s.end) / 2, s.assetId);
       const ns = mapT(s.start, a), ne = mapT(s.end, a);
       if (ns === undefined && ne === undefined) { segments.push(s); continue; }
       changed = true;
@@ -350,7 +355,7 @@ export function retimeCaptions(before: Project, after: Project): Project {
     let touched = false;
     const out: typeof words = [];
     for (const w of words) {
-      const a = anchorClipAt(before, (w.start + w.end) / 2);
+      const a = anchorClipAt(before, (w.start + w.end) / 2, s.assetId);
       const ns = mapT(w.start, a), ne = mapT(w.end, a);
       if (ns === undefined && ne === undefined) { out.push(w); continue; }
       touched = true;
