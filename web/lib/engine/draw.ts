@@ -58,6 +58,16 @@ export function mediaSize(el: MediaElement | AnyCanvas): { w: number; h: number 
   return null;
 }
 
+/**
+ * Fator de redução (≤ 1) em degraus de 2^(1/8) (~9%), arredondado PARA CIMA (nunca perde nitidez):
+ * a escala contínua de um zoom animado pedia um canvas auxiliar de tamanho novo a cada quadro (r3).
+ */
+export function stepScale(k: number): number {
+  if (!(k > 0)) return 1 / 64;
+  if (k >= 1) return 1;
+  return Math.min(1, Math.max(1 / 64, Math.pow(2, Math.ceil(Math.log2(k) * 8 - 1e-9) / 8)));
+}
+
 /* modos de mesclagem: tabela no catálogo da sessão fx (lib/fx/blend.ts) */
 const BLEND: Record<BlendMode, GlobalCompositeOperation> = BLEND_OPS;
 
@@ -161,7 +171,8 @@ export function drawLayer(ctx: Ctx, layer: LayerItem, t: Seconds, el: MediaEleme
     const fitMode = natural ? (('fit' in clip && clip.fit) || 'cover') : 'contain';
     const kfit = fitMode === 'fill' ? Math.max(W / cw, H / chh) : fitMode === 'contain' ? Math.min(W / cw, H / chh) : Math.max(W / cw, H / chh);
     const drawn = kfit * Math.max(0.05, tf.scale * tv.scale * anim.scale * geo.scale);
-    const k = Math.min(1, drawn * 1.1);
+    // em degraus: zoom animado não muda o tamanho (canvas novo + canvas GL redimensionado) a cada quadro (r3)
+    const k = stepScale(drawn * 1.1);
     let tsrc: TexImageSource = src as TexImageSource, tsw = sw, tsh = sh;
     // texturas enormes: reduz antes de subir p/ a GPU (upload é o passo caro)
     if (k < 0.6 && !crop) {
@@ -182,7 +193,7 @@ export function drawLayer(ctx: Ctx, layer: LayerItem, t: Seconds, el: MediaEleme
     // antes — o upload da textura em resolução cheia é o passo caro (≈2× mais rápido no celular)
     const fitG = natural ? (('fit' in clip && clip.fit) || 'cover') : 'contain';
     const kfitG = fitG === 'contain' ? Math.min(W / sw, H / sh) : Math.max(W / sw, H / sh);
-    const kk = Math.min(1, 1920 / Math.max(sw, sh), kfitG * Math.max(0.05, tf.scale) * 1.1);
+    const kk = Math.min(1, 1920 / Math.max(sw, sh), stepScale(kfitG * Math.max(0.05, tf.scale) * 1.1));
     if (kk < 0.9) {
       const { c, ctx: pc } = scratch(owner, Math.max(2, Math.round(sw * kk)), Math.max(2, Math.round(sh * kk)), 3);
       pc.drawImage(src, 0, 0, c.width, c.height);
