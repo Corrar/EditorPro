@@ -61,5 +61,47 @@ export async function transcribeWav(wav: ArrayBuffer, language: string, prompt?:
       return ws.map((w, i) => ({ word: w, start: s.start + i * step, end: s.start + (i + 1) * step }));
     });
   }
-  return { text: (data.text ?? '').trim(), words, provider: p.name, model: p.model };
+  const text = (data.text ?? '').trim();
+  return { text, words: punctuateWords(words, text || (data.segments ?? []).map((s) => s.text).join(' ')), provider: p.name, model: p.model };
+}
+
+const norm = (t: string) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\p{L}\p{N}]+/gu, '');
+const HAS_PUNCT = /[.,!?;:…]/;
+
+/**
+ * A API de áudio (OpenAI/Groq) devolve as palavras com tempo SEM pontuação ("Oi", "gente", "hoje"…) e a
+ * pontuação só no `text`. Sem ela a legenda saía sem vírgula/ponto e as frases não quebravam no fim da
+ * frase. Aqui cada palavra recebe a forma escrita do `text` (pontuação e maiúsculas), alinhando em ordem
+ * pelo texto normalizado; palavra que não casa fica como veio. Palavras que já trazem pontuação: intactas.
+ */
+export function punctuateWords(words: TranscribeWord[], text: string): TranscribeWord[] {
+  if (!words.length || !HAS_PUNCT.test(text) || words.some((w) => HAS_PUNCT.test(w.word))) return words;
+  const toks = text.split(/\s+/).filter(Boolean).map((raw) => ({ raw, n: norm(raw) })).filter((t) => t.n);
+  const out = words.map((w) => ({ ...w }));
+  let j = 0;
+  for (let i = 0; i < out.length && j < toks.length;) {
+    const wn = norm(out[i].word);
+    if (!wn) { i++; continue; }
+    // procura o token nas próximas posições (o texto pode ter uma palavra a mais/menos que a lista)
+    let k = -1;
+    for (let d = 0; d < 4 && j + d < toks.length; d++) if (toks[j + d].n === wn) { k = j + d; break; }
+    if (k < 0 && toks[j].n.startsWith(wn)) k = j;
+    if (k < 0) { i++; continue; }
+    const tok = toks[k];
+    if (tok.n === wn) {
+      out[i].word = tok.raw;
+      i++; j = k + 1;
+      continue;
+    }
+    // token escrito junto ("meia-noite", "fazê-lo") e palavras separadas: junta até fechar o token
+    let acc = wn, e = i;
+    while (acc.length < tok.n.length && e + 1 < out.length && tok.n.startsWith(acc + norm(out[e + 1].word))) { e++; acc += norm(out[e].word); }
+    if (acc === tok.n) {
+      const lead = /^[^\p{L}\p{N}]*/u.exec(tok.raw)![0], tail = /[^\p{L}\p{N}]*$/u.exec(tok.raw)![0];
+      if (lead) out[i].word = lead + out[i].word.trim();
+      if (tail) out[e].word = out[e].word.trim() + tail;
+      i = e + 1; j = k + 1;
+    } else i++;
+  }
+  return out;
 }
