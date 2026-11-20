@@ -64,15 +64,20 @@ export function syncLinkedAfterPack(p: Project, userOps: EditOp[], pack: EditOp[
     if (tr.id === mainId || tr.locked) continue;
     for (const c of tr.clips) {
       if (!c.linkId || !shift.has(c.linkId)) continue;
-      const start = Math.max(0, c.start + shift.get(c.linkId)!);
+      const want = c.start + shift.get(c.linkId)!;
+      // J-cut (áudio começa antes do vídeo) indo para antes de 0: corta a cabeça que sobra em vez de
+      // só travar em 0 — travar deslocava o áudio inteiro e o deixava fora de sincronia
+      const head = want < -EPS && -want < c.duration - EPS ? -want : 0;
+      const start = Math.max(0, want);
       // se o destino bater num clipe que não anda junto, abre espaço empurrando o resto (inserir)
-      const end = start + c.duration;
+      const end = start + c.duration - head;
       const hit = tr.clips.filter((o) => !moving.has(o.id) && o.start < end - EPS && clipEnd(o) > start + EPS);
       if (hit.length) {
         const push = end - Math.min(...hit.map((o) => o.start));
         for (const o of tr.clips)
           if (!moving.has(o.id) && o.start >= Math.min(...hit.map((h) => h.start)) - EPS) out.push({ op: 'move_clip', clipId: o.id, start: o.start + push });
       }
+      if (head) out.push({ op: 'trim_clip', clipId: c.id, start: c.start + head });
       out.push({ op: 'move_clip', clipId: c.id, start });
     }
   }
