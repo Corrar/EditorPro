@@ -614,7 +614,8 @@
   .ep-mtscroll, .ep-mtscroll.fl, .ep-mtscroll.fr, .ep-mtscroll.fl.fr { -webkit-mask-image:none; mask-image:none; scroll-snap-type:none; }
   .ep-mtitem { flex:0 0 62px; justify-content:flex-start; gap:6px; padding:12px 1px 6px; color:var(--ink); }
   .ep-mtitem .ic { position:relative; width:26px; height:26px; }
-  .ep-mtitem .lb { font-size:11px; font-weight:500; color:var(--ink); white-space:normal; line-height:1.2; max-width:60px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  /* palavra longa ("Velocidade", "Transformar") cabe inteira: usa 2 px de cada lado do item e aperta 0,2 px entre letras */
+  .ep-mtitem .lb { font-size:11px; font-weight:500; color:var(--ink); white-space:normal; line-height:1.2; max-width:none; width:calc(100% + 4px); margin:0 -2px; letter-spacing:-.2px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
   .ep-mtitem.on .ic, .ep-mtitem.on .lb { color:var(--green); }
   .ep-mtitem.on::after { bottom:2px; }
   .ep-mttag { position:absolute; top:-8px; left:14px; padding:1px 5px !important; min-height:0 !important; height:15px; line-height:13px !important; font-size:9px !important; font-weight:800 !important; letter-spacing:0; border-radius:6px !important; background:var(--green) !important; color:#fff !important; white-space:nowrap; }

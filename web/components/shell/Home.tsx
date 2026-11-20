@@ -205,10 +205,10 @@ function ProjectRows({ items, reload, onOpen, filter }: { items: ProjectSummary[
           )}
           {confirm === p.id && (
             <div className="ep-proj-confirm" onClick={(e) => e.stopPropagation()}>
-              <p>Apagar “{p.name}”?</p>
+              <p>Excluir “{p.name}”?</p>
               <div>
                 <button type="button" className="ep-pillbtn" onClick={() => setConfirm(null)}>Cancelar</button>
-                <button type="button" className="ep-btn primary" onClick={async () => { await deleteProject(p.id); setConfirm(null); reload(); emit('ep:toast', { text: 'Projeto apagado', kind: 'info' }); }}>Apagar</button>
+                <button type="button" className="ep-btn primary" onClick={async () => { await deleteProject(p.id); setConfirm(null); reload(); emit('ep:toast', { text: 'Projeto excluído', kind: 'info' }); }}>Excluir</button>
               </div>
             </div>
           )}
