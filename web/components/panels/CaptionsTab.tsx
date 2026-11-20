@@ -50,9 +50,14 @@ export default function CaptionsTab() {
 
   const activeId = captions.segments.find((s) => playhead >= s.start && playhead < s.end)?.id;
   useEffect(() => {
-    if (!activeId || !listRef.current) return;
-    const el = listRef.current.querySelector<HTMLElement>(`[data-seg="${activeId}"]`);
-    if (el && document.activeElement?.closest('[data-seg]') == null) el.scrollIntoView({ block: 'nearest' });
+    const list = listRef.current;
+    if (!activeId || !list) return;
+    const el = list.querySelector<HTMLElement>(`[data-seg="${activeId}"]`);
+    if (!el || document.activeElement?.closest('[data-seg]') != null) return;
+    // rola só a lista: scrollIntoView rolava também a gaveta (no celular ela abria no meio, longe de "Gerar legendas")
+    const lr = list.getBoundingClientRect(), er = el.getBoundingClientRect();
+    if (er.top < lr.top) list.scrollTop += er.top - lr.top;
+    else if (er.bottom > lr.bottom) list.scrollTop += er.bottom - lr.bottom;
   }, [activeId]);
 
   return (
