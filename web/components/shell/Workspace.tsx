@@ -4,7 +4,7 @@
    ≤899: empilhado (preview em cima, timeline embaixo) e painel/chat em bottom-sheets.
    Os módulos (Preview/Timeline/Chat) ocupam contêineres mensuráveis
    (container-type: size) — podem usar ResizeObserver ou container queries. */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Timeline from '@/components/timeline/Timeline';
 import Preview from '@/components/preview/Preview';
 import ChatPanel from '@/components/chat/ChatPanel';
@@ -94,6 +94,9 @@ export default function Workspace({ tool, sideOpen, onCloseSide, chatOpen, onCha
   };
 
   const label = toolDef(tool).label;
+  /* trocar de ferramenta abre o painel no topo (o contêiner é o mesmo: antes guardava a rolagem do painel anterior) */
+  const sideBody = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (sideBody.current) sideBody.current.scrollTop = 0; }, [tool]);
 
   return (
     <div
@@ -104,7 +107,7 @@ export default function Workspace({ tool, sideOpen, onCloseSide, chatOpen, onCha
       <aside className="ep-side" aria-label={label}>
         <SheetHandle onClose={onCloseSide} label={label} />
         <button type="button" className="ep-sideclose" onClick={onCloseSide} aria-label="Fechar painel" title="Fechar painel"><IconClose size={16} /></button>
-        <div className="ep-sidebody">{tool === 'media' ? <MediaBin /> : <Inspector tool={tool} />}</div>
+        <div className="ep-sidebody" ref={sideBody}>{tool === 'media' ? <MediaBin /> : <Inspector tool={tool} />}</div>
       </aside>
       <main className="ep-stage ep-measure"><Preview /></main>
       <section className="ep-chat" aria-label="Chat com a IA">

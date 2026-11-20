@@ -840,7 +840,7 @@
 
 /* alvos de toque ≥44px sem mudar o visual: área invisível centrada no botão */
 .ep-tl-cmore, .ep-tl-addline, .ep-tl-addend, .ep-tl.coarse .ep-tl-hb { position: relative; }
-.ep-tl-addline, .ep-tl-addend { position: absolute; }
+.ep-tl-addline, .ep-tl-addend, .ep-tl-cmore { position: absolute; }
 .ep-tl-cmore::after, .ep-tl-addline::after, .ep-tl-addend::after, .ep-tl.coarse .ep-tl-hb::after {
   content: ''; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
   width: max(100%, 44px); height: max(100%, 44px); border-radius: inherit;

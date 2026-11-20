@@ -1180,6 +1180,10 @@ export function chatIntent(text: string, ctx: ChatContext): DemoResult {
     if (p.captions.segments.length) push([{ op: 'set_caption_style', style: captionLookFrom('tiktok')!.style, explain: 'Legendas rápidas estilo TikTok' }], 'legendas rápidas');
   }
 
+  // "coloque legenda" com as legendas já ligadas: responde em vez de "não entendi"
+  if (!ops.length && !said.length && !macros.length && mentionsCaption && CAPTION_ADD.test(t) && hasCaps && p.captions.enabled) {
+    return { reply: `As legendas já estão no vídeo (${p.captions.segments.length} trechos). Para mudar o visual, diga “legenda amarela”, “legenda maior” ou “legendas estilo TikTok”.`, ops: [] };
+  }
   if (!ops.length && !said.length) { const sim = similarCommands(text); return { reply: `Não entendi esse pedido no modo demonstração. Você quis dizer ${sim.slice(0, -1).map((c) => `“${c}”`).join(', ')} ou “${sim[sim.length - 1]}”? (Diga “ajuda” para ver tudo o que eu entendo.)`, ops: [] }; }
   const msg = said.length ? said.join(', ') : 'pronto';
   const all = [...ops, ...macros];
