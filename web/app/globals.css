@@ -262,7 +262,7 @@ html, body { height: 100%; overflow: hidden; }
 
 /* busca em pílula e botões circulares (no hero usam vidro; fora, cinza) */
 .ep-searchpill { display:flex; align-items:center; gap:10px; flex:1; min-width:0; height:48px; padding:0 18px; border-radius:999px; background:var(--tile); color:var(--muted); font-size:15px; }
-.ep-searchpill input { flex:1; min-width:0; border:0; background:none; outline:none; font:inherit; color:var(--ink); }
+.ep-searchpill input { flex:1; min-width:0; border:0; background:none; outline:none; font:inherit; color:var(--ink); text-overflow:ellipsis; }
 .ep-hero2 .ep-searchpill { background:var(--heroGlass); color:#fff; }
 .ep-hero2 .ep-searchpill input { color:#fff; }
 .ep-hero2 .ep-searchpill input::placeholder { color:rgba(255,255,255,.85); }
@@ -326,7 +326,8 @@ html, body { height: 100%; overflow: hidden; }
 
 /* faixa promocional escura com fechar */
 .ep-banner { display:flex; align-items:center; gap:14px; padding:18px 22px; background:var(--inverse); color:var(--inverseInk); border-radius:var(--r-lg); font-size:15px; font-weight:600; }
-.ep-banner .x { margin-left:auto; background:none; border:0; color:inherit; cursor:pointer; opacity:.85; }
+.ep-banner .x { margin-left:auto; background:none; border:0; color:inherit; cursor:pointer; opacity:.85; position:relative; }
+.ep-banner .x::after { content:''; position:absolute; left:50%; top:50%; width:44px; height:44px; transform:translate(-50%,-50%); } /* toque ≥44px */
 
 /* bottom-sheet ("Menu") */
 .ep-sheet2 { background:var(--card); border-radius:var(--r-xl) var(--r-xl) 0 0; box-shadow:var(--shadow-sheet); padding:14px 20px calc(24px + env(safe-area-inset-bottom)); }
