@@ -213,7 +213,9 @@ export function colorPresetFromStats(c?: { r: number; g: number; b: number; sat:
 export function styleFromCuts(cuts: Seconds[], duration: Seconds, size: { width?: number; height?: number } = {}, color?: { r: number; g: number; b: number; sat: number; lum: number }, template?: ReferenceTemplate): StyleProfile {
   const shots = cuts.length + 1;
   const avg = r3(template?.shots.length ? template.shots.reduce((n, x) => n + x.end - x.start, 0) / template.shots.length : duration > 0 ? duration / shots : 3);
-  const pacing: StyleProfile['pacing'] = avg < 1.2 ? 'very-fast' : avg < 2.5 ? 'fast' : avg < 5 ? 'medium' : 'slow';
+  // sem nenhum corte (modelo de uma tomada só) o ritmo é calmo, por mais curto que seja o arquivo
+  const noCuts = template ? template.shots.length <= 1 : !cuts.length;
+  const pacing: StyleProfile['pacing'] = noCuts ? 'slow' : avg < 1.2 ? 'very-fast' : avg < 2.5 ? 'fast' : avg < 5 ? 'medium' : 'slow';
   const aspect = aspectOf(size.width, size.height);
   const names = { 'very-fast': 'muito rápido', fast: 'rápido', medium: 'moderado', slow: 'calmo' } as const;
   const tm = template?.motion;

@@ -125,8 +125,14 @@ export function fidelityOf(p: Project, style: StyleProfile, resultColor?: { r: n
   const mMed = ratioScore(median(inner), t.shotStats.median || median(refDur));
   const mP90 = ratioScore(quantile(inner, 0.9), t.shotStats.p90 || quantile(refDur, 0.9));
   const mCps = refCps > 0 ? ratioScore(Math.max(0.01, cps), refCps) : clips.length === 1 ? 1 : 0.5;
-  scores.ritmo = r2(0.5 * mMed + 0.2 * mP90 + 0.3 * mCps);
-  if (scores.ritmo < FIDELITY_MIN) deltas.ritmo = `tomadas com mediana de ${fmt(median(inner))} s (modelo: ${fmt(t.shotStats.median)} s), ${fmt(cps)} cortes por 10 s (modelo: ${fmt(refCps)})`;
+  if (t.shots.length <= 1) {
+    // modelo sem cortes: a tomada dele é um PISO (o arquivo acaba antes), não um tamanho a copiar —
+    // fiel é não cortar mais curto que ela
+    const refLen = t.shots.length ? t.shots[0].end - t.shots[0].start : 0;
+    scores.ritmo = r2(clips.length <= 1 || refLen <= 0 ? 1 : durs.reduce((a, d) => a + Math.min(1, d / refLen), 0) / durs.length);
+    if (scores.ritmo < FIDELITY_MIN) deltas.ritmo = `o modelo não tem cortes e o vídeo ficou com ${clips.length} tomadas`;
+  } else scores.ritmo = r2(0.5 * mMed + 0.2 * mP90 + 0.3 * mCps);
+  if (t.shots.length > 1 && scores.ritmo < FIDELITY_MIN) deltas.ritmo = `tomadas com mediana de ${fmt(median(inner))} s (modelo: ${fmt(t.shotStats.median)} s), ${fmt(cps)} cortes por 10 s (modelo: ${fmt(refCps)})`;
 
   // movimento
   const spec = motionSpecOf(style);

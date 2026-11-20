@@ -232,6 +232,9 @@ export function shotMotionOps(p: Project, spec: MotionSpec, only?: Set<Id>): Edi
 /** durações das tomadas do modelo (em ordem), para cortar no mesmo ritmo */
 export function templateLengths(style: StyleProfile): Seconds[] {
   const t = style.template;
+  // modelo medido SEM cortes (uma tomada só): a "tomada" é só o tamanho do arquivo, não um ritmo —
+  // copiar é não cortar (antes um modelo de 0,4 s picotava o material em pedaços de 0,4 s)
+  if (t && t.shots.length <= 1) return [];
   if (t?.shots.length) {
     // a 1ª e a última tomada costumam ser parciais: só entram se houver poucas
     const all = t.shots.map((s) => r3(s.end - s.start));
