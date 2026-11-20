@@ -6,6 +6,7 @@ import { IconTransitions } from '@/components/shell/icons';
 import { EmptyHint, Section, Slider } from './controls';
 import { secs, useClipPatch, useSelectedClip } from './hooks';
 import { useCatalogs } from './catalog';
+import { PickClipButton } from './PickClip';
 import { transitionDisplayName } from '@/lib/fx/catalog';
 import { ShaderCode } from './ShaderCode';
 
@@ -17,7 +18,7 @@ export default function TransitionsTab() {
   const patch = useClipPatch(clip?.id);
 
   if (!clip || !found) {
-    return <EmptyHint icon={<IconTransitions />} title="Selecione um clipe" text="A transição é aplicada na entrada do clipe selecionado (vinda do clipe anterior)." />;
+    return <EmptyHint icon={<IconTransitions />} title="Selecione um clipe" text="A transição é aplicada na entrada do clipe selecionado (vinda do clipe anterior)."><PickClipButton accept={(c) => c.type === 'video' || c.type === 'image'} /></EmptyHint>;
   }
 
   const current: TransitionKind = clip.transitionIn?.kind ?? 'cut';

@@ -20,6 +20,7 @@ import { BasicTab, HslTab } from './Tabs';
 import { LooksTab } from './Looks';
 import { ScopesTab, useScopes } from './Scopes';
 import { useClipFrame } from './useClipFrame';
+import { PickClipButton } from '@/components/panels/PickClip';
 
 export type ColorTab = 'wheels' | 'curves' | 'hsl' | 'basic' | 'looks' | 'scopes';
 const CLIP_KEY = 'ep-color-clipboard';
@@ -81,6 +82,7 @@ export default function ColorPanel({ initialTab = 'basic' }: { initialTab?: Colo
         <span className="ec-empty-ic"><Icon name="filters" size={28} /></span>
         <strong>Correção de cor</strong>
         <p>Selecione um clipe de vídeo, imagem ou uma camada de ajuste na timeline para corrigir a cor.</p>
+        <PickClipButton accept={isGradable} />
       </div>
     );
   }

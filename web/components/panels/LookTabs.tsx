@@ -10,6 +10,7 @@ import { AdjustSection, EffectsSection, FilterSection } from './ClipSections';
 import { EmptyHint, Section } from './controls';
 import { isFilterable, isVisual } from './clipkit';
 import { useSelectedClip } from './hooks';
+import { PickClipButton } from './PickClip';
 
 function AddAdjustmentLayer() {
   const dispatch = useEditor((s) => s.dispatch);
@@ -33,7 +34,7 @@ export function EffectsTool() {
   const clip = useSelectedClip()?.clip;
   return (
     <>
-      {isVisual(clip) || clip?.type === 'adjustment' ? <EffectsSection clip={clip} /> : <EmptyHint icon={<IconEffects />} title="Selecione um clipe" text="Escolha um vídeo, imagem, sticker ou camada de ajuste para aplicar efeitos (glitch, VHS, tremor, neon…)." />}
+      {isVisual(clip) || clip?.type === 'adjustment' ? <EffectsSection clip={clip} /> : <EmptyHint icon={<IconEffects />} title="Selecione um clipe" text="Escolha um vídeo, imagem, sticker ou camada de ajuste para aplicar efeitos (glitch, VHS, tremor, neon…)."><PickClipButton accept={(c) => isVisual(c) || c.type === 'adjustment'} /></EmptyHint>}
       <AddAdjustmentLayer />
     </>
   );
@@ -44,7 +45,7 @@ export function FiltersTool() {
   return (
     <>
       <Section title="Looks de cor"><LookGallery /></Section>
-      {isFilterable(clip) ? <FilterSection clip={clip} /> : <EmptyHint icon={<IconFilters />} title="Filtros por clipe" text="Selecione um vídeo, imagem ou camada de ajuste para os filtros clássicos." />}
+      {isFilterable(clip) ? <FilterSection clip={clip} /> : <EmptyHint icon={<IconFilters />} title="Filtros por clipe" text="Selecione um vídeo, imagem ou camada de ajuste para os filtros clássicos."><PickClipButton accept={isFilterable} /></EmptyHint>}
       <AddAdjustmentLayer />
     </>
   );
@@ -54,7 +55,7 @@ export function AdjustTool() {
   const clip = useSelectedClip()?.clip;
   return (
     <>
-      {isFilterable(clip) ? <AdjustSection clip={clip} /> : <EmptyHint icon={<IconSliders />} title="Selecione um clipe" text="Exposição, contraste, realces, sombras, temperatura, nitidez, vinheta…" />}
+      {isFilterable(clip) ? <AdjustSection clip={clip} /> : <EmptyHint icon={<IconSliders />} title="Selecione um clipe" text="Exposição, contraste, realces, sombras, temperatura, nitidez, vinheta…"><PickClipButton accept={isFilterable} /></EmptyHint>}
       <AddAdjustmentLayer />
     </>
   );
