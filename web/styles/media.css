@@ -36,8 +36,10 @@
 .ep-asset-name { font-size:11.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .ep-asset-row { display:flex; align-items:center; justify-content:space-between; gap:6px; }
 .ep-asset-size { font-size:10px; color:var(--faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.ep-role { appearance:none; -webkit-appearance:none; border:0; background:var(--tile); color:var(--sub); font:inherit; font-size:10px; font-weight:700; border-radius:999px; padding:2px 8px; cursor:pointer; outline:none; max-width:78px; }
-.ep-role:focus { border-color:var(--green); }
+.ep-role { position:relative; display:inline-block; border:0; background:var(--tile); color:var(--sub); font:inherit; font-size:10px; font-weight:700; line-height:1.2; border-radius:999px; padding:2px 8px; cursor:pointer; max-width:78px; white-space:nowrap; overflow:visible; text-overflow:ellipsis; }
+/* o select fica invisível por cima da pílula, 44 px de altura (toque), e abre a lista nativa */
+.ep-role-sel { position:absolute; left:-4px; right:-4px; top:50%; height:44px; transform:translateY(-50%); opacity:0; margin:0; padding:0; border:0; font:inherit; font-size:16px; cursor:pointer; }
+.ep-role:focus-within { box-shadow:0 0 0 2px var(--green); }
 .ep-role.r-source { background:var(--tintG); color:var(--tintGInk); border-color:var(--tintGBl); }
 .ep-role.r-reference { background:var(--amberTint); color:var(--amberInk); border-color:transparent; }
 .ep-role.r-music { background:var(--inverse); color:var(--inverseInk); border-color:transparent; }
@@ -54,6 +56,15 @@
 @media (hover: none) {
   .ep-asset-actions { opacity:1; transform:none; }
   .ep-asset-actions button { width:32px; height:32px; }
+}
+/* toque: alvos ≥ 44 px sem mudar o desenho (área invisível em volta do botão) */
+@media (pointer: coarse) {
+  .ep-asset-actions { right:8px; top:8px; gap:12px; }
+  .ep-asset-actions button { position:relative; }
+  .ep-asset-actions button::after { content:''; position:absolute; inset:-6px; }
+  .ep-asset-usemodel { position:relative; z-index:1; }
+  .ep-mfilter button { position:relative; min-height:32px; }
+  .ep-mfilter button::after { content:''; position:absolute; inset:-6px 0; }
 }
 
 /* ---------- Gerar com IA ---------- */

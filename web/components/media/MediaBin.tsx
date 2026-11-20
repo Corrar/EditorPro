@@ -111,13 +111,17 @@ function AssetCard({ asset, onAdd }: { asset: MediaAsset; onAdd: (a: MediaAsset)
       <div className="ep-asset-meta">
         <span className="ep-asset-name">{asset.name}</span>
         <span className="ep-asset-row">
-          <select
-            className={`ep-role r-${asset.role}`} value={asset.role} aria-label="Papel da mídia"
-            onChange={(e) => updateAsset(asset.id, { role: e.target.value as MediaRole })}
-            onDoubleClick={(e) => e.stopPropagation()}
-          >
-            {(Object.keys(ROLE_LABEL) as MediaRole[]).map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
-          </select>
+          {/* pílula visível + select nativo invisível por cima com 44 px de altura (alvo de toque no celular) */}
+          <span className={`ep-role r-${asset.role}`}>
+            {ROLE_LABEL[asset.role]}
+            <select
+              className="ep-role-sel" value={asset.role} aria-label="Papel da mídia"
+              onChange={(e) => updateAsset(asset.id, { role: e.target.value as MediaRole })}
+              onDoubleClick={(e) => e.stopPropagation()}
+            >
+              {(Object.keys(ROLE_LABEL) as MediaRole[]).map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+            </select>
+          </span>
           <span className="ep-asset-size">{formatBytes(asset.size)}</span>
         </span>
         {asset.role === 'reference' && asset.kind === 'video' && (
