@@ -7,6 +7,7 @@ import type { Clip, Id, MediaAsset, MediaKind, Project, Seconds, Track, TrackKin
 import { applyOp as applyOpFn, clipEnd, findClip, trackKindFor, type EditOp } from '../ops';
 import { uid } from '../util';
 import { batchRemap, remapClone } from './links';
+import { MUSIC_MAX_SECONDS, isCatalogMusicAsset } from '../music/catalog';
 
 export const MIN_CLIP: Seconds = 0.1;
 const EPS = 1e-6;
@@ -91,8 +92,15 @@ export function trimBounds(clip: Clip, track: Track | undefined, asset: MediaAss
   let maxEnd = Infinity;
   if ((clip.type === 'video' || clip.type === 'audio')) {
     const sp = speedOf(clip);
-    minStart = Math.max(0, clip.start - clip.in / sp);
-    if (asset && asset.duration > 0) maxEnd = clip.start + (asset.duration - clip.in) / sp;
+    if (clip.type === 'audio' && isCatalogMusicAsset(asset)) {
+      // música do catálogo: ao soltar, é re-renderizada no tamanho novo (refitMusicClip) — o WAV
+      // atual não limita; só o máximo do motor
+      minStart = Math.max(0, end - MUSIC_MAX_SECONDS / sp);
+      maxEnd = clip.start + MUSIC_MAX_SECONDS / sp;
+    } else {
+      minStart = Math.max(0, clip.start - clip.in / sp);
+      if (asset && asset.duration > 0) maxEnd = clip.start + (asset.duration - clip.in) / sp;
+    }
   }
   if (track) {
     for (const c of track.clips) {

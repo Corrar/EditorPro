@@ -12,7 +12,7 @@ import {
   bass, crash, hat, keys, kick, lead, pad, perc, riser, shaker, snare, vinyl,
   type Mix, type Send,
 } from './instruments';
-import { musicTrack, trackStyle, type MusicTrack } from './catalog';
+import { MUSIC_MAX_SECONDS, musicTrack, trackStyle, type MusicTrack } from './catalog';
 import type { DrumPat, Inst, Style } from './styles';
 import { chordOf, stepScale, voiceChord, type ChordSpec } from './theory';
 
@@ -23,7 +23,7 @@ export const TARGET_LUFS = -14;
 /** teto do limitador (≈ −1,2 dBFS: abaixo de −1 dBFS mesmo após quantizar em 16 bits) */
 export const CEILING = dbToGain(-1.2);
 export const MIN_DURATION = 2;
-export const MAX_DURATION = 600;
+export const MAX_DURATION = MUSIC_MAX_SECONDS;
 
 export type Section = 'intro' | 'A' | 'B' | 'end';
 

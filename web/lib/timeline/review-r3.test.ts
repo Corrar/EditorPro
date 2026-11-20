@@ -5,7 +5,8 @@ import { createProject, makeVideoClip } from '../defaults';
 import type { Clip, MediaAsset, Project } from '../types';
 import { useTimelineUi } from './ui';
 import { withMagnet } from './actions';
-import { deleteOps, detachAudioOps } from './edit';
+import { deleteOps, detachAudioOps, trimBounds } from './edit';
+import { makeAudioClip } from '../defaults';
 
 const A: MediaAsset = { id: 'a', kind: 'video', role: 'source', name: 'a.mp4', mime: 'video/mp4', size: 1, duration: 60 };
 const V = 'track_video_1';
@@ -42,5 +43,22 @@ describe('r3 — ímã com áudio vinculado em J-cut (áudio começa antes do v�
     // no início do vídeo, o áudio toca o mesmo ponto da fonte que o vídeo
     expect(srcAt(a, v.start)).toBeCloseTo(v.in, 5);
     expect(a.start).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('r3 — música do catálogo pode ser esticada (é re-renderizada no tamanho novo ao soltar)', () => {
+  const music: MediaAsset = { id: 'm', kind: 'audio', role: 'music', name: 'Café da Tarde.wav', mime: 'audio/wav', size: 1, duration: 12, url: 'blob:x', library: true };
+  it('a borda direita passa do fim do WAV gerado (antes: travava no tamanho do último refit)', () => {
+    const c = makeAudioClip(music, 5, { id: 'cm' });
+    const b = trimBounds(c, undefined, music);
+    expect(b.maxEnd).toBeGreaterThan(5 + 12 + 30);
+    expect(b.maxEnd).toBeLessThanOrEqual(5 + 600);
+    expect(b.minStart).toBe(0); // e para a esquerda também
+  });
+  it('áudio importado (ou SFX da biblioteca) continua limitado à mídia', () => {
+    const c = makeAudioClip({ ...music, library: false }, 5, { id: 'cm' });
+    expect(trimBounds(c, undefined, { ...music, library: false }).maxEnd).toBeCloseTo(17, 6);
+    const sfx = { ...music, name: 'Whoosh.wav' };
+    expect(trimBounds(makeAudioClip(sfx, 5), undefined, sfx).maxEnd).toBeCloseTo(17, 6);
   });
 });
