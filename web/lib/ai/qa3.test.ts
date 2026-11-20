@@ -85,8 +85,19 @@ describe('"deixa mais dinâmico"', () => {
     const r = chatIntent('deixa mais dinâmico', { project: p, assets });
     const after = applyOps(p, r.ops).project;
     expect(projectDuration(after)).toBeCloseTo(end + 0.15 + 3, 1);
-    expect(r.reply).toMatch(/^Feito: encurtei o trecho sem fala para 3 s \(7,\d s a menos\)/);
+    expect(r.reply).toMatch(/^Feito: encurtei o trecho sem fala \(7,\d s a menos\)/);
     intact(p, after);
+  });
+
+  it('brief pediu 20 s e o vídeo já tem 20 s: não encurta abaixo do pedido e explica', () => {
+    const segs = words(4, 0.2);
+    const end = segs[3].end;
+    const p0 = project({ shots: 10, dur: 20, segs, moving: true, style: tpl('smooth-push') });
+    const p = applyOps(p0, [{ op: 'set_project', patch: { brief: 'Reels dinâmico de 20s' } }]).project;
+    expect(20 - end).toBeGreaterThan(4); // há trecho sem fala longo
+    const r = chatIntent('deixa mais dinâmico', { project: p, assets });
+    expect(r.ops).toEqual([]);
+    expect(r.reply).toMatch(/já está nos 20 s que você pediu/);
   });
 
   it('sem modelo, tomada longa e parada, legenda de frase: corta no ritmo, dá aproximação SUAVE e legenda em blocos curtos', () => {

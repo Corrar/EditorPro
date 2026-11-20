@@ -839,7 +839,7 @@ function mainVideoClips(p: Project): VideoClip[] {
  * corta no ritmo (~2,5 s, nos respiros), (4) tomada parada ganha a aproximação suave (ou o movimento do modelo),
  * (5) transições só se o modelo tiver. Devolve só o que muda; nada a mudar -> `said` explica com honestidade.
  */
-export function dynamicOps(p0: Project, silencesByAsset?: Record<Id, Range[]>): { ops: EditOp[]; said: string[] } {
+export function dynamicOps(p0: Project, silencesByAsset?: Record<Id, Range[]>, opts: { minDuration?: Seconds } = {}): { ops: EditOp[]; said: string[] } {
   let p = p0;
   const ops: EditOp[] = [];
   const said: string[] = [];
@@ -873,12 +873,16 @@ export function dynamicOps(p0: Project, silencesByAsset?: Record<Id, Range[]>): 
   }
 
   // 1b) trecho longo SEM fala (b-roll, tempo morto > 4 s): fica com 3 s (1,5 s do começo + 1,5 s do fim, p/ não
-  //     cortar a chamada final), cortado longe das palavras
+  //     cortar a chamada final), cortado longe das palavras — sem passar abaixo da duração pedida no brief
   const ws = allWords(p).filter((w) => w.end > w.start).sort((a, b) => a.start - b.start);
   if (ws.length) {
     const T = projectDuration(p);
+    let budget = Math.max(0, T - (opts.minDuration ?? 0));
     const dead: Range[] = [];
-    const add = (a: number, b: number) => { if (b - a > 4) dead.push({ start: r3(a + 1.5), end: r3(b - 1.5) }); };
+    const add = (a: number, b: number) => {
+      const x = Math.min(b - a - 3, budget);
+      if (b - a > 4 && x > 0.3) { dead.push({ start: r3(a + 1.5), end: r3(a + 1.5 + x) }); budget -= x; }
+    };
     add(0, ws[0].start - 0.15);
     let spoken = ws[0].end;
     for (let k = 1; k < ws.length; k++) { add(spoken + 0.15, ws[k].start - 0.15); spoken = Math.max(spoken, ws[k].end); }
@@ -889,7 +893,7 @@ export function dynamicOps(p0: Project, silencesByAsset?: Record<Id, Range[]>): 
       shift += r.end - r.start;
       return op;
     });
-    push(cuts, (e, b) => `encurtei ${e.length > 1 ? `${e.length} trechos` : 'o trecho'} sem fala para 3 s (${less(b)} s a menos)`);
+    push(cuts, (e, b) => `encurtei ${e.length > 1 ? `${e.length} trechos` : 'o trecho'} sem fala (${less(b)} s a menos${opts.minDuration && projectDuration(p) <= opts.minDuration + 0.3 ? `, sem passar dos ${fmtSec(opts.minDuration)} pedidos` : ''})`);
   }
 
   // 2) legendas em blocos curtos (até 3 palavras) — a legenda do modelo manda, se houver
@@ -924,7 +928,8 @@ export function dynamicOps(p0: Project, silencesByAsset?: Record<Id, Range[]>): 
   }
 
   if (!ops.length) {
-    said.push(`já está no ritmo mais dinâmico que dá sem pancada${tpl ? ' e sem fugir do modelo' : ''}: não sobrou respiro para apertar, ${p.captions.segments.length ? 'as legendas já vão em blocos curtos e ' : ''}todas as tomadas já têm movimento. Para ir além, diga “zoom punch” (pancada) ou “acelera 1.1x”`);
+    const atTarget = opts.minDuration && projectDuration(p) <= opts.minDuration + 1.5 ? ` e o vídeo já está nos ${fmtSec(opts.minDuration)} que você pediu` : '';
+    said.push(`já está no ritmo mais dinâmico que dá sem pancada${tpl ? ' e sem fugir do modelo' : ''}: não sobrou respiro para apertar, ${p.captions.segments.length ? 'as legendas já vão em blocos curtos, ' : ''}todas as tomadas já têm movimento${atTarget}. Para ir além, diga “zoom punch” (pancada) ou “acelera 1.1x”`);
   }
   return { ops, said };
 }
@@ -1341,7 +1346,7 @@ export function chatIntent(text: string, ctx: ChatContext): DemoResult {
 
   // --- mais dinâmico (combo): só o que MUDA de verdade, suave, respeitando o modelo; nada a fazer = diz isso
   if (/dinamic|mais energia|mais ritmo|mais rapido e|prender (a )?atencao/.test(t) && !ops.some((o) => o.op === 'ripple_delete')) {
-    const d = dynamicOps(p, ctx.silencesByAsset);
+    const d = dynamicOps(p, ctx.silencesByAsset, { minDuration: targetDurationFromText(p.brief ?? '') });
     push(d.ops);
     said.push(...d.said);
   }
