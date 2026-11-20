@@ -16,8 +16,14 @@ export interface ScriptInput {
 }
 export type SandboxResult = { ops: unknown[]; logs: string[] } | { error: string; line?: number; logs: string[] };
 
-export function runSandboxed(code: string, input: ScriptInput, maxOps = 3000): SandboxResult {
+/** compila o corpo do script; o Worker passa o construtor de Function capturado ANTES de trancar o escopo */
+export type ScriptCompiler = (params: string[], body: string) => (...args: unknown[]) => unknown;
+
+export function runSandboxed(code: string, input: ScriptInput, maxOps = 3000, compile?: ScriptCompiler): SandboxResult {
   const logs: string[] = [];
+  // import() é sintaxe (não dá para sombrear por parâmetro) e busca código na rede: proibido
+  if (/\bimport\b/.test(code)) return { error: 'SyntaxError: import não é permitido no script (sem rede)', logs };
+  const make: ScriptCompiler = compile ?? ((params, body) => new Function(...params, body) as (...args: unknown[]) => unknown);
   const ops: unknown[] = [];
   let n = 0;
   const P = input.project as { tracks: { id: string; kind: string; name?: string; clips: Record<string, unknown>[] }[]; captions: { segments: { id: string; start: number; end: number; text: string; words?: unknown[] }[] }; width: number; height: number; aspect: string };
@@ -61,11 +67,11 @@ export function runSandboxed(code: string, input: ScriptInput, maxOps = 3000): S
   };
   try {
     // sombreia rede/armazenamento/escape dentro do escopo do script
-    const blocked = ['fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource', 'importScripts', 'indexedDB', 'caches', 'BroadcastChannel', 'localStorage', 'sessionStorage', 'navigator', 'postMessage', 'self', 'globalThis', 'window', 'document', 'Worker', 'SharedWorker', 'open', 'close'];
+    const blocked = ['fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource', 'importScripts', 'indexedDB', 'caches', 'BroadcastChannel', 'localStorage', 'sessionStorage', 'navigator', 'postMessage', 'self', 'globalThis', 'window', 'document', 'Worker', 'SharedWorker', 'open', 'close', 'Function', 'setTimeout', 'setInterval', 'FontFace', 'fonts', 'Notification', 'WebTransport'];
     // calibra a linha: quantas linhas o wrapper de Function acrescenta antes do corpo
     // a linha 2 do corpo (onde começa o código da IA, depois do "use strict") cai na linha `firstLine` do stack
-    try { new Function('a', '"use strict";\nthrow new Error("x")')(); } catch (e) { const m = /<anonymous>:(\d+)/.exec(String((e as Error).stack)); if (m) firstLine = Number(m[1]); }
-    const fn = new Function('ep', 'project', ...blocked, `"use strict";\n${code}`);
+    try { make(['a'], '"use strict";\nthrow new Error("x")')(); } catch (e) { const m = /<anonymous>:(\d+)/.exec(String((e as Error).stack)); if (m) firstLine = Number(m[1]); }
+    const fn = make(['ep', 'project', ...blocked], `"use strict";\n${code}`);
     const ret = fn(ep, P, ...blocked.map(() => undefined));
     if (Array.isArray(ret)) for (const o of ret) push(o as Record<string, unknown>);
     return { ops, logs };
