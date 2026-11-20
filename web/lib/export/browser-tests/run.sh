@@ -14,5 +14,6 @@ cd "$T"
 [ -f ac3.mp4 ] || ffmpeg -y -loglevel error -f lavfi -i color=c=gray:s=320x240:r=30:d=4 -f lavfi -i sine=frequency=440:duration=4 -c:v libx264 -pix_fmt yuv420p -c:a ac3 -shortest ac3.mp4
 [ -f chirp.mp4 ] || ffmpeg -y -loglevel error -f lavfi -i color=c=gray:s=320x240:r=30:d=6 -f lavfi -i "aevalsrc=sin(2*PI*(200*t+100*t*t)):s=48000:d=6" -c:v libx264 -pix_fmt yuv420p -c:a aac -b:a 192k -shortest chirp.mp4
 [ -f sine.mp4 ] || ffmpeg -y -loglevel error -f lavfi -i color=c=gray:s=320x240:r=30:d=6 -f lavfi -i sine=frequency=440:duration=6 -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest sine.mp4
+[ -f long.wav ] || ffmpeg -y -loglevel error -f lavfi -i "sine=frequency=330:duration=300" -ac 2 -ar 44100 long.wav
 python3 -m http.server 3200 >/dev/null 2>&1 & SRV=$!; trap 'kill $SRV' EXIT; sleep 1
 for t in "$HERE"/t_*.js; do echo "== $(basename "$t")"; NODE_PATH=$(npm root -g) node "$HERE/run.js" "$t" "$1"; done
