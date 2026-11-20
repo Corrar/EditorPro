@@ -915,7 +915,8 @@ export function timelineDuration(): number {
  * Confere a fidelidade do resultado ao modelo medido (ritmo, movimento, transições, legenda, cor);
  * abaixo de 0,8 num aspecto faz UMA rodada de conserto só daquele aspecto. Devolve a linha do chat.
  */
-async function checkFidelity(apply: NonNullable<PipelineOptions['apply']>, opts: PipelineOptions): Promise<string> {
+/** confere a fidelidade ao modelo e faz UMA rodada de conserto (exportada p/ testes) */
+export async function checkFidelity(apply: NonNullable<PipelineOptions['apply']>, opts: PipelineOptions): Promise<string> {
   const style = store().project.style;
   if (!style?.template) return '';
   try {
@@ -935,7 +936,9 @@ async function checkFidelity(apply: NonNullable<PipelineOptions['apply']>, opts:
         opts.onStatus?.('Ajustando para ficar igual ao modelo…');
         await apply(fix, { delayMs: 120 });
         p = store().project;
-        f = fidelityOf(p, style, bad.includes('cor') ? await renderedColor(p, store().assets, times(p)) : undefined) ?? f;
+        // a cor é medida de novo SEMPRE: sem a medida, a nota caía para o palpite (50%/90%) mesmo
+        // quando o conserto foi só de movimento/ritmo e a cor estava igual à do modelo
+        f = fidelityOf(p, style, await renderedColor(p, store().assets, times(p))) ?? f;
       }
     }
     opts.onLog?.(fidelityLine(f));
