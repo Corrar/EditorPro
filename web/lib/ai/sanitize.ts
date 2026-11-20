@@ -14,6 +14,8 @@ import { uid } from '../util';
 import { CATALOG } from './catalogs';
 
 export const ASPECTS: AspectRatio[] = ['9:16', '16:9', '1:1', '4:5'];
+/** quadros do vídeo modelo que a rota analyze-reference aceita (o cliente corta antes, sem perder as sondas) */
+export const MAX_REFERENCE_FRAMES = 48;
 export const COLOR_PRESETS: ColorPreset[] = CATALOG.colorPresets;
 export const TRANSITIONS: TransitionKind[] = CATALOG.transitions;
 export const FILTER_KINDS: FilterKind[] = CATALOG.filters;

@@ -9,6 +9,7 @@ import type { EditOp } from '../ops';
 import type { Frame } from './frames';
 import type { ReferenceSample } from './analysis';
 import { slimAssets } from './summary';
+import { MAX_REFERENCE_FRAMES } from './sanitize';
 
 export interface AIStatus { configured: boolean; provider: 'anthropic' | 'demo'; model?: string; /** a checagem falhou (rede/sessão): não é demo de verdade, tenta de novo no próximo pedido */ offline?: boolean; /** transcrição no servidor disponível (Whisper large) */ transcribe?: 'groq' | 'openai' | null }
 
@@ -119,11 +120,38 @@ export async function getStatus(force = false): Promise<AIStatus> {
 
 /** analisa o vídeo-exemplo (quadros + métricas medidas no navegador) e extrai o perfil de estilo */
 export async function analyzeReference(sample: ReferenceSample): Promise<StyleProfile> {
-  let frames = sample.frames;
-  // garante o limite do corpo, descartando quadros alternados se preciso
-  while (frames.length > 4 && JSON.stringify(frames).length > MAX_BODY - 50_000) frames = frames.filter((_, i) => i % 2 === 0);
-  const { style } = await postJson<{ style: StyleProfile }>('/api/ai/analyze-reference', { frames, metrics: sample.metrics });
+  const { style } = await postJson<{ style: StyleProfile }>('/api/ai/analyze-reference', referencePayload(sample));
   return style;
+}
+
+/** `n` itens uniformemente espaçados (mantém a ordem) */
+function spread<T>(l: T[], n: number): T[] {
+  if (l.length <= n) return l;
+  if (n <= 0) return [];
+  return Array.from({ length: n }, (_, k) => l[Math.floor(((k + 0.5) * l.length) / n)]);
+}
+
+/**
+ * Corpo do analyze-reference dentro dos limites da rota: ≤ MAX_REFERENCE_FRAMES quadros (a rota corta o
+ * excedente do FIM — eram justamente os recortes da faixa de legenda) e < MAX_BODY contando as métricas.
+ * Os quadros rotulados (pares do corte, começo/fim de tomada, recortes da legenda) têm prioridade: quem
+ * diminui primeiro são os quadros comuns (~1/s); sondas só saem se não houver outro jeito, recortes por último.
+ */
+export function referencePayload(sample: Pick<ReferenceSample, 'frames' | 'metrics'>, maxFrames = MAX_REFERENCE_FRAMES, maxBody = MAX_BODY): { frames: Frame[]; metrics: ReferenceSample['metrics'] } {
+  const metrics = sample.metrics;
+  const isCrop = (f: Frame) => !!f.label && /FAIXA DE LEGENDA/.test(f.label);
+  let probes = sample.frames.filter((f) => f.label);
+  let plain = sample.frames.filter((f) => !f.label);
+  probes = [...probes.filter((f) => !isCrop(f)).slice(0, Math.max(0, maxFrames - 4 - probes.filter(isCrop).length)), ...probes.filter(isCrop)].slice(-maxFrames);
+  plain = spread(plain, maxFrames - probes.length);
+  const fixed = JSON.stringify({ frames: [], metrics }).length + 64;
+  const size = () => fixed + JSON.stringify(plain).length + JSON.stringify(probes).length;
+  while (size() > maxBody && plain.length > 4) plain = spread(plain, Math.floor(plain.length / 2));
+  // ainda grande: tira sondas (pares de tomada/corte) antes dos recortes da legenda
+  while (size() > maxBody && probes.some((f) => !isCrop(f))) probes.splice(probes.findIndex((f) => !isCrop(f)), 1);
+  while (size() > maxBody && plain.length) plain = spread(plain, plain.length > 1 ? Math.floor(plain.length / 2) : 0);
+  while (size() > maxBody && probes.length > 1) probes = probes.slice(1);
+  return { frames: [...plain, ...probes], metrics };
 }
 
 /** pedido em linguagem natural -> resposta + operações de edição */

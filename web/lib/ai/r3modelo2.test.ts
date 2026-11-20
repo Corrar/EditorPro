@@ -1,5 +1,5 @@
 /* Revisão r3 (2ª rodada) — vídeo-modelo definitivo: um teste por bug confirmado */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { applyOps, type EditOp } from '../ops';
 import { createProject, makeVideoClip } from '../defaults';
 import type { CaptionSegment, MediaAsset, Project, ReferenceTemplate } from '../types';
@@ -7,6 +7,8 @@ import { styleFromCuts } from './demo';
 import { fidelityOf } from './fidelity';
 import { templateLengths, templateOps } from './template';
 import { resolveDuration } from './frames';
+import { analyzeReference, MAX_BODY } from './client';
+import { MAX_REFERENCE_FRAMES } from './sanitize';
 
 const src: MediaAsset = { id: 'a1', kind: 'video', role: 'source', name: 'bruto.mp4', mime: 'video/mp4', size: 1, duration: 10, width: 1080, height: 1920 };
 const base = (dur = 10): Project => applyOps(createProject(), [{ op: 'add_clip', trackId: 'track_video_1', clip: { ...makeVideoClip({ ...src, duration: dur }, 0), id: 'c1' } }]).project;
@@ -55,6 +57,33 @@ describe('modelo sem cortes (uma tomada só)', () => {
   it('modelo curtinho de uma tomada não vira "muito rápido" (o Claude cortaria a cada 0,4 s)', () => {
     expect(styleFromCuts([], 0.4, {}, color, oneShot(0.4)).pacing).toBe('slow');
     expect(styleFromCuts([], 0.4, {}, color).pacing).toBe('slow');
+  });
+});
+
+describe('caminho Claude: quadros do modelo cabem na rota', () => {
+  /** como sampleReference: até 40 quadros comuns + 14 sondas rotuladas (cortes, tomadas e 2 recortes da legenda) */
+  const sample = (plainKB: number, probeKB: number) => {
+    const jpg = (kb: number, i: number) => `${i}`.padEnd(kb * 1000, 'A');
+    const plain = Array.from({ length: 40 }, (_, i) => ({ t: i * 1.5, data: jpg(plainKB, i), mediaType: 'image/jpeg' as const }));
+    const probes = Array.from({ length: 14 }, (_, i) => ({ t: i, data: jpg(probeKB, 100 + i), mediaType: 'image/jpeg' as const, label: i >= 12 ? 'Recorte da FAIXA DE LEGENDA em resolução cheia' : `ANTES do corte ${i}` }));
+    return { frames: [...plain, ...probes], metrics: { duration: 60, cuts: [], avgShotLength: 2, pacing: 'fast' as const, width: 720, height: 1280 }, localStyle: styleFromCuts([], 60) };
+  };
+  const posted = async (s: ReturnType<typeof sample>) => {
+    let body = '';
+    vi.stubGlobal('fetch', async (_u: string, init: RequestInit) => { body = String(init.body); return new Response(JSON.stringify({ style: s.localStyle }), { status: 200 }); });
+    try { await analyzeReference(s as never); } finally { vi.unstubAllGlobals(); }
+    return { body, frames: JSON.parse(body).frames as { label?: string }[] };
+  };
+  it('modelo longo: ≤48 quadros (a rota corta o resto) e os recortes da legenda vão junto (antes: 54 → a rota jogava fora os recortes)', async () => {
+    const { frames } = await posted(sample(40, 20));
+    expect(frames.length).toBeLessThanOrEqual(MAX_REFERENCE_FRAMES);
+    expect(frames.filter((f) => f.label?.includes('FAIXA DE LEGENDA'))).toHaveLength(2);
+    expect(frames.filter((f) => f.label).length).toBe(14);
+  });
+  it('quadros pesados: corpo < limite, mantendo as sondas rotuladas (antes: descartava sondas alternadas)', async () => {
+    const { body, frames } = await posted(sample(110, 40));
+    expect(body.length).toBeLessThanOrEqual(MAX_BODY);
+    expect(frames.filter((f) => f.label?.includes('FAIXA DE LEGENDA'))).toHaveLength(2);
   });
 });
 

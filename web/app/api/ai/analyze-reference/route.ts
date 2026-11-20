@@ -9,14 +9,14 @@ import { AIError, generateStructured, imageBlock, type UserContent } from '@/lib
 import { fail, ok, readJson } from '@/lib/ai/server/http';
 import { loadPrompt } from '@/lib/ai/server/prompts';
 import { StyleSchema } from '@/lib/ai/schemas';
-import { ASPECTS, PACINGS, clampNum, isObj, num, oneOf, sanitizeStyleProfile, sanitizeTemplate, str } from '@/lib/ai/sanitize';
+import { ASPECTS, MAX_REFERENCE_FRAMES, PACINGS, clampNum, isObj, num, oneOf, sanitizeStyleProfile, sanitizeTemplate, str } from '@/lib/ai/sanitize';
 import { mergeMeasured } from '@/lib/ai/template';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
-const MAX_FRAMES = 48;
+const MAX_FRAMES = MAX_REFERENCE_FRAMES;
 
 export async function POST(req: Request) {
   try {
