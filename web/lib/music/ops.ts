@@ -5,6 +5,7 @@ import type { AudioClip, Id, MediaAsset, Project, Seconds } from '../types';
 import { clipEnd, type EditOp } from '../ops';
 import { makeAudioClip } from '../defaults';
 import { uid } from '../util';
+import { curveOf } from '../engine/speed';
 import { MAX_DURATION } from './engine';
 import { MUSIC_CATALOG, type MusicTrack } from './catalog';
 
@@ -96,12 +97,17 @@ export function musicTrackForAsset(a: MediaAsset | undefined): MusicTrack | unde
 /**
  * Troca a música do clipe por uma versão renderizada no tamanho novo (termina
  * no compasso, com final). `in` volta a 0. Puro: o asset novo já deve existir.
+ * `duration` = duração na timeline (padrão: a que o asset cobre na velocidade do
+ * clipe). Com velocidade constante nunca passa do que o asset cobre (sem silêncio no fim).
  */
-export function musicRefitOps(p: Project, clipId: Id, asset: MediaAsset): EditOp[] {
+export function musicRefitOps(p: Project, clipId: Id, asset: MediaAsset, duration?: Seconds): EditOp[] {
   for (const t of p.tracks) {
     const c = t.clips.find((x) => x.id === clipId);
     if (!c || c.type !== 'audio') continue;
-    return [{ op: 'update_clip', clipId, patch: { assetId: asset.id, in: 0, duration: asset.duration }, explain: 'Ajustando a música ao novo tamanho' }];
+    const sp = curveOf(c) ? null : c.speed > 0 ? c.speed : 1;
+    const covers = sp ? asset.duration / sp : c.duration; // com curva, o asset foi feito p/ o vão inteiro
+    const d = duration != null ? (sp ? Math.min(duration, covers) : duration) : covers;
+    return [{ op: 'update_clip', clipId, patch: { assetId: asset.id, in: 0, duration: Math.round(d * 1000) / 1000 }, explain: 'Ajustando a música ao novo tamanho' }];
   }
   return [];
 }
