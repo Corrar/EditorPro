@@ -5,7 +5,7 @@ import { createProject, makeVideoClip } from '../defaults';
 import type { CaptionSegment, Keyframe, MediaAsset, Project, ReferenceTemplate } from '../types';
 import { styleFromCuts } from './demo';
 import { fidelityOf } from './fidelity';
-import { edgePxPerFrame, measureReference, type Gray } from './motion';
+import { edgePxPerFrame, measureReference, type Gray, type RgbFrame } from './motion';
 import { smoothMotionOps, templateOps } from './template';
 import { sanitizeOps } from './validate';
 
@@ -117,5 +117,35 @@ describe('medição do modelo: dissolver também é troca de tomada', () => {
     expect(Math.abs(m.template.shots[1].start - 2.25)).toBeLessThan(0.15);
     expect(Math.abs(m.template.shots[2].start - 4.25)).toBeLessThan(0.15);
     for (const s of m.template.motion.perShot) expect(s.zoomTotal).toBeLessThan(1.08);
+  });
+});
+
+describe('medição do modelo: vídeo deitado repostado em pé (tarjas pretas)', () => {
+  it('cortes e zoom medidos só na área com imagem; legenda dentro da imagem detectada', () => {
+    const top = 65, bot = 127; // 62 linhas de imagem (16:9) num quadro 9:16
+    const band = { y0: 112, y1: 120 };
+    const gray: Gray[] = [], rgb: RgbFrame[] = [], times: number[] = [];
+    const ease = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+    for (let i = 0; i < 36; i++) {
+      const t = i / 10 + 0.05, shot = Math.floor(t / 1.2), x = (t - shot * 1.2) / 1.2;
+      const g = scene(1 + 0.15 * ease(x), shot * 3);
+      const d = g.data as Float32Array;
+      for (let k = 0; k < GW * GH; k++) { const y = Math.floor(k / GW); if (y < top || y >= bot) d[k] = 0; }
+      const c = new Uint8ClampedArray(GW * GH * 4);
+      for (let k = 0; k < GW * GH; k++) {
+        const y = Math.floor(k / GW), xx = k % GW;
+        let v: [number, number, number] = [d[k], d[k] * 0.9, d[k] * 0.8];
+        if (y >= band.y0 && y < band.y1 && xx > 25 && xx < 83) v = xx % 6 < 3 && y % 4 < 2 ? [255, 212, 0] : [17, 14, 13];
+        c.set([v[0], v[1], v[2], 255], k * 4);
+        if (y >= band.y0 && y < band.y1 && xx > 25 && xx < 83) d[k] = (v[0] + v[1] + v[2]) / 3;
+      }
+      gray.push(g); rgb.push({ w: GW, h: GH, data: c }); times.push(+t.toFixed(3));
+    }
+    const m = measureReference(gray, times, rgb, { duration: 3.6 });
+    expect(m.cuts).toEqual([1.2, 2.4]);
+    expect(m.template.motion.mode).toBe('smooth-push');
+    expect(Math.abs(m.template.motion.avgZoomPerShot - 1.15)).toBeLessThan(0.04);
+    expect(m.template.captions).toBeTruthy();
+    expect(Math.abs(m.template.captions!.region.y0 - band.y0 / GH)).toBeLessThan(0.02);
   });
 });

@@ -377,11 +377,11 @@ export interface RgbFrame { w: number; h: number; data: Uint8ClampedArray | numb
  * REALMENTE se mexe (senão um cenário parado vira "legenda"). `frames` = quadros RGBA seguidos (~10 fps).
  * Devolve faixa y0/y1, cor do texto (clara e saturada) e da caixa (escura) ou undefined.
  */
-export function detectCaptionBand(frames: RgbFrame[] | RgbFrame[][], win = 8, maxWindows = 14): ReferenceTemplate['captions'] | undefined {
+export function detectCaptionBand(frames: RgbFrame[] | RgbFrame[][], win = 8, maxWindows = 14, area?: { x0: number; x1: number; y0: number; y1: number }): ReferenceTemplate['captions'] | undefined {
   // janelas já separadas (amostrador do navegador guarda só elas): achata mantendo cada uma com `win` quadros
   if (Array.isArray(frames[0])) {
     const ws = (frames as RgbFrame[][]).filter((x) => x.length >= win);
-    return ws.length ? detectCaptionBand(ws.flatMap((x) => x.slice(0, win)).concat(ws[ws.length - 1].slice(0, 1)), win, maxWindows) : undefined;
+    return ws.length ? detectCaptionBand(ws.flatMap((x) => x.slice(0, win)).concat(ws[ws.length - 1].slice(0, 1)), win, maxWindows, area) : undefined;
   }
   const list = frames as RgbFrame[];
   if (list.length < win + 1) return undefined;
@@ -413,7 +413,8 @@ export function detectCaptionBand(frames: RgbFrame[] | RgbFrame[][], win = 8, ma
     for (let i = 0; i < N; i++) {
       const m = mean[i] / seg.length;
       const sd = Math.sqrt(Math.max(0, sq[i] / seg.length - m * m));
-      if (i % 7 === 0) sds.push(sd);
+      // o fundo se mexe? (com tarjas, só a área com imagem conta)
+      if (i % 7 === 0 && (!area || (i % w >= area.x0 && i % w < area.x1 && Math.floor(i / w) >= area.y0 && Math.floor(i / w) < area.y1))) sds.push(sd);
       if (sd < 6 && edge[i] / seg.length > 40) score[i] += 1;
     }
     motion.push(median(sds));
@@ -421,6 +422,15 @@ export function detectCaptionBand(frames: RgbFrame[] | RgbFrame[][], win = 8, ma
   // fundo parado: cenário com bordas também fica "parado" — não dá para separar
   if (median(motion) < 3) return undefined;
   for (let i = 0; i < N; i++) score[i] /= starts.length;
+  // com tarjas: a borda parada entre a tarja e a imagem não é legenda (linha inteira "parada com borda"
+  // virava a faixa mais forte e escondia a legenda de verdade)
+  if (area) {
+    const near = (v: number, edge: number, lim: number) => edge > 0 && edge < lim && Math.abs(v - edge) <= 3;
+    for (let i = 0; i < N; i++) {
+      const x = i % w, y = Math.floor(i / w);
+      if (near(y, area.y0, h) || near(y, area.y1, h) || near(x, area.x0, w) || near(x, area.x1, w)) score[i] = 0;
+    }
+  }
   const rows = Array.from({ length: h }, (_, y) => { let a = 0; for (let x = 0; x < w; x++) a += score[y * w + x]; return a / w; });
   const top = Math.max(...rows);
   if (top < 0.02) return undefined;
@@ -487,6 +497,61 @@ function meanLum(g: Gray): number {
 }
 
 /**
+ * Área com imagem de um vídeo com tarjas paradas (letterbox/pillarbox: vídeo deitado repostado em pé,
+ * barras pretas ou de cor lisa). Linhas/colunas das bordas que não mudam no tempo e são lisas viram
+ * tarja. Devolve a área em px ou undefined (sem tarjas relevantes).
+ */
+export function activeArea(gray: Gray[]): { x0: number; x1: number; y0: number; y1: number } | undefined {
+  if (gray.length < 3) return undefined;
+  const { w, h } = gray[0];
+  if (gray.some((g) => g.w !== w || g.h !== h)) return undefined;
+  const pick = gray.length <= 24 ? gray : Array.from({ length: 24 }, (_, k) => gray[Math.floor(((k + 0.5) * gray.length) / 24)]);
+  // por pixel: desvio no tempo; por linha/coluna: média desse desvio e variação espacial no 1º quadro
+  const N = w * h, mean = new Float32Array(N), sq = new Float32Array(N);
+  for (const g of pick) for (let i = 0; i < N; i++) { const v = g.data[i]; mean[i] += v; sq[i] += v * v; }
+  const tsd = new Float32Array(N);
+  for (let i = 0; i < N; i++) { const m = mean[i] / pick.length; tsd[i] = Math.sqrt(Math.max(0, sq[i] / pick.length - m * m)); mean[i] = m; }
+  const flat = (idx: number[]) => {
+    let t = 0, mn = Infinity, mx = -Infinity;
+    for (const i of idx) { t += tsd[i]; if (mean[i] < mn) mn = mean[i]; if (mean[i] > mx) mx = mean[i]; }
+    return t / idx.length < 2 && mx - mn < 12;
+  };
+  /** maior trecho seguido de linhas/colunas COM imagem (uma legenda/título dentro da tarja fica de fora) */
+  const longest = (n: number, isFlat: (i: number) => boolean): [number, number] => {
+    const f = Array.from({ length: n }, (_, i) => isFlat(i));
+    let best: [number, number] = [0, 0];
+    for (let i = 0; i < n; i++) {
+      if (f[i]) continue;
+      let e = i;
+      while (e + 1 < n && (!f[e + 1] || (e + 2 < n && !f[e + 2]))) e++;
+      if (e + 1 - i > best[1] - best[0]) best = [i, e + 1];
+      i = e;
+    }
+    return best;
+  };
+  const [y0r, y1r] = longest(h, (y) => flat(Array.from({ length: w }, (_, x) => y * w + x)));
+  if (y1r - y0r < h * 0.2) return undefined;
+  const [x0r, x1r] = longest(w, (x) => flat(Array.from({ length: y1r - y0r }, (_, k) => (y0r + k) * w + x)));
+  let y0 = y0r, y1 = y1r, x0 = x0r, x1 = x1r;
+  // a borda borrada da tarja (escala) também é tarja: 1 px de folga
+  if (y0 > 0) y0 = Math.min(y1, y0 + 1);
+  if (y1 < h) y1 = Math.max(y0, y1 - 1);
+  if (x0 > 0) x0 = Math.min(x1, x0 + 1);
+  if (x1 < w) x1 = Math.max(x0, x1 - 1);
+  const cutH = 1 - (y1 - y0) / h, cutW = 1 - (x1 - x0) / w;
+  // vídeo parado (tudo "tarja") ou tarjas finas: usa o quadro inteiro
+  if ((y1 - y0) < h * 0.2 || (x1 - x0) < w * 0.2 || (cutH < 0.08 && cutW < 0.08)) return undefined;
+  return { x0, x1, y0, y1 };
+}
+
+function cropGray(g: Gray, a: { x0: number; x1: number; y0: number; y1: number }): Gray {
+  const w = a.x1 - a.x0, h = a.y1 - a.y0;
+  const d = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) d[y * w + x] = g.data[(y + a.y0) * g.w + x + a.x0];
+  return { w, h, data: d };
+}
+
+/**
  * Mede o vídeo modelo a partir de quadros em cinza (≈10 fps, 108×192) e alguns quadros RGBA
  * (faixa de legenda). `duration` = duração analisada; `color` = cor média (frames.ts).
  * Cortes exatos, movimento por tomada (zoom/pan/pico-média/easing/pancadas), modo dominante,
@@ -496,9 +561,16 @@ export function measureReference(gray: Gray[], times: number[], rgb: RgbFrame[] 
   const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();
   const n = Math.min(gray.length, times.length);
   // faixa de legenda primeiro: ela fica parada enquanto o fundo mexe e atrapalha o alinhamento
-  const captions = detectCaptionBand(rgb);
-  const mask = captions ? { y0: Math.max(0, captions.region.y0 - 0.03), y1: Math.min(1, captions.region.y1 + 0.03) } : undefined;
-  const ao: AlignOpts = { sMin: 0.94, sMax: 1.1, shift: opts.weak ? 2 : 3, mask };
+  // vídeo deitado com tarjas (repostado em pé): mede só a área com imagem — as tarjas paradas
+  // puxavam a escala para 1 e diluíam o corte (cortes perdidos, zoom subestimado)
+  const fullH = gray[0]?.h ?? 0;
+  const act = activeArea(gray.slice(0, n));
+  const rgb0 = (Array.isArray(rgb[0]) ? (rgb[0] as RgbFrame[])[0] : (rgb[0] as RgbFrame | undefined));
+  const captions = detectCaptionBand(rgb, 8, 14, act && rgb0 && rgb0.w === gray[0]?.w && rgb0.h === fullH ? act : undefined);
+  if (act) gray = gray.map((g) => cropGray(g, act));
+  const toAct = (y: number) => (act ? (y * fullH - act.y0) / (act.y1 - act.y0) : y);
+  const mask = captions ? { y0: Math.max(0, toAct(captions.region.y0) - 0.03), y1: Math.min(1, toAct(captions.region.y1) + 0.03) } : undefined;
+  const ao: AlignOpts = { sMin: 0.94, sMax: 1.1, shift: opts.weak ? 2 : 3, ...(mask && mask.y1 > mask.y0 ? { mask } : {}) };
   const pairs: PairMotion[] = [];
   for (let i = 1; i < n; i++) pairs.push(alignPair(gray[i - 1], gray[i], ao));
   const track: MotionTrack = { times: times.slice(0, n), pairs };
