@@ -103,7 +103,8 @@ async function reviewPass(before: Project, userText: string, apply: NonNullable<
     const f = await finalizeClaude(res, store().project, {
       ...finalizeDeps, userText, getAssets: () => store().assets, messages: store().messages, context: opts.context, signal: opts.signal, onStatus: (t) => opts.onStatus?.(t), repair: false,
     });
-    const ops = await withSfx(f.ops, f.sfx, opts.onStatus);
+    const st = store().project.style;
+    const ops = await withSfx(st && !wantsPunchMotion(userText, st) ? smoothMotionOps(store().project, f.ops) : f.ops, f.sfx, opts.onStatus);
     if (!ops.length) return null;
     opts.onStatus?.('Ajustando…');
     await apply(ops);
@@ -562,7 +563,7 @@ export async function generateCaptions(opts: PipelineOptions & { language?: stri
 async function demoChat(text: string, apply: NonNullable<PipelineOptions['apply']>, opts: PipelineOptions): Promise<PipelineResult> {
   // "reedite seguindo o estilo do vídeo modelo" (+ "só as legendas/ritmo/cores")
   const st = store().project.style;
-  if (st && /(estilo|ritmo|cores|legendas?) do (video )?(modelo|exemplo)|video modelo|igual ao modelo/.test(norm(text))) {
+  if (st && /(estilo|ritmo|cores|legendas?) do (video )?(modelo|exemplo)|video modelo|(igual|parecid\w*|como|segu\w*|sig\w*|copi\w*|imit\w*) (a |o |ao |do )?(video )?(modelo|exemplo)\b/.test(norm(text))) {
     const scope = styleScopeFromText(text) ?? 'all';
     // cor: combina com as cores medidas do modelo (ColorGrade); sem modelo legível, usa o preset do perfil
     const grade = scope === 'all' || scope === 'colors' ? await matchColorOps(opts) : null;
@@ -600,7 +601,9 @@ async function claudeChat(text: string, apply: NonNullable<PipelineOptions['appl
     const frames = await sourceFrames(sourceAssets(s.assets), false, 6);
     const res = await requestEdit({ project: s.project, assets: s.assets, messages: s.messages, userText: text, mode: 'chat', frames, context: opts.context, signal: opts.signal });
     const fin = await claudeOps(res, text, opts);
-    const ops = fin.ops;
+    // com vídeo modelo ativo (sem pancada), o zoom da IA no chat também sai suave — como na 1ª edição
+    const st = store().project.style;
+    const ops = st && !wantsPunchMotion(text, st) ? smoothMotionOps(store().project, fin.ops) : fin.ops;
     const before = store().project;
     if (ops.length) opts.onStatus?.('Editando…');
     const appliedIds = ops.length ? await apply(ops) : [];
