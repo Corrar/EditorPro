@@ -260,6 +260,7 @@
   .ep-sheethandle { display:flex; flex:none; position:relative; height:46px; align-items:center; justify-content:center; cursor:grab; touch-action:none; }
   .ep-sheethandle i { width:44px; height:5px; border-radius:999px; background:var(--dash); }
   .ep-sheetclose { position:absolute; right:12px; top:5px; width:36px; height:36px; border-radius:50%; border:0; background:var(--tile); color:var(--ink); font-size:13px; cursor:pointer; display:grid; place-items:center; }
+  .ep-sheetclose::after { content:''; position:absolute; left:50%; top:50%; width:44px; height:44px; transform:translate(-50%,-50%); border-radius:50%; } /* toque ≥44px sem mudar o visual */
   .ep-panelhead { padding:4px 56px 10px 16px; position:sticky; top:0; }
   .ep-subtabs { top:46px; }
   .ep-scrim { position:fixed; inset:0; z-index:105; background:rgba(10,12,14,.4); }
