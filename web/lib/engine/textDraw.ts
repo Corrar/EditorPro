@@ -76,16 +76,19 @@ function drawBlock(ctx: Ctx, P: BlockParams, H: number) {
   const reserve = Math.max(1, P.reserve ?? 1);
   let lines: ReturnType<typeof layoutWords> = [];
   let strokeW = 0;
-  // linhas máximas: diminui a fonte até caber
-  for (let iter = 0; iter < 7; iter++) {
+  // linhas máximas: diminui a fonte até caber. Palavra sozinha mais larga que a área (endereço de site,
+  // "RESPONSABILIDADE" em fonte grande) não tem onde quebrar: antes saía cortada pelas bordas do quadro.
+  for (let iter = 0; iter < 12; iter++) {
     ctx.font = fontString(P.style, px, P.weight);
     if (spacing && 'letterSpacing' in ls) ls.letterSpacing = `${(spacing * px / P.px).toFixed(1)}px`;
     strokeW = strokeOf(px);
     const gap = strokeW * 0.6 + px * 0.04;
     const measure = (s: string) => (s === ' ' ? ctx.measureText(' ').width + gap : ctx.measureText(s).width * reserve);
     lines = (P.style.balance ? balanceLines : layoutWords)(P.words, measure, P.maxWidth, P.breaks);
-    if (!P.maxLines || lines.length <= P.maxLines) break;
-    px *= 0.88;
+    const widest = Math.max(0, ...lines.map((l) => l.width)) + strokeW;
+    const tooWide = widest > P.maxWidth + 0.5;
+    if ((!P.maxLines || lines.length <= P.maxLines) && !tooWide) break;
+    px *= tooWide ? Math.max(0.5, Math.min(0.97, P.maxWidth / widest)) : 0.88;
   }
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'left';
